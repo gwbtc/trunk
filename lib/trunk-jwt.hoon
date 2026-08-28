@@ -22,16 +22,22 @@
 ::    now  current time in unix seconds
 ::    exp  expiry in unix seconds (Galène requires the claim)
 ::
-::  +mint grants %present — the holder may publish audio. +mint-listen
-::  grants nothing, which is Galène's listener: it receives streams and
-::  cannot send one. The permission names are Galène's own (op, present,
-::  message, caption, token); an empty list is a valid claim, not a
-::  missing one.
+::  +mint grants %present and %message. %present is the right to publish
+::  audio. %message is the right to have a usermessage relayed, which
+::  Galène gates the same way it gates chat — without it the server
+::  silently drops the message and clients cannot tell each other
+::  anything the SFU does not model, mute state being the first such
+::  thing. It buys no ability to publish and no access to another room.
+::
+::  +mint-listen grants nothing, which is Galène's listener: it receives
+::  streams and cannot send one. The permission names are Galène's own
+::  (op, present, message, caption, token); an empty list is a valid
+::  claim, not a missing one.
 ::
 ++  mint
   |=  [key=@t sub=@t aud=@t now=@ud exp=@ud]
   ^-  @t
-  (mint-with key sub aud now exp ~[s+'present'])
+  (mint-with key sub aud now exp ~[s+'present' s+'message'])
 ::
 ++  mint-listen
   |=  [key=@t sub=@t aud=@t now=@ud exp=@ud]
