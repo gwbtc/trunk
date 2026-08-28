@@ -1,0 +1,5 @@
+# Galène's runtime state; the group config is the only thing worth keeping.
+sidecar/galene/data/
+sidecar/galene/groups/
+sidecar/.env
+sidecar/galene.secret
