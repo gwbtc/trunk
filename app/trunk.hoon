@@ -105,6 +105,15 @@
 ::  access without a key rotation.
 ++  ticket-ttl  ^~((div ~h6 ~s1))
 ::  how many party-line invitations we will remember from the network.
+::  The wire this desk speaks.
+::
+::  BUMP THIS on any change to the JSON shapes in lib/trunk-json.hoon.
+::  A client mirrors those by hand — there is no generator between them
+::  — and every drift so far has surfaced as a silent no-op rather than
+::  an error: a poke gall could not cast, a switch that did nothing.
+::  With a version the client can say "your ship's Trunk is too old"
+::  instead of appearing broken.
+++  wire-version  1
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
 ::  this is the brake on that.
@@ -521,6 +530,9 @@
     [%x %rooms ~]   ``trunk-rooms+!>(hosted.state)
     [%x %lines ~]   ``trunk-lines+!>(known.state)
     [%x %policy ~]  ``trunk-policy+!>(pol.state)
+    ::  Readable by any client, and the first thing a new one asks.
+    [%x %version ~]
+  ``json+!>((frond:enjs:format 'wire' (numb:enjs:format wire-version)))
     ::  base + group only. The key is write-only by design.
     [%x %sfu ~]     ``json+!>((sfu-to-json:trunk-json sfu.state))
   ==
