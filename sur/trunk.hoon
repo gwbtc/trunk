@@ -94,6 +94,11 @@
       ==
       [%close-room name=@t]
       [%join-room host=ship name=@t]
+      ::  ask a host whether a line exists, without joining it. A
+      ::  member whose ship had no %trunk when the host announced never
+      ::  received it and has no other way to find out — scries are
+      ::  local, so it cannot read the host's rooms directly.
+      [%peek-room host=ship name=@t]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]
@@ -103,6 +108,10 @@
 ::  ship-to-ship room negotiation
 +$  room-sig
   $%  [%ask name=@t]
+      ::  same checks as %ask, but mints nothing and joins nothing.
+      ::  Answered with %announce when the asker may see the line, and
+      ::  %deny otherwise.
+      [%peek name=@t]
       [%grant =ticket]
       [%deny name=@t why=@t]
       ::  the host telling a member a line is open / gone, so joining

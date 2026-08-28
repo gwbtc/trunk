@@ -113,7 +113,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  1
+++  wire-version  2
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
 ::  this is the brake on that.
@@ -368,6 +368,16 @@
               ==
       ==  ==
     ::
+        %peek-room
+      ::  hosting it ourselves? we already know, answer locally.
+      ?:  =(host.act our.bowl)
+        :_(this (peek-cards:hc our.bowl name.act))
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%peek name.act])
+      ==  ==
+    ::
         %join-room
       ::  hosting it ourselves? mint straight away, no round trip.
       ?:  =(host.act our.bowl)
@@ -412,6 +422,7 @@
     =/  msg  !<(room-sig:trunk vase)
     ?-    -.msg
         %ask    :_(this (grant-cards:hc src.bowl name.msg))
+        %peek   :_(this (peek-cards:hc src.bowl name.msg))
     ::
     ::  A room admin, over ames, turning the line on or off. %trunk
     ::  does not know what a Tlon group is — admins are simply the
@@ -619,6 +630,31 @@
     ==
   (reply who [%grant name loc tok])
 ::
+::  +peek-cards: answer "is there a line here?" without joining it.
+::
+::  The checks are +grant-cards' checks, in the same order and with the
+::  same answers, because any divergence is an oracle: a %peek that
+::  said 'blocked' where %ask says 'not a member' would turn this into
+::  a way to probe whether you have been blocked, which the whole
+::  policy design is built to avoid.
+::
+::  Answers with %announce, so a client that already knows how to be
+::  told about a line needs no new handling for being told on request.
+++  peek-cards
+  |=  [who=ship name=@t]
+  ^-  (list card)
+  ?:  (~(has in block.pol.state) who)
+    (reply who [%deny name 'not a member'])
+  =/  got  (~(get by hosted.state) name)
+  ?~  got
+    (reply who [%deny name 'no such room'])
+  ?.  ?|  =(who our.bowl)
+          (~(has in members.u.got) who)
+      ==
+    (reply who [%deny name 'not a member'])
+  =/  base=@t  base:(room-sfu name)
+  (reply who [%announce name title.u.got listen.u.got base])
+::
 ::  +room-location: the Galène URL for a room we host.
 ::
 ::  Every room is a subgroup of the one configured group, so opening a
@@ -719,6 +755,7 @@
       ::  neither is ever addressed to ourselves; the ?- must still
       ::  be total.
       %ask        ~
+      %peek       ~
       %configure  ~
       %share      ~
       %link       ~[(fact [%listen-link listen-link.msg])]

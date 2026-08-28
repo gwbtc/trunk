@@ -14,6 +14,7 @@
 ::                               "sfu":null|{"base":b,"group":g,"key":k}}}
 ::            {"close-room":{"name":n}}
 ::            {"join-room":{"host":"~zod","name":n}}
+::            {"peek-room":{"host":"~zod","name":n}}
 ::            {"set-call-mode":"open"} | {"allow":"~zod"}
 ::            {"unallow":"~zod"} | {"block":"~zod"} | {"unblock":"~zod"}
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
@@ -70,6 +71,7 @@
       ==
       [%close-room (ot ~[name+so])]
       [%join-room (ot ~[host+ship-from-json name+so])]
+      [%peek-room (ot ~[host+ship-from-json name+so])]
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]
