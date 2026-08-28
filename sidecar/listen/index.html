@@ -97,6 +97,9 @@
   .dot { width: .5rem; height: .5rem; border-radius: 50%;
          background: var(--line); flex: none; }
   .dot.on { background: var(--accent); }
+  .muted { margin-left: auto; font-size: .75rem; color: var(--muted);
+           border: 1px solid var(--line); border-radius: .6rem;
+           padding: 0 .4rem; flex: none; }
   .topic { margin: -1.5rem 0 2rem; color: var(--muted); font-size: 1rem; }
   .trace { margin-top: .75rem; font-size: .75rem; color: var(--muted);
            opacity: .8; min-height: 1rem; }
@@ -143,7 +146,15 @@
 
   var conn = null;
   var speaking = {};
-  var receivers = {};
+  // stream id -> { s: the down stream, rs: [RTCRtpReceiver] }.
+  //
+  // Keyed by stream rather than by publisher name: protocol.js may not
+  // have filled in s.username by the time ondowntrack fires, and a name
+  // captured then could be the 'someone' fallback forever — a dot that
+  // never lands on a row anybody displays. Resolving the name at poll
+  // time costs nothing and is always current.
+  var streams = {};
+  var muted = {};
   var elements = {};
   var ctx = null;
   var speakTimer = null;
@@ -267,6 +278,15 @@
       dot.className = speaking[n] ? 'dot on' : 'dot';
       li.appendChild(dot);
       li.appendChild(document.createTextNode(n));
+      // Only the muted are marked: everyone here is expected to be able
+      // to talk, so a mic on every row would be a column of noise.
+      if (muted[n]) {
+        var m = document.createElement('span');
+        m.className = 'muted';
+        m.title = 'Muted';
+        m.textContent = 'muted';
+        li.appendChild(m);
+      }
       whoList.appendChild(li);
     });
     if (others > 0) {
@@ -279,7 +299,7 @@
   }
 
   /**
-   * Who is talking, polled off the receivers.
+   * Who is talking, polled off each stream's receivers.
    *
    * WebRTC already carries an audio level in the RTP header, so
    * getSynchronizationSources costs nothing extra — no stats round
@@ -289,15 +309,27 @@
     if (speakTimer) return;
     speakTimer = setInterval(function () {
       var changed = false;
-      Object.keys(receivers).forEach(function (name) {
+      var now = {};
+      Object.keys(streams).forEach(function (id) {
+        var e = streams[id];
+        if (!e) return;
+        var name = (e.s && e.s.username) || null;
+        if (!name) return;
         var loud = false;
-        (receivers[name] || []).forEach(function (r) {
-          var srcs = r.getSynchronizationSources ? r.getSynchronizationSources() : [];
-          srcs.forEach(function (src) {
+        (e.rs || []).forEach(function (r) {
+          // getSynchronizationSources reads the level straight off the
+          // RTP header — no stats round trip. Firefox doesn't implement
+          // it, so fall back to the last known state there rather than
+          // reporting everyone permanently silent.
+          if (!r.getSynchronizationSources) { loud = loud || !!speaking[name]; return; }
+          r.getSynchronizationSources().forEach(function (src) {
             if (typeof src.audioLevel === 'number' && src.audioLevel > 0.02) loud = true;
           });
         });
-        if (!!speaking[name] !== loud) { speaking[name] = loud; changed = true; }
+        now[name] = now[name] || loud;
+      });
+      Object.keys(now).forEach(function (name) {
+        if (!!speaking[name] !== now[name]) { speaking[name] = now[name]; changed = true; }
       });
       if (changed) renderWho();
     }, 250);
@@ -312,7 +344,8 @@
     sinks.innerHTML = '';
     elements = {};
     speaking = {};
-    receivers = {};
+    streams = {};
+    muted = {};
     renderWho();
     goBtn.textContent = 'Listen';
     goBtn.className = '';
@@ -356,6 +389,15 @@
     // (id, kind) only — the user record lives in conn.users.
     conn.onuser = function () { renderWho(); };
 
+    // Mic state, broadcast by Talon clients. Galène relays kinds it
+    // doesn't recognise, so this needs nothing from the server; a room
+    // with no Talon clients simply never sets it.
+    conn.onusermessage = function (source, dest, username, time, privileged, kind, error, value) {
+      if (kind !== 'talon-mute' || !username) return;
+      muted[username] = !!value;
+      renderWho();
+    };
+
     conn.ondownstream = function (s) {
       trace('stream offered');
       s.onstatus = function (st) {
@@ -363,12 +405,12 @@
         if (st === 'connected') say('Listening');
       };
       s.ondowntrack = function (track, transceiver, stream_) {
-        // Tie this receiver to whoever is publishing, so the speaking
-        // dot lands on the right name.
-        var who = s.username || 'someone';
-        (receivers[who] = receivers[who] || []).push(transceiver.receiver);
+        // Hold the stream, not its name — see the `streams` comment.
+        var e = streams[s.id] || (streams[s.id] = { s: s, rs: [] });
+        e.s = s;
+        e.rs.push(transceiver.receiver);
         startSpeakingPoll();
-        trace('track from ' + who);
+        trace('track from ' + (s.username || 'someone'));
         play(s.id, s.stream || stream_);
         say('Listening');
       };
