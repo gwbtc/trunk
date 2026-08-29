@@ -113,7 +113,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  2
+++  wire-version  3
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
 ::  this is the brake on that.
@@ -327,11 +327,32 @@
       this(hosted.state (~(del by hosted.state) name.act))
     ::
         %send
-      :_  this
-      :~  :*  %pass  /relay/(scot %p ship.act)
-              %agent  [ship.act %trunk]
-              %poke  %trunk-signal  !>(sig.act)
-      ==  ==
+      ::  Answering, declining or hanging up settles the call for the
+      ::  whole ship, not just the device that did it. Every device saw
+      ::  the %ring — that is deliberate — but nothing told the rest it
+      ::  had been dealt with, so they rang out their full watchdog
+      ::  beside a call already in progress.
+      ::  ?- per variant, not ?= against a fork of three. Narrowing to
+      ::  a fork leaves the compiler without one face for `id` across
+      ::  the branches — that is the find-fork it complains about —
+      ::  even though every variant happens to carry one.
+      =/  settled=(unit @t)
+        ?-  -.sig.act
+          %ring    ~
+          %offer   ~
+          %accept  `id.sig.act
+          %reject  `id.sig.act
+          %hangup  `id.sig.act
+        ==
+      =/  extra=(list card)
+        ?~  settled  ~
+        ~[(fact:hc [%handled u.settled])]
+      =/  relay=(list card)
+        :~  :*  %pass  /relay/(scot %p ship.act)
+                %agent  [ship.act %trunk]
+                %poke  %trunk-signal  !>(sig.act)
+        ==  ==
+      :_(this (weld extra relay))
     ::
         %configure-room
       ::  Hosting it ourselves? Apply directly. Creating is allowed

@@ -174,6 +174,8 @@
         [%url s+url.listen-link.u]
         [%expires (numb expires.listen-link.u)]
     ==
+  ::
+      %handled  (frond %handled s+id.u)
   ==
 ::
 ++  sfu-to-json

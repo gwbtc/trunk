@@ -157,5 +157,11 @@
       [%policy =policy]
       ::  a freshly minted listen link, for the client to share
       [%listen-link =listen-link]
+      ::  one of this ship's devices answered or declined a call, so
+      ::  the rest can stop ringing. Every device sees the %ring — that
+      ::  is the point — but until now nothing told the others it had
+      ::  been dealt with, and they rang out their whole watchdog next
+      ::  to a call already in progress.
+      [%handled id=@t]
   ==
 --
