@@ -55,12 +55,20 @@
 ::             rather not route its audio through the host's sidecar
 ::             sets its own here — the host still mints the tickets,
 ::             but against the group's chosen server.
+::  where a room's roster is mirrored from, when it is bound to a
+::  group. %trunk still has no idea what a group IS — this is an
+::  opaque [host name] pair used to build one scry path and one
+::  subscription. Unbound rooms (~) behave exactly as before: the
+::  host seeds members/admins by hand and nothing watches anything.
++$  group-source  [=ship name=@t]
 +$  room
   $:  title=@t
       members=(set ship)
       admins=(set ship)
       listen=?
       sfu=(unit sfu-config)
+      ::  ~ = manual roster (the only mode before wire 4)
+      group=(unit group-source)
   ==
 ::  a listen-only link: where to point a browser, and until when.
 +$  listen-link  [name=@t url=@t expires=@ud]
@@ -99,6 +107,11 @@
       ::  received it and has no other way to find out — scries are
       ::  local, so it cannot read the host's rooms directly.
       [%peek-room host=ship name=@t]
+      ::  bind or unbind a hosted room's roster to a group. Bound,
+      ::  the members/admins lists mirror the group and manual edits
+      ::  are overwritten on the next sync; ~ unbinds and freezes the
+      ::  roster as it stands.
+      [%bind-room name=@t group=(unit group-source)]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]

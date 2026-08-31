@@ -26,6 +26,14 @@
 ::  ...and as they were in %6, before the per-room SFU.
 +$  old-room-6
   [title=@t members=(set ship) admins=(set ship) listen=?]
+::  ...and as saved by %7, before the group binding.
++$  old-room-7
+  $:  title=@t
+      members=(set ship)
+      admins=(set ship)
+      listen=?
+      sfu=(unit sfu-config:trunk)
+  ==
 +$  versioned-state
   $%  state-0
       state-1
@@ -35,6 +43,7 @@
       state-5
       state-6
       state-7
+      state-8
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -94,6 +103,16 @@
   $:  %7
       ice=(list ice-server:trunk)
       sfu=sfu-config:trunk
+      hosted=(map @t old-room-7)
+      known=lines:trunk
+      asked=(set [=ship name=@t])
+      pol=policy:trunk
+  ==
+::  %8 rooms carry an optional group binding.
++$  state-8
+  $:  %8
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
       hosted=(map @t room:trunk)
       known=lines:trunk
       asked=(set [=ship name=@t])
@@ -113,7 +132,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  3
+++  wire-version  4
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
 ::  this is the brake on that.
@@ -130,7 +149,7 @@
   %-  ~(run by old)
   |=  r=old-room
   ^-  room:trunk
-  [title.r members.r ~ %.n ~]
+  [title.r members.r ~ %.n ~ ~]
 ::
 ::  +upgrade-rooms-6: %6 rooms gain the per-room SFU, unset — every
 ::  existing room keeps running on its host ship's own sidecar.
@@ -140,7 +159,17 @@
   %-  ~(run by old)
   |=  r=old-room-6
   ^-  room:trunk
-  [title.r members.r admins.r listen.r ~]
+  [title.r members.r admins.r listen.r ~ ~]
+::
+::  +upgrade-rooms-7: %7 rooms gain the group binding, unset — an
+::  existing roster stays manual until someone binds it on purpose.
+++  upgrade-rooms-7
+  |=  old=(map @t old-room-7)
+  ^-  (map @t room:trunk)
+  %-  ~(run by old)
+  |=  r=old-room-7
+  ^-  room:trunk
+  [title.r members.r admins.r listen.r sfu.r ~]
 ::
 ::  +upgrade-lines: a remembered invitation used to be just a title.
 ::  Nothing is known about its settings until the host announces
@@ -159,7 +188,7 @@
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
 %-  agent:dbug
-=|  state-7
+=|  state-8
 =*  state  -
 ^-  agent:gall
 =<
@@ -182,14 +211,14 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-vase)
   ?-  -.old
-    %0  `this(state [%7 ~ ['' '' ''] ~ ~ ~ open-policy])
-    %1  `this(state [%7 ice.old ['' '' ''] ~ ~ ~ open-policy])
-    %2  `this(state [%7 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy])
+    %0  `this(state [%8 ~ ['' '' ''] ~ ~ ~ open-policy])
+    %1  `this(state [%8 ice.old ['' '' ''] ~ ~ ~ open-policy])
+    %2  `this(state [%8 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy])
     %3
   :-  ~
   %=  this
     state
-  :*  %7  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %8  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  ~  open-policy
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
@@ -198,7 +227,7 @@
   :-  ~
   %=  this
     state
-  :*  %7  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %8  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  asked.old  open-policy
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
@@ -207,7 +236,7 @@
   :-  ~
   %=  this
     state
-  :*  %7  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %8  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  asked.old  pol.old
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
@@ -216,10 +245,18 @@
   :-  ~
   %=  this
     state
-  :*  %7  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+  :*  %8  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
       (upgrade-lines known.old)  asked.old  pol.old
   ==  ==
-    %7  `this(state old)
+  ::  %7 rooms gain the group binding, unset.
+    %7
+  :-  ~
+  %=  this
+    state
+  :*  %8  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+      known.old  asked.old  pol.old
+  ==  ==
+    %8  `this(state old)
   ==
 
 ::
@@ -271,7 +308,12 @@
       =/  had  (~(get by hosted.state) name.act)
       =/  listen  ?~(had %.n listen.u.had)
       =/  room-sfu  ?~(had ~ sfu.u.had)
-      =/  new=room:trunk  [title.act members.act admins.act listen room-sfu]
+      ::  the group binding survives a reopen for the same reason
+      ::  listen does. The manual roster in this action still lands,
+      ::  and the next sync overwrites it if the room is bound.
+      =/  had-group  ?~(had ~ group.u.had)
+      =/  new=room:trunk
+        [title.act members.act admins.act listen room-sfu had-group]
       =.  hosted.state  (~(put by hosted.state) name.act new)
       :_  this
       (announce:hc name.act new %.y)
@@ -366,7 +408,9 @@
           this(hosted.state (~(del by hosted.state) name.act))
         =/  new=room:trunk
           ?~  got
-            [title.act members.act admins.act listen.act sfu.act]
+            ::  a brand-new room starts unbound; binding is a separate
+            ::  deliberate act.
+            [title.act members.act admins.act listen.act sfu.act ~]
           =/  new-sfu  ?:(keep-sfu.act sfu.u.got sfu.act)
           =/  new-title  ?:(=('' title.act) title.u.got title.act)
           %=  u.got
@@ -398,6 +442,33 @@
               %agent  [host.act %trunk]
               %poke  %trunk-room  !>(`room-sig:trunk`[%peek name.act])
       ==  ==
+    ::
+        %bind-room
+      ::  bind (or unbind) a hosted room's roster to a group. The
+      ::  binding is host-local: members learn nothing unless a sync
+      ::  actually changes the roster, which then announces like any
+      ::  other roster change. A fresh binding syncs immediately
+      ::  rather than waiting for the group to next change.
+      =/  got  (~(get by hosted.state) name.act)
+      ?~  got  ~|(no-such-room+name.act !!)
+      =/  mirror-live=?
+        =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
+        ?~(w %.n acked.u.w)
+      =/  ros=(unit [members=(set ship) admins=(set ship)])
+        ?~  group.act  ~
+        ::  only sync now if the mirror watch is already live — that
+        ::  is the proof %groups exists that mirror-roster requires.
+        ::  A first-ever binding syncs on the watch's initial fact
+        ::  instead, moments later.
+        ?.(mirror-live ~ (mirror-roster:hc u.group.act))
+      =/  new=room:trunk
+        ?~  ros  u.got(group group.act)
+        u.got(group group.act, members members.u.ros, admins admins.u.ros)
+      =.  hosted.state  (~(put by hosted.state) name.act new)
+      :_  this
+      %+  weld  (mirror-sub-cards:hc hosted.state)
+      ?:  =([members admins]:new [members admins]:u.got)  ~
+      (announce:hc name.act new %.y)
     ::
         %join-room
       ::  hosting it ourselves? mint straight away, no round trip.
@@ -491,7 +562,7 @@
           %-  (slog leaf+"trunk: too many rooms; refusing {<name.msg>}" ~)
           `this
         =/  new=room:trunk
-          [title.msg members.msg admins.msg listen.msg sfu.msg]
+          [title.msg members.msg admins.msg listen.msg sfu.msg ~]
         =.  hosted.state  (~(put by hosted.state) name.msg new)
         :_  this
         (announce:hc name.msg new %.y)
@@ -572,7 +643,47 @@
 ++  on-agent
   |=  [=wire =sign:agent:gall]
   ^-  (quip card _this)
-  ?+    -.sign  (on-agent:def wire sign)
+  ::  ?- rather than ?+: all four sign types now have cases, and an
+  ::  exhaustive ?+ is a mint-vain.
+  ?-    -.sign
+      %watch-ack
+    ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
+    ?~  p.sign  `this
+    ::  refused (older %groups, permissions...). Not an error state:
+    ::  every bound room simply keeps its last known roster.
+    %-  (slog leaf+"trunk: groups mirror refused; rosters stay manual" ~)
+    `this
+  ::
+      %kick
+    ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
+    ::  %groups restarted or was upgraded. Re-arm if anything is
+    ::  still bound; the helper no-ops otherwise.
+    :_(this (mirror-sub-cards:hc hosted.state))
+  ::
+      %fact
+    ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
+    ::  The cage is deliberately never opened. %trunk cannot cast
+    ::  Tlon's versioned marks and does not need to: any fact on this
+    ::  wire means "something changed somewhere", and the truth is
+    ::  re-read through the stable JSON scry. That is what keeps this
+    ::  mirror alive across their group-2/group-3 style bumps.
+    =/  rooms  ~(tap by hosted.state)
+    =|  cards=(list card)
+    |-
+    ?~  rooms  [cards this]
+    =/  nom  p.i.rooms
+    =/  rum  q.i.rooms
+    ?~  group.rum  $(rooms t.rooms)
+    =/  ros  (mirror-roster:hc u.group.rum)
+    ?~  ros  $(rooms t.rooms)
+    ?:  ?&  =(members.u.ros members.rum)
+            =(admins.u.ros admins.rum)
+        ==
+      $(rooms t.rooms)
+    =/  new  rum(members members.u.ros, admins admins.u.ros)
+    =.  hosted.state  (~(put by hosted.state) nom new)
+    $(rooms t.rooms, cards (weld cards (announce:hc nom new %.y)))
+  ::
       %poke-ack
     ?~  p.sign  `this
     ?+    wire  `this
@@ -785,4 +896,50 @@
           %agent  [who %trunk]
           %poke  %trunk-room  !>(msg)
   ==  ==
+::
+::  +mirror-roster: one bound room's roster, read back through the
+::  stable JSON scry. ~ on any failure, and the caller keeps the
+::  roster it has: version drift degrades to staleness, never to a
+::  broken line.
+::
+::  Callers must only invoke this when %groups is known to be alive —
+::  a fact just arrived from it, or the mirror watch is acked in
+::  wex.bowl. There is no reliable in-agent probe for a missing
+::  agent: %gu of one answers nothing and a failed .^ crashes the
+::  whole event, straight through mole (verified on-ship — the poke
+::  trace names the %gx path). Proof-of-life is the guard, not a
+::  scry. The group LIST is read before the single group for the
+::  same reason: a bound-but-deleted group would otherwise crash the
+::  sync instead of going quietly stale.
+++  mirror-roster
+  |=  gs=group-source:trunk
+  ^-  (unit [members=(set ship) admins=(set ship)])
+  =/  base  /(scot %p our.bowl)/groups/(scot %da now.bowl)
+  =/  all=json  .^(json %gx (weld base /v2/groups/json))
+  ?.  ?=([%o *] all)  ~
+  =/  flag  (rap 3 (scot %p ship.gs) '/' name.gs ~)
+  ?.  (~(has by p.all) flag)  ~
+  =/  jon=json
+    .^(json %gx (weld base /v2/groups/(scot %p ship.gs)/[name.gs]/json))
+  (roster-from-json:trunk-json jon ship.gs)
+::
+::  +mirror-sub-cards: keep exactly one local watch on %groups alive
+::  while any room is bound, and none when none is. Idempotent — the
+::  caller fires it after every binding change without tracking what
+::  happened last time. No is-groups-installed probe: watching a
+::  missing agent nacks, the nack is logged, and rosters stay manual
+::  — which is the correct behaviour and needs no second mechanism.
+++  mirror-sub-cards
+  |=  hosted=(map @t room:trunk)
+  ^-  (list card)
+  =/  want=?
+    %+  lien  ~(tap by hosted)
+    |=([@t r=room:trunk] ?=(^ group.r))
+  =/  has=?
+    (~(has by wex.bowl) [/groups-mirror our.bowl %groups])
+  ?:  &(want !has)
+    [%pass /groups-mirror %agent [our.bowl %groups] %watch /v1/groups]~
+  ?:  &(!want has)
+    [%pass /groups-mirror %agent [our.bowl %groups] %leave ~]~
+  ~
 --

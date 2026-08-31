@@ -72,6 +72,8 @@
       [%close-room (ot ~[name+so])]
       [%join-room (ot ~[host+ship-from-json name+so])]
       [%peek-room (ot ~[host+ship-from-json name+so])]
+      :-  %bind-room
+      (ot ~[name+so group+(mu (ot ~[ship+ship-from-json name+so]))])
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]
@@ -209,6 +211,12 @@
       [%a (turn ~(tap in members.room) |=(w=@p `json`s+(scot %p w)))]
       :-  %admins
       [%a (turn ~(tap in admins.room) |=(w=@p `json`s+(scot %p w)))]
+      :-  %group
+      ?~  group.room  ~
+      %-  pairs:enjs:format
+      :~  [%ship s+(scot %p ship.u.group.room)]
+          [%name s+name.u.group.room]
+      ==
   ==
 ::
 ++  lines-to-json
@@ -227,4 +235,64 @@
       [%listen b+listen.line]
       [%sfu-base s+sfu-base.line]
   ==
+::  +roster-from-json: members and admins out of a Tlon group's JSON.
+::
+::  This is the entire coupling surface of the group mirror, and it is
+::  field names, not types: %trunk never imports a Tlon structure and
+::  never casts a Tlon mark. The names carry both schema generations
+::  (seats/roles/admins with fleet/sects/bloc fallbacks) — the same
+::  pairs Talon's own GroupAdminParser reads in production. A shape
+::  this walk does not recognise yields ~, and the caller keeps the
+::  roster it already has: version drift degrades to staleness, never
+::  to a broken line.
+::
+::  admin = the group host, or anyone holding the literal 'admin'
+::  role, or anyone holding a role the group lists as an admin role.
+++  roster-from-json
+  |=  [jon=json host=ship]
+  ^-  (unit [members=(set ship) admins=(set ship)])
+  ?.  ?=([%o *] jon)  ~
+  =/  seats
+    =/  x  (~(get by p.jon) 'seats')
+    ?^(x x (~(get by p.jon) 'fleet'))
+  ?~  seats  ~
+  ?.  ?=([%o *] u.seats)  ~
+  =/  admin-roles=(set @t)
+    =/  a
+      =/  x  (~(get by p.jon) 'admins')
+      ?^(x x (~(get by p.jon) 'bloc'))
+    ?~  a  ~
+    ?.  ?=([%a *] u.a)  ~
+    %-  silt
+    %+  murn  p.u.a
+    |=(j=json ?:(?=([%s *] j) `p.j ~))
+  =/  entries  ~(tap by p.u.seats)
+  =|  members=(set ship)
+  =|  admins=(set ship)
+  |-
+  ?~  entries  `[members admins]
+  =/  who  (slaw %p p.i.entries)
+  ?~  who  $(entries t.entries)
+  =/  roles=(set @t)
+    =/  v  q.i.entries
+    ?.  ?=([%o *] v)  ~
+    =/  r
+      =/  x  (~(get by p.v) 'roles')
+      ?^(x x (~(get by p.v) 'sects'))
+    ?~  r  ~
+    ?.  ?=([%a *] u.r)  ~
+    %-  silt
+    %+  murn  p.u.r
+    |=(j=json ?:(?=([%s *] j) `p.j ~))
+  =/  is-admin=?
+    ?|  =(u.who host)
+        (~(has in roles) 'admin')
+        !=(~ (~(int in roles) admin-roles))
+    ==
+  %=  $
+    entries  t.entries
+    members  (~(put in members) u.who)
+    admins   ?:(is-admin (~(put in admins) u.who) admins)
+  ==
+
 --
