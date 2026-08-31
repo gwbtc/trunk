@@ -312,11 +312,18 @@
       ::  listen does. The manual roster in this action still lands,
       ::  and the next sync overwrites it if the room is bound.
       =/  had-group  ?~(had ~ group.u.had)
+      ::  a reopen that shrinks the roster must tell the leavers:
+      ::  +announce reaches only the NEW members. Diffed before the
+      ::  state write — helper arms see pre-mutation state, so diffs
+      ::  are computed here and passed down, never derived inside.
+      =/  removed=(set ship)
+        ?~  had  ~
+        (~(dif in members.u.had) members.act)
       =/  new=room:trunk
         [title.act members.act admins.act listen room-sfu had-group]
       =.  hosted.state  (~(put by hosted.state) name.act new)
       :_  this
-      (announce:hc name.act new %.y)
+      (weld (announce:hc name.act new %.y) (shut-cards:hc name.act removed))
     ::
         %set-room-listen
       =/  got  (~(get by hosted.state) name.act)
@@ -389,8 +396,22 @@
       =/  extra=(list card)
         ?~  settled  ~
         ~[(fact:hc [%handled u.settled])]
+      ::  the wire carries the call id: a nacked relay comes back as a
+      ::  %reject on /calls, and the client drops any %reject whose id
+      ::  it did not mint — so a made-up id never matched, and the
+      ::  caller rang out its whole watchdog against a ship that was
+      ::  not there. scot %t, because an id is a client-minted cord
+      ::  (uuid), not something already knot-safe.
+      =/  call-id=@t
+        ?-  -.sig.act
+          %ring    id.sig.act
+          %offer   id.sig.act
+          %accept  id.sig.act
+          %reject  id.sig.act
+          %hangup  id.sig.act
+        ==
       =/  relay=(list card)
-        :~  :*  %pass  /relay/(scot %p ship.act)
+        :~  :*  %pass  /relay/(scot %p ship.act)/(scot %t call-id)
                 %agent  [ship.act %trunk]
                 %poke  %trunk-signal  !>(sig.act)
         ==  ==
@@ -420,9 +441,14 @@
             members  ?~(members.act members.u.got members.act)
             admins   ?~(admins.act admins.u.got admins.act)
           ==
+        ::  a shrunk roster's leavers get a %shut — +announce reaches
+        ::  only the ships that remain. Diffed before the write.
+        =/  removed=(set ship)
+          ?~  got  ~
+          (~(dif in members.u.got) members.new)
         =.  hosted.state  (~(put by hosted.state) name.act new)
         :_  this
-        (announce:hc name.act new %.y)
+        (weld (announce:hc name.act new %.y) (shut-cards:hc name.act removed))
       :_  this
       :~  :*  %pass  /room/(scot %p host.act)
               %agent  [host.act %trunk]
@@ -437,11 +463,16 @@
       ::  hosting it ourselves? we already know, answer locally.
       ?:  =(host.act our.bowl)
         :_(this (peek-cards:hc our.bowl name.act))
-      :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%peek name.act])
-      ==  ==
+      ::  Recorded in asked exactly like a %join: a refused peek is
+      ::  answered with %deny, and the %deny handler drops anything
+      ::  not in asked. Without this entry the host's answer was
+      ::  silently eaten and the client re-poked a host that had
+      ::  already said no.
+      :-  :~  :*  %pass  /room/(scot %p host.act)
+                  %agent  [host.act %trunk]
+                  %poke  %trunk-room  !>(`room-sig:trunk`[%peek name.act])
+          ==  ==
+      this(asked.state (~(put in asked.state) [host.act name.act]))
     ::
         %bind-room
       ::  bind (or unbind) a hosted room's roster to a group. The
@@ -464,11 +495,17 @@
       =/  new=room:trunk
         ?~  ros  u.got(group group.act)
         u.got(group group.act, members members.u.ros, admins admins.u.ros)
+      ::  ships the fresh sync drops are told the line is gone —
+      ::  +announce reaches only the new roster. Diffed against
+      ::  u.got, the pre-write room.
+      =/  removed=(set ship)
+        ?~  ros  ~
+        (~(dif in members.u.got) members.u.ros)
       =.  hosted.state  (~(put by hosted.state) name.act new)
       :_  this
       %+  weld  (mirror-sub-cards:hc hosted.state)
       ?:  =([members admins]:new [members admins]:u.got)  ~
-      (announce:hc name.act new %.y)
+      (weld (announce:hc name.act new %.y) (shut-cards:hc name.act removed))
     ::
         %join-room
       ::  hosting it ourselves? mint straight away, no round trip.
@@ -594,6 +631,15 @@
       ?:  (gth ~(wyt by known.state) invite-cap)  `this
       =/  =line:trunk  [title.msg listen.msg sfu-base.msg]
       :-  ~[(fact:hc [%open src.bowl name.msg line])]
+      ::  deliberately does NOT settle asked.state: joins and peeks
+      ::  share that set, and a host's roster-change announce landing
+      ::  between our %ask and its %grant would delete the entry the
+      ::  %grant handler requires — the grant would be dropped as
+      ::  unsolicited and the join would silently die. A peek's entry
+      ::  therefore lingers after its announce answer, like an ask to
+      ::  a host that never replies; the exposure is one unsolicited
+      ::  %ticket fact, which every client device already ignores
+      ::  unless it has a matching pending join of its own.
       this(known.state (~(put by known.state) [src.bowl name.msg] line))
     ::
         %shut
@@ -681,14 +727,33 @@
         ==
       $(rooms t.rooms)
     =/  new  rum(members members.u.ros, admins admins.u.ros)
+    ::  members the group dropped get a %shut — +announce reaches
+    ::  only the new roster. Diffed against rum and the cards built
+    ::  before the write, since helper arms see pre-mutation state.
+    =/  removed  (~(dif in members.rum) members.u.ros)
+    =/  told  (weld (announce:hc nom new %.y) (shut-cards:hc nom removed))
     =.  hosted.state  (~(put by hosted.state) nom new)
-    $(rooms t.rooms, cards (weld cards (announce:hc nom new %.y)))
+    $(rooms t.rooms, cards (weld cards told))
   ::
       %poke-ack
     ?~  p.sign  `this
     ?+    wire  `this
         ::  a nacked relay means the peer has no %trunk (or rejected
-        ::  us). surface it so the caller's UI stops ringing.
+        ::  us). surface it so the caller's UI stops ringing. The
+        ::  reject carries the call id from the wire's third segment:
+        ::  the client filters rejects by the id it minted, so a
+        ::  reject without the real id is silently dropped and tells
+        ::  the caller nothing.
+        [%relay @ @ ~]
+      =/  peer  (slav %p i.t.wire)
+      =/  id  (slav %t i.t.t.wire)
+      :_  this
+      ~[(fact:hc [%recv peer [%reject id 'unreachable']])]
+    ::
+        ::  the id-less wire shape from before the fix above. A poke
+        ::  in flight across a desk upgrade still acks against this
+        ::  code, so the old shape must keep parsing; nothing better
+        ::  than 'unknown' can be said for it.
         [%relay @ ~]
       =/  peer  (slav %p i.t.wire)
       :_  this
@@ -869,6 +934,27 @@
       %agent  [who %trunk]
       %poke  %trunk-room
       !>(`room-sig:trunk`?:(open [%announce name title listen base] [%shut name]))
+  ==
+::
+::  +shut-cards: tell each ship in `whom` the line is gone FOR THEM.
+::  Roster shrinks need this: +announce iterates the room's members,
+::  and a ship just removed is no longer one, so it never heard —
+::  its known list kept the dead line forever, a call button whose
+::  every tap round-trips to 'not a member'. Same card as
+::  +announce's close path. Takes the removed set by value: callers
+::  diff old against new BEFORE mutating state, for the closure
+::  reason +announce documents.
+::
+++  shut-cards
+  |=  [name=@t whom=(set ship)]
+  ^-  (list card)
+  %+  turn  ~(tap in (~(del in whom) our.bowl))
+  |=  who=ship
+  ^-  card
+  :*  %pass  /room/(scot %p who)
+      %agent  [who %trunk]
+      %poke  %trunk-room
+      !>(`room-sig:trunk`[%shut name])
   ==
 ::
 ::  +reply: deliver a room-sig to `who` — as a local fact when that's
