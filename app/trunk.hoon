@@ -289,14 +289,20 @@
   :*  %9  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
       known.old  asked.old  pol.old
   ==  ==
-  ::  %8 rooms gain the role gates and mute set, unset.
+  ::  %8 rooms gain the role gates and mute set, unset — and empty
+  ::  seat-roles. Sweep the group mirror now if its watch is live:
+  ::  otherwise a gate set right after the upgrade would consult
+  ::  empty seat-roles and admit nobody but admins until the group
+  ::  next happens to change.
     %8
-  :-  ~
-  %=  this
-    state
-  :*  %9  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
-      known.old  asked.old  pol.old
-  ==  ==
+  =.  state
+    :*  %9  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+        known.old  asked.old  pol.old
+    ==
+  =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
+  ?.  ?~(w %.n acked.u.w)  `this
+  =^  cards  hosted.state  (mirror-sweep:hc hosted.state)
+  [cards this]
     %9  `this(state old)
   ==
 
