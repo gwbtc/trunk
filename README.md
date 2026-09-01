@@ -239,17 +239,87 @@ is total.
 One line per group, hosted by one ship, running on an SFU. The host
 mints a per-member, per-room token; membership is the whole check.
 
-Rooms carry the two things their admins decide:
+Rooms carry what their admins decide:
 
 ```
 +$ room  [title=@t members=(set ship) admins=(set ship)
-          listen=? sfu=(unit sfu-config)]
+          listen=? sfu=(unit sfu-config)
+          group=(unit group-source)
+          join-roles=(unit (set @t)) speak-roles=(unit (set @t))
+          muted=(set ship) seat-roles=(map ship (set @t))]
 ```
 
 `admins` is just "ships that may reconfigure this room" — the agent has
-no idea what a group is. A client seeds it from whatever roster it has.
-`sfu` overrides the ship's own sidecar, so a group needn't route its
-audio through the host's server.
+no idea what a group is. A client seeds it from whatever roster it has,
+or binds the room to a group source and the roster (and each member's
+roles) mirrors it from then on. `sfu` overrides the ship's own sidecar,
+so a group needn't route its audio through the host's server. The role
+gates are wire 5: `~` for either gate means everyone on the roster,
+which is exactly the pre-wire-5 behavior; a set gate admits a member
+iff their mirrored roles intersect it, the host and admins bypass both
+gates, and `muted` is moderation that beats everything except the host.
+
+### From the dojo
+
+Every action a client can poke works by hand, and a few are genuinely
+useful for operating a host. All of these are local-only pokes — run
+them on the ship they act for.
+
+```dojo
+::  host a room, with yourself as admin
+:trunk &trunk-action [%open-room 'lounge' 'The Lounge' (silt ~[~zod ~bus]) (silt ~[our])]
+
+::  join a line someone else hosts (the ticket arrives on /calls)
+:trunk &trunk-action [%join-room ~zod 'lounge']
+
+::  ask whether a line exists without joining it. This is the recovery
+::  path for a missed invitation: a member whose ship had no %trunk
+::  when the host announced (or whose announce was lost) has no other
+::  way to learn of the line — a member's peek is answered %announce.
+:trunk &trunk-action [%peek-room ~zod 'lounge']
+
+::  bind a hosted room's roster to a group, and unbind it
+:trunk &trunk-action [%bind-room 'v769287' [~ [~hodler-lorfeb 'v769287']]]
+:trunk &trunk-action [%bind-room 'v769287' ~]
+
+::  reconfigure a line — on the host, or from any ship on its admin
+::  list (the poke relays and the host checks). Empty members/admins
+::  keep the existing roster, '' keeps the title, keep-sfu=%.y keeps
+::  the sfu, so this exact form is a no-op that re-announces the line
+::  to every member — the manual re-delivery for a lost invitation:
+:trunk &trunk-action [%configure-room ~zod 'lounge' %.y %.n ~ %.y '' ~ ~]
+::                                    host  name  open listen sfu keep title members admins
+
+::  role gates (wire 5): only 'admin'-role seats may join, anyone may
+::  speak; then read the gates back (%access-state arrives on /calls)
+:trunk &trunk-action [%set-room-access ~zod 'lounge' [~ (silt ~['admin'])] ~]
+:trunk &trunk-action [%get-room-access ~zod 'lounge']
+
+::  moderation (wire 5): mute one member for everyone, and undo it
+:trunk &trunk-action [%moderate-member ~zod 'lounge' ~bus %.y]
+:trunk &trunk-action [%moderate-member ~zod 'lounge' ~bus %.n]
+
+::  anonymous listening: allow it, then mint a one-hour listen link
+::  (the url arrives on /calls as listen-link)
+:trunk &trunk-action [%set-room-listen 'lounge' %.y]
+:trunk &trunk-action [%share-room ~zod 'lounge' 3.600]
+
+::  point the ship at its SFU (base url, Galène group, signing key)
+:trunk &trunk-action [%set-sfu 'https://sfu.example' 'talon' '<key>']
+```
+
+Read state over HTTP (eyre supplies the `%x` care — don't put it in
+the path):
+
+```
+/~/scry/trunk/version.json    what wire the desk speaks
+/~/scry/trunk/rooms.json      the lines this ship hosts, gates included
+/~/scry/trunk/lines.json      the lines this ship holds invitations to
+/~/scry/trunk/policy.json     who may ring
+/~/scry/trunk/ice.json        the ICE servers this ship advertises
+```
+
+The dojo form of the same reads is `.^(json %gx /=trunk=/lines/json)`.
 
 **Anonymous listening** mints a token with no `present` permission —
 Galène's listener, receives and cannot publish. It is off unless asked
