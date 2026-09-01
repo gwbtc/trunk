@@ -9,4 +9,14 @@
 :-  %noun
 =/  jon  (de:json:html txt)
 ?~  jon  [%bad-json ~]
-[%parsed (roster-from-json:trunk-json u.jon host)]
+=/  ros  (roster-from-json:trunk-json u.jon host)
+?~  ros  [%parsed ~]
+::  unpacked so the dojo shows lists, not raw set/map trees — the
+::  seat-roles leg is the wire-5 addition this harness now covers.
+:-  %parsed
+:~  members+~(tap in members.u.ros)
+    admins+~(tap in admins.u.ros)
+    :-  %seat-roles
+    %+  turn  ~(tap by seat-roles.u.ros)
+    |=([s=@p r=(set @t)] [s ~(tap in r)])
+==

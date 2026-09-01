@@ -15,6 +15,11 @@
 ::            {"close-room":{"name":n}}
 ::            {"join-room":{"host":"~zod","name":n}}
 ::            {"peek-room":{"host":"~zod","name":n}}
+::            {"set-room-access":{"host":"~zod","name":n,
+::                                "join":null|["r"],"speak":null|["r"]}}
+::            {"moderate-member":{"host":"~zod","name":n,
+::                                "who":"~bus","mute":true}}
+::            {"get-room-access":{"host":"~zod","name":n}}
 ::            {"set-call-mode":"open"} | {"allow":"~zod"}
 ::            {"unallow":"~zod"} | {"block":"~zod"} | {"unblock":"~zod"}
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
@@ -23,6 +28,8 @@
 ::    update  {"recv":{"from":"~zod","sig":{...}}}
 ::            {"ticket":{"from":"~zod","name":n,"location":l,"token":t}}
 ::            {"denied":{"from":"~zod","name":n,"why":w}}
+::            {"access-state":{"from":"~zod","name":n,"join":null|["r"],
+::                             "speak":null|["r"],"muted":["~bus"]}}
 ::    policy  {"mode":"open","allow":["~zod"],"block":["~bus"]}
 ::    link    {"listen-link":{"name":n,"url":u,"expires":1787000000}}
 /-  trunk
@@ -72,6 +79,15 @@
       [%close-room (ot ~[name+so])]
       [%join-room (ot ~[host+ship-from-json name+so])]
       [%peek-room (ot ~[host+ship-from-json name+so])]
+      ::  null means "everyone on the roster" for either gate
+      :-  %set-room-access
+      %-  ot
+      :~  host+ship-from-json  name+so
+          join+(mu (as so))  speak+(mu (as so))
+      ==
+      :-  %moderate-member
+      (ot ~[host+ship-from-json name+so who+ship-from-json mute+bo])
+      [%get-room-access (ot ~[host+ship-from-json name+so])]
       :-  %bind-room
       (ot ~[name+so group+(mu (ot ~[ship+ship-from-json name+so]))])
       [%set-call-mode (su (perk %open %allow ~))]
@@ -117,6 +133,16 @@
     %reject  (frond %reject (pairs ~[id+s+id.s reason+s+reason.s]))
     %hangup  (frond %hangup (pairs ~[id+s+id.s]))
   ==
+::
+::  +roles-to-json: one role gate. null means "everyone on the
+::  roster" and is NEVER an empty array — the client keys off the
+::  distinction, and an empty array is the opposite gate (admins
+::  only).
+++  roles-to-json
+  |=  r=(unit (set @t))
+  ^-  json
+  ?~  r  ~
+  [%a (turn ~(tap in u.r) |=(t=@t `json`s+t))]
 ::
 ++  update-to-json
   |=  u=update:trunk
@@ -178,6 +204,17 @@
     ==
   ::
       %handled  (frond %handled s+id.u)
+  ::
+      %access-state
+    %+  frond  %access-state
+    %-  pairs
+    :~  [%from s+(scot %p from.u)]
+        [%name s+name.u]
+        [%join (roles-to-json join.u)]
+        [%speak (roles-to-json speak.u)]
+        :-  %muted
+        [%a (turn ~(tap in muted.u) |=(w=@p `json`s+(scot %p w)))]
+    ==
   ==
 ::
 ++  sfu-to-json
@@ -211,6 +248,10 @@
       [%a (turn ~(tap in members.room) |=(w=@p `json`s+(scot %p w)))]
       :-  %admins
       [%a (turn ~(tap in admins.room) |=(w=@p `json`s+(scot %p w)))]
+      [%join-roles (roles-to-json join-roles.room)]
+      [%speak-roles (roles-to-json speak-roles.room)]
+      :-  %muted
+      [%a (turn ~(tap in muted.room) |=(w=@p `json`s+(scot %p w)))]
       :-  %group
       ?~  group.room  ~
       %-  pairs:enjs:format
@@ -235,7 +276,8 @@
       [%listen b+listen.line]
       [%sfu-base s+sfu-base.line]
   ==
-::  +roster-from-json: members and admins out of a Tlon group's JSON.
+::  +roster-from-json: members, admins and per-seat roles out of a
+::  Tlon group's JSON.
 ::
 ::  This is the entire coupling surface of the group mirror, and it is
 ::  field names, not types: %trunk never imports a Tlon structure and
@@ -248,9 +290,15 @@
 ::
 ::  admin = the group host, or anyone holding the literal 'admin'
 ::  role, or anyone holding a role the group lists as an admin role.
+::
+::  seat-roles keeps the RAW role set per seat (seats.*.roles, with
+::  the legacy fleet.*.sects fallback — the same two names the admin
+::  derivation above already reads): the room's join/speak gates are
+::  intersected against it at ticket time, so the role ids here must
+::  be the ids an admin picked in the group, untranslated.
 ++  roster-from-json
   |=  [jon=json host=ship]
-  ^-  (unit [members=(set ship) admins=(set ship)])
+  ^-  (unit [members=(set ship) admins=(set ship) seat-roles=(map ship (set @t))])
   ?.  ?=([%o *] jon)  ~
   =/  seats
     =/  x  (~(get by p.jon) 'seats')
@@ -269,8 +317,9 @@
   =/  entries  ~(tap by p.u.seats)
   =|  members=(set ship)
   =|  admins=(set ship)
+  =|  seat-roles=(map ship (set @t))
   |-
-  ?~  entries  `[members admins]
+  ?~  entries  `[members admins seat-roles]
   =/  who  (slaw %p p.i.entries)
   ?~  who  $(entries t.entries)
   =/  roles=(set @t)
@@ -290,9 +339,10 @@
         !=(~ (~(int in roles) admin-roles))
     ==
   %=  $
-    entries  t.entries
-    members  (~(put in members) u.who)
-    admins   ?:(is-admin (~(put in admins) u.who) admins)
+    entries     t.entries
+    members     (~(put in members) u.who)
+    admins      ?:(is-admin (~(put in admins) u.who) admins)
+    seat-roles  (~(put by seat-roles) u.who roles)
   ==
 
 --

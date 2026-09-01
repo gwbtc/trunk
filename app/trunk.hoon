@@ -34,6 +34,15 @@
       listen=?
       sfu=(unit sfu-config:trunk)
   ==
+::  ...and as saved by %8, before the role gates.
++$  old-room-8
+  $:  title=@t
+      members=(set ship)
+      admins=(set ship)
+      listen=?
+      sfu=(unit sfu-config:trunk)
+      group=(unit group-source:trunk)
+  ==
 +$  versioned-state
   $%  state-0
       state-1
@@ -44,6 +53,7 @@
       state-6
       state-7
       state-8
+      state-9
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -113,6 +123,17 @@
   $:  %8
       ice=(list ice-server:trunk)
       sfu=sfu-config:trunk
+      hosted=(map @t old-room-8)
+      known=lines:trunk
+      asked=(set [=ship name=@t])
+      pol=policy:trunk
+  ==
+::  %9 rooms carry role gates, a moderation mute set, and the
+::  mirrored per-seat roles that feed both.
++$  state-9
+  $:  %9
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
       hosted=(map @t room:trunk)
       known=lines:trunk
       asked=(set [=ship name=@t])
@@ -132,7 +153,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  4
+++  wire-version  5
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
 ::  this is the brake on that.
@@ -149,7 +170,7 @@
   %-  ~(run by old)
   |=  r=old-room
   ^-  room:trunk
-  [title.r members.r ~ %.n ~ ~]
+  [title.r members.r ~ %.n ~ ~ ~ ~ ~ ~]
 ::
 ::  +upgrade-rooms-6: %6 rooms gain the per-room SFU, unset — every
 ::  existing room keeps running on its host ship's own sidecar.
@@ -159,7 +180,7 @@
   %-  ~(run by old)
   |=  r=old-room-6
   ^-  room:trunk
-  [title.r members.r admins.r listen.r ~ ~]
+  [title.r members.r admins.r listen.r ~ ~ ~ ~ ~ ~]
 ::
 ::  +upgrade-rooms-7: %7 rooms gain the group binding, unset — an
 ::  existing roster stays manual until someone binds it on purpose.
@@ -169,7 +190,19 @@
   %-  ~(run by old)
   |=  r=old-room-7
   ^-  room:trunk
-  [title.r members.r admins.r listen.r sfu.r ~]
+  [title.r members.r admins.r listen.r sfu.r ~ ~ ~ ~ ~]
+::
+::  +upgrade-rooms-8: %8 rooms gain the role gates and mute set, all
+::  unset — an existing line keeps admitting and voicing its whole
+::  roster, because gating is something an admin turns on, never
+::  something an upgrade turns on.
+++  upgrade-rooms-8
+  |=  old=(map @t old-room-8)
+  ^-  (map @t room:trunk)
+  %-  ~(run by old)
+  |=  r=old-room-8
+  ^-  room:trunk
+  [title.r members.r admins.r listen.r sfu.r group.r ~ ~ ~ ~]
 ::
 ::  +upgrade-lines: a remembered invitation used to be just a title.
 ::  Nothing is known about its settings until the host announces
@@ -188,7 +221,7 @@
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
 %-  agent:dbug
-=|  state-8
+=|  state-9
 =*  state  -
 ^-  agent:gall
 =<
@@ -211,14 +244,14 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-vase)
   ?-  -.old
-    %0  `this(state [%8 ~ ['' '' ''] ~ ~ ~ open-policy])
-    %1  `this(state [%8 ice.old ['' '' ''] ~ ~ ~ open-policy])
-    %2  `this(state [%8 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy])
+    %0  `this(state [%9 ~ ['' '' ''] ~ ~ ~ open-policy])
+    %1  `this(state [%9 ice.old ['' '' ''] ~ ~ ~ open-policy])
+    %2  `this(state [%9 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy])
     %3
   :-  ~
   %=  this
     state
-  :*  %8  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %9  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  ~  open-policy
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
@@ -227,7 +260,7 @@
   :-  ~
   %=  this
     state
-  :*  %8  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %9  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  asked.old  open-policy
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
@@ -236,7 +269,7 @@
   :-  ~
   %=  this
     state
-  :*  %8  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %9  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  asked.old  pol.old
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
@@ -245,7 +278,7 @@
   :-  ~
   %=  this
     state
-  :*  %8  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+  :*  %9  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
       (upgrade-lines known.old)  asked.old  pol.old
   ==  ==
   ::  %7 rooms gain the group binding, unset.
@@ -253,10 +286,18 @@
   :-  ~
   %=  this
     state
-  :*  %8  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+  :*  %9  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
       known.old  asked.old  pol.old
   ==  ==
-    %8  `this(state old)
+  ::  %8 rooms gain the role gates and mute set, unset.
+    %8
+  :-  ~
+  %=  this
+    state
+  :*  %9  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+      known.old  asked.old  pol.old
+  ==  ==
+    %9  `this(state old)
   ==
 
 ::
@@ -312,6 +353,13 @@
       ::  listen does. The manual roster in this action still lands,
       ::  and the next sync overwrites it if the room is bound.
       =/  had-group  ?~(had ~ group.u.had)
+      ::  the role gates, mute set and mirrored seat roles survive a
+      ::  reopen too: re-announcing a line must not silently unmute
+      ::  anyone or drop the gates an admin set.
+      =/  had-join  ?~(had ~ join-roles.u.had)
+      =/  had-speak  ?~(had ~ speak-roles.u.had)
+      =/  had-muted=(set ship)  ?~(had ~ muted.u.had)
+      =/  had-seats=(map ship (set @t))  ?~(had ~ seat-roles.u.had)
       ::  a reopen that shrinks the roster must tell the leavers:
       ::  +announce reaches only the NEW members. Diffed before the
       ::  state write — helper arms see pre-mutation state, so diffs
@@ -320,7 +368,9 @@
         ?~  had  ~
         (~(dif in members.u.had) members.act)
       =/  new=room:trunk
-        [title.act members.act admins.act listen room-sfu had-group]
+        :*  title.act  members.act  admins.act  listen  room-sfu
+            had-group  had-join  had-speak  had-muted  had-seats
+        ==
       =.  hosted.state  (~(put by hosted.state) name.act new)
       :_  this
       (weld (announce:hc name.act new %.y) (shut-cards:hc name.act removed))
@@ -429,9 +479,9 @@
           this(hosted.state (~(del by hosted.state) name.act))
         =/  new=room:trunk
           ?~  got
-            ::  a brand-new room starts unbound; binding is a separate
-            ::  deliberate act.
-            [title.act members.act admins.act listen.act sfu.act ~]
+            ::  a brand-new room starts unbound and ungated; binding
+            ::  and gating are separate deliberate acts.
+            [title.act members.act admins.act listen.act sfu.act ~ ~ ~ ~ ~]
           =/  new-sfu  ?:(keep-sfu.act sfu.u.got sfu.act)
           =/  new-title  ?:(=('' title.act) title.u.got title.act)
           %=  u.got
@@ -485,16 +535,22 @@
       =/  mirror-live=?
         =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
         ?~(w %.n acked.u.w)
-      =/  ros=(unit [members=(set ship) admins=(set ship)])
+      =/  ros=(unit [members=(set ship) admins=(set ship) seat-roles=(map ship (set @t))])
         ?~  group.act  ~
         ::  only sync now if the mirror watch is already live — that
         ::  is the proof %groups exists that mirror-roster requires.
-        ::  A first-ever binding syncs on the watch's initial fact
-        ::  instead, moments later.
+        ::  A first-ever binding syncs on the watch-ack sweep instead,
+        ::  moments later: /v1/groups sends no initial fact, so the
+        ::  ack itself is the first (and only) proof-of-life signal.
         ?.(mirror-live ~ (mirror-roster:hc u.group.act))
       =/  new=room:trunk
         ?~  ros  u.got(group group.act)
-        u.got(group group.act, members members.u.ros, admins admins.u.ros)
+        %=  u.got
+          group       group.act
+          members     members.u.ros
+          admins      admins.u.ros
+          seat-roles  seat-roles.u.ros
+        ==
       ::  ships the fresh sync drops are told the line is gone —
       ::  +announce reaches only the new roster. Diffed against
       ::  u.got, the pre-write room.
@@ -516,6 +572,67 @@
                   %poke  %trunk-room  !>(`room-sig:trunk`[%ask name.act])
           ==  ==
       this(asked.state (~(put in asked.state) [host.act name.act]))
+    ::
+    ::  Role gates for a line. Local-only action, so it is already our
+    ::  own ship's owner asking: hosting it ourselves we apply
+    ::  directly, otherwise we relay and the HOST checks we are on its
+    ::  admin list — the same split as %configure-room. Either way the
+    ::  answer is one %access-state fact on /calls.
+        %set-room-access
+      ?:  =(host.act our.bowl)
+        =/  got  (~(get by hosted.state) name.act)
+        ?~  got  `this
+        =/  new  u.got(join-roles join.act, speak-roles speak.act)
+        =.  hosted.state  (~(put by hosted.state) name.act new)
+        :_  this
+        %+  reply:hc  our.bowl
+        [%access-state name.act join-roles.new speak-roles.new muted.new]
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room
+              !>(`room-sig:trunk`[%access name.act join.act speak.act])
+      ==  ==
+    ::
+    ::  Muting one member for everyone. Same local/relay split; the
+    ::  mute lands in the room's muted set and takes effect on the
+    ::  next ticket minted — the live socket is the client's job.
+        %moderate-member
+      ?:  =(host.act our.bowl)
+        =/  got  (~(get by hosted.state) name.act)
+        ?~  got  `this
+        =/  new-muted
+          ?:  mute.act  (~(put in muted.u.got) who.act)
+          (~(del in muted.u.got) who.act)
+        =/  new  u.got(muted new-muted)
+        =.  hosted.state  (~(put by hosted.state) name.act new)
+        :_  this
+        %+  reply:hc  our.bowl
+        [%access-state name.act join-roles.new speak-roles.new muted.new]
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room
+              !>(`room-sig:trunk`[%moderate name.act who.act mute.act])
+      ==  ==
+    ::
+    ::  Reading the gates back. Hosting it ourselves we answer from
+    ::  state; otherwise the host answers with %access-state, and a
+    ::  wire-4 host nacks at the mark cast — which the client reads as
+    ::  "this host does not speak roles yet".
+        %get-room-access
+      ?:  =(host.act our.bowl)
+        =/  got  (~(get by hosted.state) name.act)
+        ?~  got  `this
+        :_  this
+        %+  reply:hc  our.bowl
+        [%access-state name.act join-roles.u.got speak-roles.u.got muted.u.got]
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room
+              !>(`room-sig:trunk`[%get-access name.act])
+      ==  ==
     ==
   ::
   ::  1:1 signal from a peer ship
@@ -599,7 +716,7 @@
           %-  (slog leaf+"trunk: too many rooms; refusing {<name.msg>}" ~)
           `this
         =/  new=room:trunk
-          [title.msg members.msg admins.msg listen.msg sfu.msg ~]
+          [title.msg members.msg admins.msg listen.msg sfu.msg ~ ~ ~ ~ ~]
         =.  hosted.state  (~(put by hosted.state) name.msg new)
         :_  this
         (announce:hc name.msg new %.y)
@@ -660,6 +777,71 @@
       ?.  (~(has in asked.state) [src.bowl name.msg])  `this
       :-  ~[(fact:hc [%denied src.bowl name.msg why.msg])]
       this(asked.state (~(del in asked.state) [src.bowl name.msg]))
+    ::
+    ::  An admin, over ames, setting a line's role gates. The auth
+    ::  rule for all three access signals is +configure's: only the
+    ::  host itself or a ship on the room's admin list may touch or
+    ::  read the gates. Each is answered with %access-state so the
+    ::  asking admin's UI converges without a scry it cannot make.
+        %access
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  ?|(=(src.bowl our.bowl) (~(has in admins.u.got) src.bowl))
+        %-  (slog leaf+"trunk: {<src.bowl>} is not an admin of {<name.msg>}" ~)
+        `this
+      =/  new  u.got(join-roles join.msg, speak-roles speak.msg)
+      =.  hosted.state  (~(put by hosted.state) name.msg new)
+      :_  this
+      %+  reply:hc  src.bowl
+      [%access-state name.msg join-roles.new speak-roles.new muted.new]
+    ::
+    ::  An admin muting (or unmuting) one member for everyone. The
+    ::  mute is a set entry, nothing more: +may-speak is where it
+    ::  bites. Muting the host is dropped before it touches state,
+    ::  so the muted list never contradicts the host bypass there.
+        %moderate
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  ?|(=(src.bowl our.bowl) (~(has in admins.u.got) src.bowl))
+        %-  (slog leaf+"trunk: {<src.bowl>} is not an admin of {<name.msg>}" ~)
+        `this
+      =/  new-muted
+        ?:  &(mute.msg =(who.msg our.bowl))  muted.u.got
+        ?:  mute.msg  (~(put in muted.u.got) who.msg)
+        (~(del in muted.u.got) who.msg)
+      =/  new  u.got(muted new-muted)
+      =.  hosted.state  (~(put by hosted.state) name.msg new)
+      :_  this
+      %+  reply:hc  src.bowl
+      [%access-state name.msg join-roles.new speak-roles.new muted.new]
+    ::
+    ::  An admin reading the gates back without changing them. A
+    ::  missing room stays silent: a %deny here would be dropped by
+    ::  the asker's %deny handler (no asked entry), and minting an
+    ::  asked entry for a read would widen the %grant mic-hijack
+    ::  guard. The asking UI times out instead.
+        %get-access
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  ?|(=(src.bowl our.bowl) (~(has in admins.u.got) src.bowl))
+        %-  (slog leaf+"trunk: {<src.bowl>} is not an admin of {<name.msg>}" ~)
+        `this
+      :_  this
+      %+  reply:hc  src.bowl
+      [%access-state name.msg join-roles.u.got speak-roles.u.got muted.u.got]
+    ::
+    ::  The host answering one of the three above: pass it through to
+    ::  our client. Inert information, so unlike %grant it needs no
+    ::  asked entry — but it must at least be a line we know from
+    ::  this ship, or any stranger could spray "muted" lists at us.
+        %access-state
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      ?.  (~(has by known.state) [src.bowl name.msg])  `this
+      :_  this
+      ~[(fact:hc [%access-state src.bowl name.msg join.msg speak.msg muted.msg])]
     ==
   ==
 ::
@@ -694,7 +876,16 @@
   ?-    -.sign
       %watch-ack
     ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
-    ?~  p.sign  `this
+    ?~  p.sign
+      ::  the ack IS the proof %groups exists and answered — sync all
+      ::  bound rooms right now. The first design deferred a fresh
+      ::  bind's sync to the watch's "initial fact", but /v1/groups
+      ::  sends none (verified live 2026-09-01: a new subscribe emits
+      ::  zero facts until the next group change), so a just-bound
+      ::  room sat on its stale roster until an admin happened to bind
+      ::  it a second time with the watch already live.
+      =^  cards  hosted.state  (mirror-sweep:hc hosted.state)
+      [cards this]
     ::  refused (older %groups, permissions...). Not an error state:
     ::  every bound room simply keeps its last known roster.
     %-  (slog leaf+"trunk: groups mirror refused; rosters stay manual" ~)
@@ -713,27 +904,8 @@
     ::  wire means "something changed somewhere", and the truth is
     ::  re-read through the stable JSON scry. That is what keeps this
     ::  mirror alive across their group-2/group-3 style bumps.
-    =/  rooms  ~(tap by hosted.state)
-    =|  cards=(list card)
-    |-
-    ?~  rooms  [cards this]
-    =/  nom  p.i.rooms
-    =/  rum  q.i.rooms
-    ?~  group.rum  $(rooms t.rooms)
-    =/  ros  (mirror-roster:hc u.group.rum)
-    ?~  ros  $(rooms t.rooms)
-    ?:  ?&  =(members.u.ros members.rum)
-            =(admins.u.ros admins.rum)
-        ==
-      $(rooms t.rooms)
-    =/  new  rum(members members.u.ros, admins admins.u.ros)
-    ::  members the group dropped get a %shut — +announce reaches
-    ::  only the new roster. Diffed against rum and the cards built
-    ::  before the write, since helper arms see pre-mutation state.
-    =/  removed  (~(dif in members.rum) members.u.ros)
-    =/  told  (weld (announce:hc nom new %.y) (shut-cards:hc nom removed))
-    =.  hosted.state  (~(put by hosted.state) nom new)
-    $(rooms t.rooms, cards (weld cards told))
+    =^  cards  hosted.state  (mirror-sweep:hc hosted.state)
+    [cards this]
   ::
       %poke-ack
     ?~  p.sign  `this
@@ -795,9 +967,50 @@
     %allow  (~(has in allow.pol.state) who)
   ==
 ::
+::  +roles-of: the mirrored group roles `who` holds in this room.
+::  Empty for anyone the mirror has never seen — which on an unbound
+::  room is everyone, and role gates then admit only admins, the
+::  honest reading of "gate by roles nobody has".
+::
+++  roles-of
+  |=  [=room:trunk who=ship]
+  ^-  (set @t)
+  (fall (~(get by seat-roles.room) who) ~)
+::
+::  +may-join: may `who` enter this room at all? The rule: the host
+::  and its admins always may; an unset join-roles admits the whole
+::  roster (the only behavior before wire 5); a set one requires the
+::  member to hold at least one of the listed roles. Membership
+::  itself is the caller's check — this arm only gates members.
+::
+++  may-join
+  |=  [=room:trunk who=ship]
+  ^-  ?
+  ?:  =(who our.bowl)  %.y
+  ?:  (~(has in admins.room) who)  %.y
+  ?~  join-roles.room  %.y
+  !=(~ (~(int in (roles-of room who)) u.join-roles.room))
+::
+::  +may-speak: may `who` publish audio? The rule: a mute beats
+::  everything except the host itself — admins included, or an admin
+::  could not be moderated at all; past the mute it is +may-join's
+::  rule against speak-roles.
+::
+++  may-speak
+  |=  [=room:trunk who=ship]
+  ^-  ?
+  ?:  =(who our.bowl)  %.y
+  ?:  (~(has in muted.room) who)  %.n
+  ?:  (~(has in admins.room) who)  %.y
+  ?~  speak-roles.room  %.y
+  !=(~ (~(int in (roles-of room who)) u.speak-roles.room))
+::
 ::  +grant-cards: authorize (or refuse) `who` for the room `name` we
-::  host. Membership is the whole check — a ticket is only ever minted
-::  for a ship the host explicitly listed.
+::  host. Membership plus +may-join is the whole check — a ticket is
+::  only ever minted for a ship the host explicitly listed, and only
+::  one the join gate admits. What KIND of ticket is +may-speak's
+::  call: Galène permissions are claims in the token, so the gate has
+::  to be decided here at mint time, not on the socket.
 ::
 ++  grant-cards
   |=  [who=ship name=@t]
@@ -813,17 +1026,32 @@
           (~(has in members.u.got) who)
       ==
     (reply who [%deny name 'not a member'])
+  ?.  (may-join u.got who)
+    (reply who [%deny name 'missing join role'])
   ?:  =('' key:(room-sfu name))
     (reply who [%deny name 'no sfu configured'])
+  ::  admin → op (moderate over the socket) and, unless muted, a
+  ::  voice; speaker → voice; listener → neither. %message stays in
+  ::  every tier so the talon-mute gossip usermessages keep flowing —
+  ::  it buys no audio and no access to another room.
+  =/  is-adm=?  ?|(=(who our.bowl) (~(has in admins.u.got) who))
+  =/  can-speak=?  (may-speak u.got who)
+  =/  perms=(list json)
+    ?:  is-adm
+      ?:  can-speak  ~[s+'op' s+'present' s+'message']
+      ~[s+'op' s+'message']
+    ?:  can-speak  ~[s+'present' s+'message']
+    ~[s+'message']
   =/  loc=@t  (room-location name)
   =/  now-secs  (unix-secs:trunk-jwt now.bowl)
   =/  tok=@t
-    %:  mint:trunk-jwt
+    %:  mint-with:trunk-jwt
       key:(room-sfu name)
       (scot %p who)
       loc
       now-secs
       (add now-secs ticket-ttl)
+      perms
     ==
   (reply who [%grant name loc tok])
 ::
@@ -970,13 +1198,18 @@
       %announce
     ~[(fact [%open our.bowl name.msg [title.msg listen.msg sfu-base.msg]])]
       %shut      ~[(fact [%shut our.bowl name.msg])]
-      ::  neither is ever addressed to ourselves; the ?- must still
-      ::  be total.
-      %ask        ~
-      %peek       ~
-      %configure  ~
-      %share      ~
-      %link       ~[(fact [%listen-link listen-link.msg])]
+      %access-state
+    ~[(fact [%access-state our.bowl name.msg join.msg speak.msg muted.msg])]
+      ::  none of these is ever addressed to ourselves; the ?- must
+      ::  still be total.
+      %ask         ~
+      %peek        ~
+      %configure   ~
+      %share       ~
+      %access      ~
+      %moderate    ~
+      %get-access  ~
+      %link        ~[(fact [%listen-link listen-link.msg])]
     ==
   :~  :*  %pass  /room/(scot %p who)
           %agent  [who %trunk]
@@ -999,7 +1232,7 @@
 ::  sync instead of going quietly stale.
 ++  mirror-roster
   |=  gs=group-source:trunk
-  ^-  (unit [members=(set ship) admins=(set ship)])
+  ^-  (unit [members=(set ship) admins=(set ship) seat-roles=(map ship (set @t))])
   =/  base  /(scot %p our.bowl)/groups/(scot %da now.bowl)
   =/  all=json  .^(json %gx (weld base /v2/groups/json))
   ?.  ?=([%o *] all)  ~
@@ -1015,6 +1248,43 @@
 ::  happened last time. No is-groups-installed probe: watching a
 ::  missing agent nacks, the nack is logged, and rosters stay manual
 ::  — which is the correct behaviour and needs no second mechanism.
+::  +mirror-sweep: re-read every bound room's roster from %groups and
+::  apply what changed. Shared by the mirror's %fact arm and the
+::  watch-ack (the first sync a fresh bind gets). Takes and returns the
+::  hosted map by value — helper arms close over pre-mutation state, so
+::  the caller assigns the result. Announce/shut fire only when the
+::  membership actually moved; a seat-roles-only change stays
+::  host-local, since an announce carries no role data.
+++  mirror-sweep
+  |=  hosted=(map @t room:trunk)
+  ^-  [(list card) (map @t room:trunk)]
+  =/  rooms  ~(tap by hosted)
+  =|  cards=(list card)
+  |-
+  ?~  rooms  [cards hosted]
+  =/  nom  p.i.rooms
+  =/  rum  q.i.rooms
+  ?~  group.rum  $(rooms t.rooms)
+  =/  ros  (mirror-roster u.group.rum)
+  ?~  ros  $(rooms t.rooms)
+  ?:  ?&  =(members.u.ros members.rum)
+          =(admins.u.ros admins.rum)
+          =(seat-roles.u.ros seat-roles.rum)
+      ==
+    $(rooms t.rooms)
+  =/  new
+    %=  rum
+      members     members.u.ros
+      admins      admins.u.ros
+      seat-roles  seat-roles.u.ros
+    ==
+  =/  removed  (~(dif in members.rum) members.u.ros)
+  =/  told
+    ?:  =([members admins]:new [members admins]:rum)  ~
+    (weld (announce nom new %.y) (shut-cards nom removed))
+  =.  hosted  (~(put by hosted) nom new)
+  $(rooms t.rooms, cards (weld cards told))
+::
 ++  mirror-sub-cards
   |=  hosted=(map @t room:trunk)
   ^-  (list card)

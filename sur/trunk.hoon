@@ -61,6 +61,13 @@
 ::  subscription. Unbound rooms (~) behave exactly as before: the
 ::  host seeds members/admins by hand and nothing watches anything.
 +$  group-source  [=ship name=@t]
+::  role gates (wire 5). ~ for either gate means "everyone on the
+::  roster", the only behavior before state-9 — so a bunted room is
+::  exactly a wire-4 room. A set gate admits a member iff their
+::  seat-roles entry intersects it; the host and admins bypass both
+::  gates. muted is moderation and beats everything except the host.
+::  seat-roles is mirrored from the bound group alongside members and
+::  admins; role gating is only meaningful on bound rooms.
 +$  room
   $:  title=@t
       members=(set ship)
@@ -69,6 +76,10 @@
       sfu=(unit sfu-config)
       ::  ~ = manual roster (the only mode before wire 4)
       group=(unit group-source)
+      join-roles=(unit (set @t))
+      speak-roles=(unit (set @t))
+      muted=(set ship)
+      seat-roles=(map ship (set @t))
   ==
 ::  a listen-only link: where to point a browser, and until when.
 +$  listen-link  [name=@t url=@t expires=@ud]
@@ -112,6 +123,19 @@
       ::  are overwritten on the next sync; ~ unbinds and freezes the
       ::  roster as it stands.
       [%bind-room name=@t group=(unit group-source)]
+      ::  role-gate a line: who may join, who may speak. ~ = everyone
+      ::  on the roster. Applied locally when we host, relayed to the
+      ::  host otherwise — who checks we are on its admin list.
+      $:  %set-room-access
+          host=ship
+          name=@t
+          join=(unit (set @t))
+          speak=(unit (set @t))
+      ==
+      ::  mute (or unmute) one member of a line for everyone
+      [%moderate-member host=ship name=@t who=ship mute=?]
+      ::  ask a host for a line's current gates and mute set
+      [%get-room-access host=ship name=@t]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]
@@ -152,6 +176,23 @@
           members=(set ship)
           admins=(set ship)
       ==
+      ::  an admin, over ames, setting a line's role gates. ~ =
+      ::  everyone on the roster. The host checks the asker is on its
+      ::  admin list and answers with %access-state. New in wire 5:
+      ::  an old desk nacks these at the mark cast, which the sender's
+      ::  client surfaces — the designed compat story.
+      [%access name=@t join=(unit (set @t)) speak=(unit (set @t))]
+      ::  an admin muting (or unmuting) one member for everyone
+      [%moderate name=@t who=ship mute=?]
+      ::  an admin asking for the current gates without changing them
+      [%get-access name=@t]
+      ::  the host answering any of the three above
+      $:  %access-state
+          name=@t
+          join=(unit (set @t))
+          speak=(unit (set @t))
+          muted=(set ship)
+      ==
   ==
 ::  a line another ship has invited us to. Carries enough for an admin
 ::  to see the current settings without owning the host ship; never the
@@ -176,5 +217,14 @@
       ::  been dealt with, and they rang out their whole watchdog next
       ::  to a call already in progress.
       [%handled id=@t]
+      ::  a line's role gates and mute set, echoed after every access
+      ::  change and on request, so admin UIs converge without a scry
+      $:  %access-state
+          from=ship
+          name=@t
+          join=(unit (set @t))
+          speak=(unit (set @t))
+          muted=(set ship)
+      ==
   ==
 --
