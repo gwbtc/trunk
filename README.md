@@ -278,7 +278,11 @@ them on the ship they act for.
 ::  way to learn of the line — a member's peek is answered %announce.
 :trunk &trunk-action [%peek-room ~zod 'lounge']
 
-::  bind a hosted room's roster to a group, and unbind it
+::  bind a hosted room's roster to a group, and unbind it. A room
+::  created with a group's slug as its name binds at birth on its
+::  own (if %groups is installed and has that group), so this is for
+::  older rooms, renamed ones, and deliberately unbinding. Manual
+::  rosters are still first-class: nothing needs %groups to work.
 :trunk &trunk-action [%bind-room 'v769287' [~ [~hodler-lorfeb 'v769287']]]
 :trunk &trunk-action [%bind-room 'v769287' ~]
 

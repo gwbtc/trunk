@@ -503,8 +503,15 @@
           ?~  got  ~
           (~(dif in members.u.got) members.new)
         =.  hosted.state  (~(put by hosted.state) name.act new)
-        :_  this
-        (weld (announce:hc name.act new %.y) (shut-cards:hc name.act removed))
+        =/  cards
+          (weld (announce:hc name.act new %.y) (shut-cards:hc name.act removed))
+        ::  a room born here binds to its group at birth (+auto-bind),
+        ::  so a roster seeded from a stale client cache heals itself
+        ::  instead of stranding late joiners. Existing rooms keep
+        ::  whatever binding they have.
+        ?^  got  [cards this]
+        =^  bcards  hosted.state  (auto-bind:hc name.act hosted.state)
+        [(weld cards bcards) this]
       :_  this
       :~  :*  %pass  /room/(scot %p host.act)
               %agent  [host.act %trunk]
@@ -534,40 +541,13 @@
       ::  bind (or unbind) a hosted room's roster to a group. The
       ::  binding is host-local: members learn nothing unless a sync
       ::  actually changes the roster, which then announces like any
-      ::  other roster change. A fresh binding syncs immediately
-      ::  rather than waiting for the group to next change.
+      ::  other roster change. Body lives in +bind-to-group so room
+      ::  creation can bind at birth through the same machinery.
       =/  got  (~(get by hosted.state) name.act)
       ?~  got  ~|(no-such-room+name.act !!)
-      =/  mirror-live=?
-        =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
-        ?~(w %.n acked.u.w)
-      =/  ros=(unit [members=(set ship) admins=(set ship) seat-roles=(map ship (set @t))])
-        ?~  group.act  ~
-        ::  only sync now if the mirror watch is already live — that
-        ::  is the proof %groups exists that mirror-roster requires.
-        ::  A first-ever binding syncs on the watch-ack sweep instead,
-        ::  moments later: /v1/groups sends no initial fact, so the
-        ::  ack itself is the first (and only) proof-of-life signal.
-        ?.(mirror-live ~ (mirror-roster:hc u.group.act))
-      =/  new=room:trunk
-        ?~  ros  u.got(group group.act)
-        %=  u.got
-          group       group.act
-          members     members.u.ros
-          admins      admins.u.ros
-          seat-roles  seat-roles.u.ros
-        ==
-      ::  ships the fresh sync drops are told the line is gone —
-      ::  +announce reaches only the new roster. Diffed against
-      ::  u.got, the pre-write room.
-      =/  removed=(set ship)
-        ?~  ros  ~
-        (~(dif in members.u.got) members.u.ros)
-      =.  hosted.state  (~(put by hosted.state) name.act new)
-      :_  this
-      %+  weld  (mirror-sub-cards:hc hosted.state)
-      ?:  =([members admins]:new [members admins]:u.got)  ~
-      (weld (announce:hc name.act new %.y) (shut-cards:hc name.act removed))
+      =^  cards  hosted.state
+        (bind-to-group:hc name.act group.act hosted.state)
+      [cards this]
     ::
         %join-room
       ::  hosting it ourselves? mint straight away, no round trip.
@@ -724,8 +704,14 @@
         =/  new=room:trunk
           [title.msg members.msg admins.msg listen.msg sfu.msg ~ ~ ~ ~ ~]
         =.  hosted.state  (~(put by hosted.state) name.msg new)
+        ::  bind at birth (+auto-bind): a line opened remotely by a
+        ::  group admin was the one creation path nothing ever bound —
+        ::  the reconciler only runs on the host's own client, which a
+        ::  headless host never opens. The seeded roster is announced
+        ::  either way; a sync that changes it announces the delta.
+        =^  bcards  hosted.state  (auto-bind:hc name.msg hosted.state)
         :_  this
-        (announce:hc name.msg new %.y)
+        (weld (announce:hc name.msg new %.y) bcards)
       ?.  (~(has in admins.u.got) src.bowl)
         %-  (slog leaf+"trunk: {<src.bowl>} is not an admin of {<name.msg>}" ~)
         `this
@@ -881,6 +867,23 @@
   ::  exhaustive ?+ is a mint-vain.
   ?-    -.sign
       %watch-ack
+    ::  a one-shot adopt watch opened by +auto-bind for one room. The
+    ::  ack is the proof %groups exists: bind that room if its group
+    ::  is really there, then drop the watch — +mirror-sub-cards owns
+    ::  the canonical one from here on. Nack: no %groups (or an old
+    ::  one); the room keeps its manual roster.
+    ?:  ?=([%groups-mirror %adopt @ ~] wire)
+      =/  name  (slav %t i.t.t.wire)
+      =/  leave  [%pass wire %agent [our.bowl %groups] %leave ~]
+      ?^  p.sign
+        %-  (slog leaf+"trunk: no %groups to bind {<name>} to; roster stays manual" ~)
+        `this
+      =/  got  (~(get by hosted.state) name)
+      ?:  |(?=(~ got) ?=(^ group.u.got))  :_(this ~[leave])
+      ?~  (mirror-roster:hc [our.bowl name])  :_(this ~[leave])
+      =^  cards  hosted.state
+        (bind-to-group:hc name `[our.bowl name] hosted.state)
+      [[leave cards] this]
     ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
     ?~  p.sign
       ::  the ack IS the proof %groups exists and answered — sync all
@@ -898,12 +901,16 @@
     `this
   ::
       %kick
+    ?:  ?=([%groups-mirror %adopt @ ~] wire)  `this
     ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
     ::  %groups restarted or was upgraded. Re-arm if anything is
     ::  still bound; the helper no-ops otherwise.
     :_(this (mirror-sub-cards:hc hosted.state))
   ::
       %fact
+    ::  a stray fact on an adopt wire between its ack and our leave
+    ::  carries nothing the canonical watch won't also deliver.
+    ?:  ?=([%groups-mirror %adopt @ ~] wire)  `this
     ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
     ::  The cage is deliberately never opened. %trunk cannot cast
     ::  Tlon's versioned marks and does not need to: any fact on this
@@ -1290,6 +1297,73 @@
     (weld (announce nom new %.y) (shut-cards nom removed))
   =.  hosted  (~(put by hosted) nom new)
   $(rooms t.rooms, cards (weld cards told))
+::
+::  +bind-to-group: point a hosted room's roster at a group (or ~ to
+::  unbind). The %bind-room body, factored so creation can bind at
+::  birth. Takes and returns hosted by value; the caller assigns.
+::  Sync now only if the mirror watch is already live — that is the
+::  proof %groups exists that mirror-roster requires. A first-ever
+::  binding syncs on the watch-ack sweep instead, moments later:
+::  /v1/groups sends no initial fact, so the ack itself is the first
+::  (and only) proof-of-life signal. Ships a fresh sync drops are
+::  told the line is gone — +announce reaches only the new roster.
+++  bind-to-group
+  |=  $:  name=@t
+          gs=(unit group-source:trunk)
+          hosted=(map @t room:trunk)
+      ==
+  ^-  [(list card) (map @t room:trunk)]
+  =/  got  (~(get by hosted) name)
+  ?~  got  [~ hosted]
+  =/  mirror-live=?
+    =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
+    ?~(w %.n acked.u.w)
+  =/  ros=(unit [members=(set ship) admins=(set ship) seat-roles=(map ship (set @t))])
+    ?~  gs  ~
+    ?.(mirror-live ~ (mirror-roster u.gs))
+  =/  new=room:trunk
+    ?~  ros  u.got(group gs)
+    %=  u.got
+      group       gs
+      members     members.u.ros
+      admins      admins.u.ros
+      seat-roles  seat-roles.u.ros
+    ==
+  =/  removed=(set ship)
+    ?~  ros  ~
+    (~(dif in members.u.got) members.u.ros)
+  =.  hosted  (~(put by hosted) name new)
+  :_  hosted
+  %+  weld  (mirror-sub-cards hosted)
+  ?:  =([members admins]:new [members admins]:u.got)  ~
+  (weld (announce name new %.y) (shut-cards name removed))
+::
+::  +auto-bind: a room made for a group binds at birth. The mapping
+::  is the naming convention every client already uses: the room is
+::  named the group's slug, on the group's host. Two cases, neither
+::  of which ever probes %groups directly — the only proof-of-life
+::  this agent trusts is a watch's ack:
+::    mirror already live  -> confirm the group exists, bind + sync now
+::    no live mirror       -> open a one-shot watch on a wire naming
+::                            this room; its ack proves %groups is
+::                            there and the %watch-ack arm adopts the
+::                            room (or not, if no such group). A ship
+::                            without %groups nacks it once, logged,
+::                            and the room stays a manual roster.
+::  Manual rosters remain first-class: nothing here is required for
+::  a line to work, and unbinding stays an explicit act.
+++  auto-bind
+  |=  [name=@t hosted=(map @t room:trunk)]
+  ^-  [(list card) (map @t room:trunk)]
+  =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
+  ?:  &(?=(^ w) acked.u.w)
+    ?~  (mirror-roster [our.bowl name])  [~ hosted]
+    (bind-to-group name `[our.bowl name] hosted)
+  :_  hosted
+  :~  :*  %pass  /groups-mirror/adopt/(scot %t name)
+          %agent  [our.bowl %groups]  %watch  /v1/groups
+      ==
+  ==
 ::
 ++  mirror-sub-cards
   |=  hosted=(map @t room:trunk)
