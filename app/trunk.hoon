@@ -54,6 +54,7 @@
       state-7
       state-8
       state-9
+      state-10
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -139,6 +140,20 @@
       asked=(set [=ship name=@t])
       pol=policy:trunk
   ==
+::  %10 adds live presence: per room, the ships currently on the line
+::  and when we last heard from each (heartbeat). Pruned on read by
+::  +present-ttl, so it needs no timers and self-heals a client that
+::  dropped without saying %left.
++$  state-10
+  $:  %10
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
+      hosted=(map @t room:trunk)
+      known=lines:trunk
+      asked=(set [=ship name=@t])
+      pol=policy:trunk
+      present=(map @t (map ship @da))
+  ==
 +$  card  card:agent:gall
 ::  how long a minted ticket stays valid. Long enough for a call that
 ::  outlasts a conversation, short enough that a removed member loses
@@ -153,7 +168,8 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  5
+++  wire-version  6
+++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
 ::  this is the brake on that.
@@ -221,7 +237,7 @@
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
 %-  agent:dbug
-=|  state-9
+=|  state-10
 =*  state  -
 ^-  agent:gall
 =<
@@ -244,15 +260,15 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-vase)
   ?-  -.old
-    %0  `this(state [%9 ~ ['' '' ''] ~ ~ ~ open-policy])
-    %1  `this(state [%9 ice.old ['' '' ''] ~ ~ ~ open-policy])
-    %2  `this(state [%9 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy])
+    %0  `this(state [%10 ~ ['' '' ''] ~ ~ ~ open-policy ~])
+    %1  `this(state [%10 ice.old ['' '' ''] ~ ~ ~ open-policy ~])
+    %2  `this(state [%10 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~])
     %3
   :-  ~
   %=  this
     state
-  :*  %9  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  ~  open-policy
+  :*  %10  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  ~  open-policy  ~
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
   ::  ship keeps ringing for anyone until its owner says otherwise.
@@ -260,8 +276,8 @@
   :-  ~
   %=  this
     state
-  :*  %9  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  asked.old  open-policy
+  :*  %10  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  asked.old  open-policy  ~
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
   ::  are things you opt into, never things an upgrade turns on.
@@ -269,8 +285,8 @@
   :-  ~
   %=  this
     state
-  :*  %9  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  asked.old  pol.old
+  :*  %10  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  asked.old  pol.old  ~
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
   ::  per-room SFU, unset.
@@ -278,16 +294,16 @@
   :-  ~
   %=  this
     state
-  :*  %9  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
-      (upgrade-lines known.old)  asked.old  pol.old
+  :*  %10  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+      (upgrade-lines known.old)  asked.old  pol.old  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
     %7
   :-  ~
   %=  this
     state
-  :*  %9  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
-      known.old  asked.old  pol.old
+  :*  %10  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+      known.old  asked.old  pol.old  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
   ::  seat-roles. Sweep the group mirror now if its watch is live:
@@ -296,14 +312,21 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %9  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
-        known.old  asked.old  pol.old
+    :*  %10  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+        known.old  asked.old  pol.old  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
   ?.  ?~(w %.n acked.u.w)  `this
   =^  cards  hosted.state  (mirror-sweep:hc hosted.state)
   [cards this]
-    %9  `this(state old)
+    %9
+  :-  ~
+  %=  this
+    state
+  :*  %10  ice.old  sfu.old  hosted.old
+      known.old  asked.old  pol.old  ~
+  ==  ==
+    %10  `this(state old)
   ==
 
 ::
@@ -537,6 +560,41 @@
           ==  ==
       this(asked.state (~(put in asked.state) [host.act name.act]))
     ::
+    ::  live presence relays. enter/leave tell the host (or update our
+    ::  own state when we host); occupancy-of asks and the host answers
+    ::  %present. Hosting it ourselves short-circuits the round trip.
+        %enter-room
+      ?:  =(host.act our.bowl)
+        =/  got  (~(get by hosted.state) name.act)
+        ?~  got  `this
+        =/  rp  (~(gut by present.state) name.act *(map ship @da))
+        `this(present.state (~(put by present.state) name.act (~(put by rp) our.bowl now.bowl)))
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%entered name.act])
+      ==  ==
+    ::
+        %leave-room
+      ?:  =(host.act our.bowl)
+        =/  rp  (~(gut by present.state) name.act *(map ship @da))
+        `this(present.state (~(put by present.state) name.act (~(del by rp) our.bowl)))
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%left name.act])
+      ==  ==
+    ::
+        %occupancy-of
+      ?:  =(host.act our.bowl)
+        =^  n  present.state  (occupancy-of:hc name.act present.state)
+        :_(this ~[(fact:hc [%present our.bowl name.act n])])
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%occupancy name.act])
+      ==  ==
+    ::
         %bind-room
       ::  bind (or unbind) a hosted room's roster to a group. The
       ::  binding is host-local: members learn nothing unless a sync
@@ -655,6 +713,28 @@
     ?-    -.msg
         %ask    :_(this (grant-cards:hc src.bowl name.msg))
         %peek   :_(this (peek-cards:hc src.bowl name.msg))
+    ::
+    ::  live presence (wire 6). A member reports it connected to /
+    ::  left a line we host; %entered doubles as a heartbeat. Only a
+    ::  ship allowed on the line counts, so a stranger can't inflate
+    ::  the number. %occupancy is answered %present with the live,
+    ::  TTL-pruned count.
+        %entered
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
+      =/  room-present  (~(gut by present.state) name.msg *(map ship @da))
+      =.  room-present  (~(put by room-present) src.bowl now.bowl)
+      `this(present.state (~(put by present.state) name.msg room-present))
+    ::
+        %left
+      =/  room-present  (~(gut by present.state) name.msg *(map ship @da))
+      =.  room-present  (~(del by room-present) src.bowl)
+      `this(present.state (~(put by present.state) name.msg room-present))
+    ::
+        %occupancy
+      =^  n  present.state  (occupancy-of:hc name.msg present.state)
+      :_(this (reply:hc src.bowl [%present name.msg n]))
     ::
     ::  A room admin, over ames, turning the line on or off. %trunk
     ::  does not know what a Tlon group is — admins are simply the
@@ -834,6 +914,12 @@
       ?.  (~(has by known.state) [src.bowl name.msg])  `this
       :_  this
       ~[(fact:hc [%access-state src.bowl name.msg join.msg speak.msg muted.msg])]
+    ::
+    ::  the host answering our %occupancy: pass the live count to our
+    ::  client on /calls. Inert info; a blocked host gets silence.
+        %present
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      :_(this ~[(fact:hc [%present src.bowl name.msg n.msg])])
     ==
   ==
 ::
@@ -1078,6 +1164,21 @@
 ::
 ::  Answers with %announce, so a client that already knows how to be
 ::  told about a line needs no new handling for being told on request.
+::  +occupancy-of: the live count on one line, and the present map with
+::  that room's stale (past present-ttl) heartbeats pruned. Pruning on
+::  read is why presence needs no timers: a client that dropped without
+::  saying %left ages out on the next %occupancy read.
+++  occupancy-of
+  |=  [name=@t present=(map @t (map ship @da))]
+  ^-  [@ud (map @t (map ship @da))]
+  =/  room-present  (~(gut by present) name *(map ship @da))
+  =/  live=(map ship @da)
+    %-  ~(gas by *(map ship @da))
+    %+  skim  ~(tap by room-present)
+    |=  [=ship t=@da]
+    ?|((gth t now.bowl) (lth (sub now.bowl t) present-ttl))
+  [~(wyt by live) (~(put by present) name live)]
+::
 ++  peek-cards
   |=  [who=ship name=@t]
   ^-  (list card)
@@ -1213,10 +1314,14 @@
       %shut      ~[(fact [%shut our.bowl name.msg])]
       %access-state
     ~[(fact [%access-state our.bowl name.msg join.msg speak.msg muted.msg])]
+      %present     ~[(fact [%present our.bowl name.msg n.msg])]
       ::  none of these is ever addressed to ourselves; the ?- must
       ::  still be total.
       %ask         ~
       %peek        ~
+      %entered     ~
+      %left        ~
+      %occupancy   ~
       %configure   ~
       %share       ~
       %access      ~

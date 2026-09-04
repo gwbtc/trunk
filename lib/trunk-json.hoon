@@ -79,6 +79,9 @@
       [%close-room (ot ~[name+so])]
       [%join-room (ot ~[host+ship-from-json name+so])]
       [%peek-room (ot ~[host+ship-from-json name+so])]
+      [%enter-room (ot ~[host+ship-from-json name+so])]
+      [%leave-room (ot ~[host+ship-from-json name+so])]
+      [%occupancy-of (ot ~[host+ship-from-json name+so])]
       ::  null means "everyone on the roster" for either gate
       :-  %set-room-access
       %-  ot
@@ -214,6 +217,14 @@
         [%speak (roles-to-json speak.u)]
         :-  %muted
         [%a (turn ~(tap in muted.u) |=(w=@p `json`s+(scot %p w)))]
+    ==
+  ::
+      %present
+    %+  frond  %present
+    %-  pairs
+    :~  [%from s+(scot %p from.u)]
+        [%name s+name.u]
+        [%n (numb n.u)]
     ==
   ==
 ::

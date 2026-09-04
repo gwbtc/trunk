@@ -118,6 +118,13 @@
       ::  received it and has no other way to find out — scries are
       ::  local, so it cannot read the host's rooms directly.
       [%peek-room host=ship name=@t]
+      ::  live presence (wire 6): tell the host we connected to / left
+      ::  a line, and ask how many are on one. The client heartbeats
+      ::  %enter-room while connected; %occupancy-of drives the count
+      ::  a non-joined viewer shows.
+      [%enter-room host=ship name=@t]
+      [%leave-room host=ship name=@t]
+      [%occupancy-of host=ship name=@t]
       ::  bind or unbind a hosted room's roster to a group. Bound,
       ::  the members/admins lists mirror the group and manual edits
       ::  are overwritten on the next sync; ~ unbinds and freezes the
@@ -193,6 +200,15 @@
           speak=(unit (set @t))
           muted=(set ship)
       ==
+      ::  live presence (wire 6). A member tells the host it connected
+      ::  to / left a line; %entered doubles as a heartbeat. %occupancy
+      ::  asks the host how many are on a line right now; the host
+      ::  answers %present. An old host nacks these, which the client
+      ::  treats as "presence unavailable".
+      [%entered name=@t]
+      [%left name=@t]
+      [%occupancy name=@t]
+      [%present name=@t n=@ud]
   ==
 ::  a line another ship has invited us to. Carries enough for an admin
 ::  to see the current settings without owning the host ship; never the
@@ -226,5 +242,7 @@
           speak=(unit (set @t))
           muted=(set ship)
       ==
+      ::  live occupancy of a line we asked about (wire 6)
+      [%present from=ship name=@t n=@ud]
   ==
 --
