@@ -125,6 +125,14 @@
       [%enter-room host=ship name=@t]
       [%leave-room host=ship name=@t]
       [%occupancy-of host=ship name=@t]
+      ::  call recording (wire 7): tell the host we started / stopped
+      ::  recording a line, and ask who is recording one. Recording is
+      ::  heartbeated with %start-recording while active and self-heals
+      ::  by the same TTL as presence; %recorders-of drives the badge
+      ::  every member on the line shows.
+      [%start-recording host=ship name=@t]
+      [%stop-recording host=ship name=@t]
+      [%recorders-of host=ship name=@t]
       ::  bind or unbind a hosted room's roster to a group. Bound,
       ::  the members/admins lists mirror the group and manual edits
       ::  are overwritten on the next sync; ~ unbinds and freezes the
@@ -209,6 +217,15 @@
       [%left name=@t]
       [%occupancy name=@t]
       [%present name=@t n=@ud]
+      ::  call recording (wire 7). A member tells the host it started /
+      ::  stopped recording a line; %recording-on doubles as a
+      ::  heartbeat. %recorders asks the host who is recording; the host
+      ::  answers %recorders-are with the live, TTL-pruned set. An old
+      ::  host nacks these, which the client treats as "not announced".
+      [%recording-on name=@t]
+      [%recording-off name=@t]
+      [%recorders name=@t]
+      [%recorders-are name=@t who=(set ship)]
   ==
 ::  a line another ship has invited us to. Carries enough for an admin
 ::  to see the current settings without owning the host ship; never the
@@ -244,5 +261,7 @@
       ==
       ::  live occupancy of a line we asked about (wire 6)
       [%present from=ship name=@t n=@ud]
+      ::  who is recording a line we asked about (wire 7)
+      [%recorders from=ship name=@t who=(set ship)]
   ==
 --

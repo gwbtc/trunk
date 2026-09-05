@@ -55,6 +55,7 @@
       state-8
       state-9
       state-10
+      state-11
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -154,6 +155,21 @@
       pol=policy:trunk
       present=(map @t (map ship @da))
   ==
+::  %11 adds call recording announcement: per room, the ships currently
+::  recording the line and when we last heard from each (heartbeat).
+::  Pruned on read by +present-ttl exactly like presence, so it self-
+::  heals a recorder that quit without saying %recording-off.
++$  state-11
+  $:  %11
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
+      hosted=(map @t room:trunk)
+      known=lines:trunk
+      asked=(set [=ship name=@t])
+      pol=policy:trunk
+      present=(map @t (map ship @da))
+      recording=(map @t (map ship @da))
+  ==
 +$  card  card:agent:gall
 ::  how long a minted ticket stays valid. Long enough for a call that
 ::  outlasts a conversation, short enough that a removed member loses
@@ -168,7 +184,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  6
+++  wire-version  7
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -237,7 +253,7 @@
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
 %-  agent:dbug
-=|  state-10
+=|  state-11
 =*  state  -
 ^-  agent:gall
 =<
@@ -260,15 +276,15 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-vase)
   ?-  -.old
-    %0  `this(state [%10 ~ ['' '' ''] ~ ~ ~ open-policy ~])
-    %1  `this(state [%10 ice.old ['' '' ''] ~ ~ ~ open-policy ~])
-    %2  `this(state [%10 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~])
+    %0  `this(state [%11 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~])
+    %1  `this(state [%11 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~])
+    %2  `this(state [%11 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~])
     %3
   :-  ~
   %=  this
     state
-  :*  %10  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  ~  open-policy  ~
+  :*  %11  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  ~  open-policy  ~  ~
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
   ::  ship keeps ringing for anyone until its owner says otherwise.
@@ -276,8 +292,8 @@
   :-  ~
   %=  this
     state
-  :*  %10  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  asked.old  open-policy  ~
+  :*  %11  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  asked.old  open-policy  ~  ~
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
   ::  are things you opt into, never things an upgrade turns on.
@@ -285,8 +301,8 @@
   :-  ~
   %=  this
     state
-  :*  %10  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  asked.old  pol.old  ~
+  :*  %11  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  asked.old  pol.old  ~  ~
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
   ::  per-room SFU, unset.
@@ -294,16 +310,16 @@
   :-  ~
   %=  this
     state
-  :*  %10  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
-      (upgrade-lines known.old)  asked.old  pol.old  ~
+  :*  %11  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+      (upgrade-lines known.old)  asked.old  pol.old  ~  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
     %7
   :-  ~
   %=  this
     state
-  :*  %10  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
-      known.old  asked.old  pol.old  ~
+  :*  %11  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+      known.old  asked.old  pol.old  ~  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
   ::  seat-roles. Sweep the group mirror now if its watch is live:
@@ -312,21 +328,30 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %10  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
-        known.old  asked.old  pol.old  ~
+    :*  %11  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+        known.old  asked.old  pol.old  ~  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
   ?.  ?~(w %.n acked.u.w)  `this
   =^  cards  hosted.state  (mirror-sweep:hc hosted.state)
   [cards this]
+  ::  %9 gains live presence, unset.
     %9
   :-  ~
   %=  this
     state
-  :*  %10  ice.old  sfu.old  hosted.old
-      known.old  asked.old  pol.old  ~
+  :*  %11  ice.old  sfu.old  hosted.old
+      known.old  asked.old  pol.old  ~  ~
   ==  ==
-    %10  `this(state old)
+  ::  %10 gains the recording set, unset.
+    %10
+  :-  ~
+  %=  this
+    state
+  :*  %11  ice.old  sfu.old  hosted.old
+      known.old  asked.old  pol.old  present.old  ~
+  ==  ==
+    %11  `this(state old)
   ==
 
 ::
@@ -595,6 +620,42 @@
               %poke  %trunk-room  !>(`room-sig:trunk`[%occupancy name.act])
       ==  ==
     ::
+    ::  call recording relays (wire 7). start/stop tell the host (or
+    ::  update our own state when we host); recorders-of asks and the
+    ::  host answers %recorders. Hosting it ourselves short-circuits
+    ::  the round trip, exactly like presence.
+        %start-recording
+      ?:  =(host.act our.bowl)
+        =/  got  (~(get by hosted.state) name.act)
+        ?~  got  `this
+        =/  rc  (~(gut by recording.state) name.act *(map ship @da))
+        `this(recording.state (~(put by recording.state) name.act (~(put by rc) our.bowl now.bowl)))
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%recording-on name.act])
+      ==  ==
+    ::
+        %stop-recording
+      ?:  =(host.act our.bowl)
+        =/  rc  (~(gut by recording.state) name.act *(map ship @da))
+        `this(recording.state (~(put by recording.state) name.act (~(del by rc) our.bowl)))
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%recording-off name.act])
+      ==  ==
+    ::
+        %recorders-of
+      ?:  =(host.act our.bowl)
+        =^  who  recording.state  (recorders-of:hc name.act recording.state)
+        :_(this ~[(fact:hc [%recorders our.bowl name.act who])])
+      :_  this
+      :~  :*  %pass  /room/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%recorders name.act])
+      ==  ==
+    ::
         %bind-room
       ::  bind (or unbind) a hosted room's roster to a group. The
       ::  binding is host-local: members learn nothing unless a sync
@@ -735,6 +796,32 @@
         %occupancy
       =^  n  present.state  (occupancy-of:hc name.msg present.state)
       :_(this (reply:hc src.bowl [%present name.msg n]))
+    ::
+    ::  call recording (wire 7). A member reports it started / stopped
+    ::  recording a line we host; %recording-on doubles as a heartbeat.
+    ::  Only a ship allowed on the line counts. %recorders is answered
+    ::  %recorders-are with the live, TTL-pruned set.
+        %recording-on
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
+      =/  rc  (~(gut by recording.state) name.msg *(map ship @da))
+      =.  rc  (~(put by rc) src.bowl now.bowl)
+      `this(recording.state (~(put by recording.state) name.msg rc))
+    ::
+        %recording-off
+      =/  rc  (~(gut by recording.state) name.msg *(map ship @da))
+      =.  rc  (~(del by rc) src.bowl)
+      `this(recording.state (~(put by recording.state) name.msg rc))
+    ::
+        %recorders
+      =^  who  recording.state  (recorders-of:hc name.msg recording.state)
+      :_(this (reply:hc src.bowl [%recorders-are name.msg who]))
+    ::
+        %recorders-are
+      ::  the host answering our %recorders: pass the set to our client.
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      :_(this ~[(fact:hc [%recorders src.bowl name.msg who.msg])])
     ::
     ::  A room admin, over ames, turning the line on or off. %trunk
     ::  does not know what a Tlon group is — admins are simply the
@@ -1178,6 +1265,20 @@
     |=  [=ship t=@da]
     ?|((gth t now.bowl) (lth (sub now.bowl t) present-ttl))
   [~(wyt by live) (~(put by present) name live)]
+::  +recorders-of: the live set of ships recording one line, and the
+::  recording map with that room's stale heartbeats pruned. Same TTL
+::  and same read-time pruning as +occupancy-of — a recorder that quit
+::  without saying %recording-off ages out on the next read.
+++  recorders-of
+  |=  [name=@t recording=(map @t (map ship @da))]
+  ^-  [(set ship) (map @t (map ship @da))]
+  =/  room-recording  (~(gut by recording) name *(map ship @da))
+  =/  live=(map ship @da)
+    %-  ~(gas by *(map ship @da))
+    %+  skim  ~(tap by room-recording)
+    |=  [=ship t=@da]
+    ?|((gth t now.bowl) (lth (sub now.bowl t) present-ttl))
+  [~(key by live) (~(put by recording) name live)]
 ::
 ++  peek-cards
   |=  [who=ship name=@t]
@@ -1315,6 +1416,7 @@
       %access-state
     ~[(fact [%access-state our.bowl name.msg join.msg speak.msg muted.msg])]
       %present     ~[(fact [%present our.bowl name.msg n.msg])]
+      %recorders-are  ~[(fact [%recorders our.bowl name.msg who.msg])]
       ::  none of these is ever addressed to ourselves; the ?- must
       ::  still be total.
       %ask         ~
@@ -1322,6 +1424,9 @@
       %entered     ~
       %left        ~
       %occupancy   ~
+      %recording-on   ~
+      %recording-off  ~
+      %recorders   ~
       %configure   ~
       %share       ~
       %access      ~
