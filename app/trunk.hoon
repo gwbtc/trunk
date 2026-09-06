@@ -56,6 +56,7 @@
       state-9
       state-10
       state-11
+      state-12
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -170,6 +171,21 @@
       present=(map @t (map ship @da))
       recording=(map @t (map ship @da))
   ==
+::  %11 kept `asked` as a bare set, so an ask a host never answered
+::  stayed in it forever: nothing deletes an entry except the matching
+::  %grant or %deny. Stamping each ask lets +prune-asked age them out,
+::  the same read-time TTL trick presence and recording already use.
++$  state-12
+  $:  %12
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
+      hosted=(map @t room:trunk)
+      known=lines:trunk
+      asked=(map [=ship name=@t] @da)
+      pol=policy:trunk
+      present=(map @t (map ship @da))
+      recording=(map @t (map ship @da))
+  ==
 +$  card  card:agent:gall
 ::  how long a minted ticket stays valid. Long enough for a call that
 ::  outlasts a conversation, short enough that a removed member loses
@@ -247,13 +263,38 @@
   ^-  line:trunk
   [t %.n '']
 ::
+::  How long an unanswered ask is kept. The client gives up after 15s
+::  and ignores a later grant, so this only has to be long enough to
+::  claim an answer that is merely slow — well short of forever.
+++  asked-ttl  ~m5
+::  +prune-asked: drop asks older than +asked-ttl. Called where asks
+::  are added, so growth is bounded by the rate of asking with no
+::  timer to maintain. A host that never answers used to leave one
+::  entry per attempt, permanently.
+++  prune-asked
+  |=  [asked=(map [=ship name=@t] @da) now=@da]
+  ^-  (map [=ship name=@t] @da)
+  %-  ~(gas by *(map [=ship name=@t] @da))
+  %+  skim  ~(tap by asked)
+  |=  [k=[=ship name=@t] t=@da]
+  ?|((gth t now) (lth (sub now t) asked-ttl))
+::  +stamp-asked: the %11 set becomes a map dated now, so anything
+::  genuinely in flight across the upgrade survives one TTL rather
+::  than being dropped on the floor.
+++  stamp-asked
+  |=  [old=(set [=ship name=@t]) now=@da]
+  ^-  (map [=ship name=@t] @da)
+  %-  ~(gas by *(map [=ship name=@t] @da))
+  %+  turn  ~(tap in old)
+  |=(k=[=ship name=@t] [k now])
+::
 ::  The policy a ship starts with: ring for anyone, block nobody.
 ::  Always assign this explicitly — never lean on the bunt of
 ::  +$ policy, which forks to %allow and locks the ship down.
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
 %-  agent:dbug
-=|  state-11
+=|  state-12
 =*  state  -
 ^-  agent:gall
 =<
@@ -276,14 +317,14 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-vase)
   ?-  -.old
-    %0  `this(state [%11 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~])
-    %1  `this(state [%11 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~])
-    %2  `this(state [%11 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~])
+    %0  `this(state [%12 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~])
+    %1  `this(state [%12 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~])
+    %2  `this(state [%12 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~])
     %3
   :-  ~
   %=  this
     state
-  :*  %11  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %12  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  ~  open-policy  ~  ~
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
@@ -292,8 +333,8 @@
   :-  ~
   %=  this
     state
-  :*  %11  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  asked.old  open-policy  ~  ~
+  :*  %12  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
   ::  are things you opt into, never things an upgrade turns on.
@@ -301,8 +342,8 @@
   :-  ~
   %=  this
     state
-  :*  %11  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  asked.old  pol.old  ~  ~
+  :*  %12  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
   ::  per-room SFU, unset.
@@ -310,16 +351,16 @@
   :-  ~
   %=  this
     state
-  :*  %11  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
-      (upgrade-lines known.old)  asked.old  pol.old  ~  ~
+  :*  %12  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
     %7
   :-  ~
   %=  this
     state
-  :*  %11  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
-      known.old  asked.old  pol.old  ~  ~
+  :*  %12  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
   ::  seat-roles. Sweep the group mirror now if its watch is live:
@@ -328,8 +369,8 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %11  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
-        known.old  asked.old  pol.old  ~  ~
+    :*  %12  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+        known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
   ?.  ?~(w %.n acked.u.w)  `this
@@ -340,18 +381,27 @@
   :-  ~
   %=  this
     state
-  :*  %11  ice.old  sfu.old  hosted.old
-      known.old  asked.old  pol.old  ~  ~
+  :*  %12  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
   ==  ==
   ::  %10 gains the recording set, unset.
     %10
   :-  ~
   %=  this
     state
-  :*  %11  ice.old  sfu.old  hosted.old
-      known.old  asked.old  pol.old  present.old  ~
+  :*  %12  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~
   ==  ==
-    %11  `this(state old)
+  ::  %11 gains dated asks so they can be pruned.
+    %11
+  :-  ~
+  %=  this
+    state
+  :*  %12  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old
+      present.old  recording.old
+  ==  ==
+    %12  `this(state old)
   ==
 
 ::
@@ -583,7 +633,7 @@
                   %agent  [host.act %trunk]
                   %poke  %trunk-room  !>(`room-sig:trunk`[%peek name.act])
           ==  ==
-      this(asked.state (~(put in asked.state) [host.act name.act]))
+      this(asked.state (~(put by (prune-asked asked.state now.bowl)) [host.act name.act] now.bowl))
     ::
     ::  live presence relays. enter/leave tell the host (or update our
     ::  own state when we host); occupancy-of asks and the host answers
@@ -676,7 +726,7 @@
                   %agent  [host.act %trunk]
                   %poke  %trunk-room  !>(`room-sig:trunk`[%ask name.act])
           ==  ==
-      this(asked.state (~(put in asked.state) [host.act name.act]))
+      this(asked.state (~(put by (prune-asked asked.state now.bowl)) [host.act name.act] now.bowl))
     ::
     ::  Role gates for a line. Local-only action, so it is already our
     ::  own ship's owner asking: hosting it ourselves we apply
@@ -780,10 +830,16 @@
     ::  ship allowed on the line counts, so a stranger can't inflate
     ::  the number. %occupancy is answered %present with the live,
     ::  TTL-pruned count.
+    ::
+    ::  "Allowed" is +grant-cards' rule, not the bare roster: a blocked
+    ::  or role-less member is refused a ticket and so can never be on
+    ::  the line, and must not be able to heartbeat itself into it.
         %entered
+      ?:  (~(has in block.pol.state) src.bowl)  `this
       =/  got  (~(get by hosted.state) name.msg)
       ?~  got  `this
       ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
+      ?.  (may-join:hc u.got src.bowl)  `this
       =/  room-present  (~(gut by present.state) name.msg *(map ship @da))
       =.  room-present  (~(put by room-present) src.bowl now.bowl)
       `this(present.state (~(put by present.state) name.msg room-present))
@@ -808,17 +864,23 @@
       =/  got  (~(get by hosted.state) name.msg)
       ?~  got  `this
       ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
+      ?.  (may-join:hc u.got src.bowl)  `this
       =^  n  present.state  (occupancy-of:hc name.msg present.state)
       :_(this (reply:hc src.bowl [%present name.msg n]))
     ::
     ::  call recording (wire 7). A member reports it started / stopped
     ::  recording a line we host; %recording-on doubles as a heartbeat.
     ::  Only a ship allowed on the line counts. %recorders is answered
-    ::  %recorders-are with the live, TTL-pruned set.
+    ::  %recorders-are with the live, TTL-pruned set. Gated like
+    ::  %entered above, and for the same reason: a rostered ship the
+    ::  host blocked would otherwise show to everyone as 'Recording'
+    ::  on a line it can never join.
         %recording-on
+      ?:  (~(has in block.pol.state) src.bowl)  `this
       =/  got  (~(get by hosted.state) name.msg)
       ?~  got  `this
       ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
+      ?.  (may-join:hc u.got src.bowl)  `this
       =/  rc  (~(gut by recording.state) name.msg *(map ship @da))
       =.  rc  (~(put by rc) src.bowl now.bowl)
       `this(recording.state (~(put by recording.state) name.msg rc))
@@ -839,12 +901,17 @@
       =/  got  (~(get by hosted.state) name.msg)
       ?~  got  `this
       ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
+      ?.  (may-join:hc u.got src.bowl)  `this
       =^  who  recording.state  (recorders-of:hc name.msg recording.state)
       :_(this (reply:hc src.bowl [%recorders-are name.msg who]))
     ::
         %recorders-are
       ::  the host answering our %recorders: pass the set to our client.
+      ::  Known-line gated like %access-state: without it any ship could
+      ::  spray recorder sets at us for names we never heard of, and the
+      ::  client files every one into a map it never prunes.
       ?:  (~(has in block.pol.state) src.bowl)  `this
+      ?.  (~(has by known.state) [src.bowl name.msg])  `this
       :_(this ~[(fact:hc [%recorders src.bowl name.msg who.msg])])
     ::
     ::  A room admin, over ames, turning the line on or off. %trunk
@@ -950,16 +1017,16 @@
     ::  to, so an unsolicited one is a microphone-hijack attempt: only
     ::  accept an answer to a request we actually made.
         %grant
-      ?.  (~(has in asked.state) [src.bowl name.ticket.msg])
+      ?.  (~(has by asked.state) [src.bowl name.ticket.msg])
         %-  (slog leaf+"trunk: unsolicited grant from {<src.bowl>}" ~)
         `this
       :-  ~[(fact:hc [%ticket src.bowl ticket.msg])]
-      this(asked.state (~(del in asked.state) [src.bowl name.ticket.msg]))
+      this(asked.state (~(del by asked.state) [src.bowl name.ticket.msg]))
     ::
         %deny
-      ?.  (~(has in asked.state) [src.bowl name.msg])  `this
+      ?.  (~(has by asked.state) [src.bowl name.msg])  `this
       :-  ~[(fact:hc [%denied src.bowl name.msg why.msg])]
-      this(asked.state (~(del in asked.state) [src.bowl name.msg]))
+      this(asked.state (~(del by asked.state) [src.bowl name.msg]))
     ::
     ::  An admin, over ames, setting a line's role gates. The auth
     ::  rule for all three access signals is +configure's: only the
@@ -1027,9 +1094,13 @@
       ~[(fact:hc [%access-state src.bowl name.msg join.msg speak.msg muted.msg])]
     ::
     ::  the host answering our %occupancy: pass the live count to our
-    ::  client on /calls. Inert info; a blocked host gets silence.
+    ::  client on /calls. Inert info; a blocked host gets silence, and
+    ::  a ship whose line we do not know gets it too — same guard as
+    ::  %access-state, so a stranger's counts cannot pile up in a
+    ::  client map nothing ever prunes.
         %present
       ?:  (~(has in block.pol.state) src.bowl)  `this
+      ?.  (~(has by known.state) [src.bowl name.msg])  `this
       :_(this ~[(fact:hc [%present src.bowl name.msg n.msg])])
     ==
   ==
