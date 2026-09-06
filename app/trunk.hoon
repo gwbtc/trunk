@@ -788,12 +788,26 @@
       =.  room-present  (~(put by room-present) src.bowl now.bowl)
       `this(present.state (~(put by present.state) name.msg room-present))
     ::
+    ::  Drop the name key once the last ship leaves. These maps are
+    ::  keyed by a remote-supplied name, and re-putting an emptied map
+    ::  grew state by one key per name anyone ever named.
         %left
       =/  room-present  (~(gut by present.state) name.msg *(map ship @da))
       =.  room-present  (~(del by room-present) src.bowl)
-      `this(present.state (~(put by present.state) name.msg room-present))
+      =.  present.state
+        ?:  =(~ room-present)  (~(del by present.state) name.msg)
+        (~(put by present.state) name.msg room-present)
+      `this
     ::
+    ::  Gated like %entered above. Unguarded, any ship that guessed a
+    ::  host and room name learned a private line's live occupancy —
+    ::  while +grant-cards refuses those same ships a ticket. Dropped
+    ::  silently, not %deny, so this stays a non-oracle.
         %occupancy
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
       =^  n  present.state  (occupancy-of:hc name.msg present.state)
       :_(this (reply:hc src.bowl [%present name.msg n]))
     ::
@@ -812,9 +826,19 @@
         %recording-off
       =/  rc  (~(gut by recording.state) name.msg *(map ship @da))
       =.  rc  (~(del by rc) src.bowl)
-      `this(recording.state (~(put by recording.state) name.msg rc))
+      =.  recording.state
+        ?:  =(~ rc)  (~(del by recording.state) name.msg)
+        (~(put by recording.state) name.msg rc)
+      `this
     ::
+    ::  Gated like %recording-on above: this answer is the @p set of
+    ::  everyone recording a private line, which a stranger has no
+    ::  business learning.
         %recorders
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
       =^  who  recording.state  (recorders-of:hc name.msg recording.state)
       :_(this (reply:hc src.bowl [%recorders-are name.msg who]))
     ::
