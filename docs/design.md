@@ -461,6 +461,14 @@ installs and then keeps auto-updating software published by another
 ship. That is the ordinary Urbit distribution model, but it should be
 a knowing choice rather than a side effect of tapping a phone icon.
 
+Since 1.6.5 the client also installs on its own, once per login, when
+the ship plainly has no `%trunk` — eyre answers the policy scry with a
+404 for an agent that isn't there, and nothing else is treated as
+"missing". That install is quiet: on success the desk is simply there;
+on failure nothing is shown, and the first call or join raises the
+dialog above with the reason. The dialog is still the only path for an
+outdated desk and for retries, and it still names the publisher.
+
 `TrunkInstallE2ETest` drives the whole path against real ships. It is
 destructive — it uninstalls the desk — so it needs `TRUNK_INSTALL=1`
 on top of `TRUNK_E2E=1`.
