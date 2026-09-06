@@ -595,7 +595,7 @@
         =/  rp  (~(gut by present.state) name.act *(map ship @da))
         `this(present.state (~(put by present.state) name.act (~(put by rp) our.bowl now.bowl)))
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room  !>(`room-sig:trunk`[%entered name.act])
       ==  ==
@@ -605,7 +605,7 @@
         =/  rp  (~(gut by present.state) name.act *(map ship @da))
         `this(present.state (~(put by present.state) name.act (~(del by rp) our.bowl)))
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room  !>(`room-sig:trunk`[%left name.act])
       ==  ==
@@ -615,7 +615,7 @@
         =^  n  present.state  (occupancy-of:hc name.act present.state)
         :_(this ~[(fact:hc [%present our.bowl name.act n])])
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room  !>(`room-sig:trunk`[%occupancy name.act])
       ==  ==
@@ -631,7 +631,7 @@
         =/  rc  (~(gut by recording.state) name.act *(map ship @da))
         `this(recording.state (~(put by recording.state) name.act (~(put by rc) our.bowl now.bowl)))
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room  !>(`room-sig:trunk`[%recording-on name.act])
       ==  ==
@@ -641,7 +641,7 @@
         =/  rc  (~(gut by recording.state) name.act *(map ship @da))
         `this(recording.state (~(put by recording.state) name.act (~(del by rc) our.bowl)))
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room  !>(`room-sig:trunk`[%recording-off name.act])
       ==  ==
@@ -651,7 +651,7 @@
         =^  who  recording.state  (recorders-of:hc name.act recording.state)
         :_(this ~[(fact:hc [%recorders our.bowl name.act who])])
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room  !>(`room-sig:trunk`[%recorders name.act])
       ==  ==
@@ -1141,6 +1141,14 @@
       :_  this
       ~[(fact:hc [%recv peer [%reject 'unknown' 'unreachable']])]
     ::
+    ::  Only the asks that a user is waiting on ride /room. The six
+    ::  fire-and-forget sigs (%entered %left %occupancy %recording-on
+    ::  %recording-off %recorders) ride /beat instead: an older host
+    ::  nacks them BY DESIGN, and on this wire that nameless denial
+    ::  settled whichever join or peek happened to be pending against
+    ::  the same host — polls run every 15-30s, so it killed real
+    ::  grants and painted refusal banners on line-less groups. On
+    ::  /beat the ?+ falls through and the nack is simply ignored.
         [%room @ ~]
       =/  peer  (slav %p i.t.wire)
       :_  this
