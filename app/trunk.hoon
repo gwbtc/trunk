@@ -500,7 +500,7 @@
       ::  else's group clicked the button and nothing happened at all.
       ?.  =(host.act our.bowl)
         :_  this
-        :~  :*  %pass  /room/(scot %p host.act)
+        :~  :*  %pass  (room-wire:hc host.act)
                 %agent  [host.act %trunk]
                 %poke  %trunk-room
                 !>(`room-sig:trunk`[%share name.act ttl.act])
@@ -611,7 +611,7 @@
         =^  bcards  hosted.state  (auto-bind:hc name.act hosted.state)
         [(weld cards bcards) this]
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  (room-wire:hc host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room
               !>  ^-  room-sig:trunk
@@ -629,7 +629,7 @@
       ::  not in asked. Without this entry the host's answer was
       ::  silently eaten and the client re-poked a host that had
       ::  already said no.
-      :-  :~  :*  %pass  /room/(scot %p host.act)
+      :-  :~  :*  %pass  (room-wire:hc host.act)
                   %agent  [host.act %trunk]
                   %poke  %trunk-room  !>(`room-sig:trunk`[%peek name.act])
           ==  ==
@@ -722,7 +722,7 @@
       ::  hosting it ourselves? mint straight away, no round trip.
       ?:  =(host.act our.bowl)
         :_  this  (grant-cards:hc our.bowl name.act)
-      :-  :~  :*  %pass  /room/(scot %p host.act)
+      :-  :~  :*  %pass  (room-wire:hc host.act)
                   %agent  [host.act %trunk]
                   %poke  %trunk-room  !>(`room-sig:trunk`[%ask name.act])
           ==  ==
@@ -743,7 +743,7 @@
         %+  reply:hc  our.bowl
         [%access-state name.act join-roles.new speak-roles.new muted.new]
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  (room-wire:hc host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room
               !>(`room-sig:trunk`[%access name.act join.act speak.act])
@@ -765,7 +765,7 @@
         %+  reply:hc  our.bowl
         [%access-state name.act join-roles.new speak-roles.new muted.new]
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  (room-wire:hc host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room
               !>(`room-sig:trunk`[%moderate name.act who.act mute.act])
@@ -783,7 +783,7 @@
         %+  reply:hc  our.bowl
         [%access-state name.act join-roles.u.got speak-roles.u.got muted.u.got]
       :_  this
-      :~  :*  %pass  /room/(scot %p host.act)
+      :~  :*  %pass  (room-wire:hc host.act)
               %agent  [host.act %trunk]
               %poke  %trunk-room
               !>(`room-sig:trunk`[%get-access name.act])
@@ -1220,7 +1220,10 @@
     ::  the same host — polls run every 15-30s, so it killed real
     ::  grants and painted refusal banners on line-less groups. On
     ::  /beat the ?+ falls through and the nack is simply ignored.
-        [%room @ ~]
+    ::
+    ::  The wire carries a date after the ship: +room-wire explains.
+    ::  Match on the ship alone so acks for either shape land here.
+        [%room @ *]
       =/  peer  (slav %p i.t.wire)
       :_  this
       ~[(fact:hc [%denied peer '' 'host unreachable'])]
@@ -1242,6 +1245,23 @@
   |=  =update:trunk
   ^-  card
   [%give %fact ~[/calls] %trunk-update !>(update)]
+::
+::  +room-wire: the wire an ask, peek or reply rides to `who`.
+::
+::  One fixed wire per peer meant one ames flow per peer, forever:
+::  when that flow wedged (mesa cannot close a stuck flow, and a
+::  restart keeps it) every later ask and peek to that host queued
+::  behind the first undelivered one and the line went silent while
+::  |hi still worked. Seen twice in the field on the same day. The
+::  date makes each ask its own flow, the way /relay's call-id
+::  already does for 1:1 calls. Fan-outs (+announce, +shut-cards)
+::  keep the bare wire: one flow per roster change per member would
+::  grow peer state fast, and neither has ever wedged.
+::
+++  room-wire
+  |=  who=ship
+  ^-  wire
+  /room/(scot %p who)/(scot %da now.bowl)
 ::
 ::  +may-ring: may `who` ring us 1:1? Our own ship always may — that
 ::  is our other devices, not a stranger.
@@ -1537,7 +1557,7 @@
       %get-access  ~
       %link        ~[(fact [%listen-link listen-link.msg])]
     ==
-  :~  :*  %pass  /room/(scot %p who)
+  :~  :*  %pass  (room-wire who)
           %agent  [who %trunk]
           %poke  %trunk-room  !>(msg)
   ==  ==
