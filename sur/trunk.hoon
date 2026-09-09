@@ -125,6 +125,9 @@
       [%enter-room host=ship name=@t]
       [%leave-room host=ship name=@t]
       [%occupancy-of host=ship name=@t]
+      ::  who is on a line (wire 8): the @p set behind %occupancy-of,
+      ::  for a /party roll call and the party-lines list.
+      [%who-is-on host=ship name=@t]
       ::  call recording (wire 7): tell the host we started / stopped
       ::  recording a line, and ask who is recording one. Recording is
       ::  heartbeated with %start-recording while active and self-heals
@@ -217,6 +220,10 @@
       [%left name=@t]
       [%occupancy name=@t]
       [%present name=@t n=@ud]
+      ::  who is on a line (wire 8). %who asks the host for the ships
+      ::  behind the count; the host answers %on-line. Old hosts nack.
+      [%who name=@t]
+      [%on-line name=@t who=(set ship)]
       ::  call recording (wire 7). A member tells the host it started /
       ::  stopped recording a line; %recording-on doubles as a
       ::  heartbeat. %recorders asks the host who is recording; the host
@@ -261,6 +268,8 @@
       ==
       ::  live occupancy of a line we asked about (wire 6)
       [%present from=ship name=@t n=@ud]
+      ::  who is on a line we asked about (wire 8)
+      [%on-line from=ship name=@t who=(set ship)]
       ::  who is recording a line we asked about (wire 7)
       [%recorders from=ship name=@t who=(set ship)]
   ==

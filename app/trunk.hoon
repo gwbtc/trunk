@@ -200,7 +200,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  7
+++  wire-version  8
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -670,6 +670,19 @@
               %poke  %trunk-room  !>(`room-sig:trunk`[%occupancy name.act])
       ==  ==
     ::
+    ::  who is on a line (wire 8): the ships behind %occupancy-of. Same
+    ::  short-circuit when we host; the host answers %on-line.
+        %who-is-on
+      ?:  =(host.act our.bowl)
+        =^  n  present.state  (occupancy-of:hc name.act present.state)
+        =/  who  ~(key by (~(gut by present.state) name.act *(map ship @da)))
+        :_(this ~[(fact:hc [%on-line our.bowl name.act who])])
+      :_  this
+      :~  :*  %pass  /beat/(scot %p host.act)
+              %agent  [host.act %trunk]
+              %poke  %trunk-room  !>(`room-sig:trunk`[%who name.act])
+      ==  ==
+    ::
     ::  call recording relays (wire 7). start/stop tell the host (or
     ::  update our own state when we host); recorders-of asks and the
     ::  host answers %recorders. Hosting it ourselves short-circuits
@@ -867,6 +880,18 @@
       ?.  (may-join:hc u.got src.bowl)  `this
       =^  n  present.state  (occupancy-of:hc name.msg present.state)
       :_(this (reply:hc src.bowl [%present name.msg n]))
+    ::
+    ::  Gated exactly like %occupancy: the @p set behind the count is
+    ::  strictly more than the count, so the same non-oracle rules.
+        %who
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      =/  got  (~(get by hosted.state) name.msg)
+      ?~  got  `this
+      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
+      ?.  (may-join:hc u.got src.bowl)  `this
+      =^  n  present.state  (occupancy-of:hc name.msg present.state)
+      =/  who  ~(key by (~(gut by present.state) name.msg *(map ship @da)))
+      :_(this (reply:hc src.bowl [%on-line name.msg who]))
     ::
     ::  call recording (wire 7). A member reports it started / stopped
     ::  recording a line we host; %recording-on doubles as a heartbeat.
@@ -1102,6 +1127,12 @@
       ?:  (~(has in block.pol.state) src.bowl)  `this
       ?.  (~(has by known.state) [src.bowl name.msg])  `this
       :_(this ~[(fact:hc [%present src.bowl name.msg n.msg])])
+    ::
+    ::  the host answering our %who: same known-line guard as %present.
+        %on-line
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      ?.  (~(has by known.state) [src.bowl name.msg])  `this
+      :_(this ~[(fact:hc [%on-line src.bowl name.msg who.msg])])
     ==
   ==
 ::
@@ -1540,6 +1571,7 @@
     ~[(fact [%access-state our.bowl name.msg join.msg speak.msg muted.msg])]
       %present     ~[(fact [%present our.bowl name.msg n.msg])]
       %recorders-are  ~[(fact [%recorders our.bowl name.msg who.msg])]
+      %on-line     ~[(fact [%on-line our.bowl name.msg who.msg])]
       ::  none of these is ever addressed to ourselves; the ?- must
       ::  still be total.
       %ask         ~
@@ -1547,6 +1579,7 @@
       %entered     ~
       %left        ~
       %occupancy   ~
+      %who         ~
       %recording-on   ~
       %recording-off  ~
       %recorders   ~

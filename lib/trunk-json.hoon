@@ -82,6 +82,7 @@
       [%enter-room (ot ~[host+ship-from-json name+so])]
       [%leave-room (ot ~[host+ship-from-json name+so])]
       [%occupancy-of (ot ~[host+ship-from-json name+so])]
+      [%who-is-on (ot ~[host+ship-from-json name+so])]
       [%start-recording (ot ~[host+ship-from-json name+so])]
       [%stop-recording (ot ~[host+ship-from-json name+so])]
       [%recorders-of (ot ~[host+ship-from-json name+so])]
@@ -228,6 +229,15 @@
     :~  [%from s+(scot %p from.u)]
         [%name s+name.u]
         [%n (numb n.u)]
+    ==
+  ::
+      %on-line
+    %+  frond  %on-line
+    %-  pairs
+    :~  [%from s+(scot %p from.u)]
+        [%name s+name.u]
+        :-  %who
+        [%a (turn ~(tap in who.u) |=(w=@p `json`s+(scot %p w)))]
     ==
   ::
       %recorders
