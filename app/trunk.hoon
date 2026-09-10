@@ -57,6 +57,7 @@
       state-10
       state-11
       state-12
+      state-13
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -186,6 +187,24 @@
       present=(map @t (map ship @da))
       recording=(map @t (map ship @da))
   ==
+::  %13 announces presence instead of only answering asks. `beat` is
+::  when the presence timer we set is due, ~ if none is armed. A host
+::  needs it because a push-only line has one blind spot: the last
+::  ship on it dying without saying %left leaves nothing to trigger a
+::  recount, and the line would read "occupied" forever. One timer,
+::  armed only while somebody is on a line, closes it.
++$  state-13
+  $:  %13
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
+      hosted=(map @t room:trunk)
+      known=lines:trunk
+      asked=(map [=ship name=@t] @da)
+      pol=policy:trunk
+      present=(map @t (map ship @da))
+      recording=(map @t (map ship @da))
+      beat=(unit @da)
+  ==
 +$  card  card:agent:gall
 ::  how long a minted ticket stays valid. Long enough for a call that
 ::  outlasts a conversation, short enough that a removed member loses
@@ -200,7 +219,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  8
+++  wire-version  9
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -294,7 +313,7 @@
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
 %-  agent:dbug
-=|  state-12
+=|  state-13
 =*  state  -
 ^-  agent:gall
 =<
@@ -317,15 +336,15 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-vase)
   ?-  -.old
-    %0  `this(state [%12 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~])
-    %1  `this(state [%12 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~])
-    %2  `this(state [%12 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~])
+    %0  `this(state [%13 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~ ~])
+    %1  `this(state [%13 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~ ~])
+    %2  `this(state [%13 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~ ~])
     %3
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  ~  open-policy  ~  ~
+  :*  %13  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  ~  open-policy  ~  ~  ~
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
   ::  ship keeps ringing for anyone until its owner says otherwise.
@@ -333,8 +352,8 @@
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~
+  :*  %13  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~  ~
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
   ::  are things you opt into, never things an upgrade turns on.
@@ -342,8 +361,8 @@
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
+  :*  %13  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
   ::  per-room SFU, unset.
@@ -351,16 +370,16 @@
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
+  :*  %13  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
     %7
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
+  :*  %13  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
   ::  seat-roles. Sweep the group mirror now if its watch is live:
@@ -369,8 +388,8 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %12  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
-        known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
+    :*  %13  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+        known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
   ?.  ?~(w %.n acked.u.w)  `this
@@ -381,27 +400,35 @@
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  hosted.old
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~
+  :*  %13  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
   ==  ==
   ::  %10 gains the recording set, unset.
     %10
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  hosted.old
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~
+  :*  %13  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~  ~
   ==  ==
   ::  %11 gains dated asks so they can be pruned.
     %11
   :-  ~
   %=  this
     state
-  :*  %12  ice.old  sfu.old  hosted.old
+  :*  %13  ice.old  sfu.old  hosted.old
       known.old  (stamp-asked asked.old now.bowl)  pol.old
-      present.old  recording.old
+      present.old  recording.old  ~
   ==  ==
-    %12  `this(state old)
+    %12
+  :-  ~
+  %=  this
+    state
+  :*  %13  ice.old  sfu.old  hosted.old
+      known.old  asked.old  pol.old
+      present.old  recording.old  ~
+  ==  ==
+    %13  `this(state old)
   ==
 
 ::
@@ -642,8 +669,13 @@
       ?:  =(host.act our.bowl)
         =/  got  (~(get by hosted.state) name.act)
         ?~  got  `this
+        =/  was  present.state
         =/  rp  (~(gut by present.state) name.act *(map ship @da))
-        `this(present.state (~(put by present.state) name.act (~(put by rp) our.bowl now.bowl)))
+        =.  present.state
+          (~(put by present.state) name.act (~(put by rp) our.bowl now.bowl))
+        =^  cards  present.state  (presence-sweep:hc was)
+        =^  bcards  beat.state  (arm-beat:hc beat.state present.state)
+        [(weld cards bcards) this]
       :_  this
       :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
@@ -652,8 +684,13 @@
     ::
         %leave-room
       ?:  =(host.act our.bowl)
+        =/  was  present.state
         =/  rp  (~(gut by present.state) name.act *(map ship @da))
-        `this(present.state (~(put by present.state) name.act (~(del by rp) our.bowl)))
+        =.  present.state
+          (~(put by present.state) name.act (~(del by rp) our.bowl))
+        =^  cards  present.state  (presence-sweep:hc was)
+        =^  bcards  beat.state  (arm-beat:hc beat.state present.state)
+        [(weld cards bcards) this]
       :_  this
       :~  :*  %pass  /beat/(scot %p host.act)
               %agent  [host.act %trunk]
@@ -853,20 +890,27 @@
       ?~  got  `this
       ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
       ?.  (may-join:hc u.got src.bowl)  `this
+      =/  was  present.state
       =/  room-present  (~(gut by present.state) name.msg *(map ship @da))
       =.  room-present  (~(put by room-present) src.bowl now.bowl)
-      `this(present.state (~(put by present.state) name.msg room-present))
+      =.  present.state  (~(put by present.state) name.msg room-present)
+      =^  cards  present.state  (presence-sweep:hc was)
+      =^  bcards  beat.state  (arm-beat:hc beat.state present.state)
+      [(weld cards bcards) this]
     ::
     ::  Drop the name key once the last ship leaves. These maps are
     ::  keyed by a remote-supplied name, and re-putting an emptied map
     ::  grew state by one key per name anyone ever named.
         %left
+      =/  was  present.state
       =/  room-present  (~(gut by present.state) name.msg *(map ship @da))
       =.  room-present  (~(del by room-present) src.bowl)
       =.  present.state
         ?:  =(~ room-present)  (~(del by present.state) name.msg)
         (~(put by present.state) name.msg room-present)
-      `this
+      =^  cards  present.state  (presence-sweep:hc was)
+      =^  bcards  beat.state  (arm-beat:hc beat.state present.state)
+      [(weld cards bcards) this]
     ::
     ::  Gated like %entered above. Unguarded, any ship that guessed a
     ::  host and room name learned a private line's live occupancy —
@@ -1261,7 +1305,18 @@
     ==
   ==
 ::
-++  on-arvo   on-arvo:def
+::  the presence timer: re-sweep, announce whatever aged out, and
+::  re-arm while anyone is still on a line.
+++  on-arvo
+  |=  [=wire =sign-arvo]
+  ^-  (quip card _this)
+  ?.  ?=([%presence ~] wire)  (on-arvo:def wire sign-arvo)
+  ?.  ?=([%behn %wake *] sign-arvo)  (on-arvo:def wire sign-arvo)
+  =.  beat.state  ~
+  =/  was  present.state
+  =^  cards  present.state  (presence-sweep:hc was)
+  =^  bcards  beat.state  (arm-beat:hc beat.state present.state)
+  [(weld cards bcards) this]
 ++  on-leave  |=(path `this)
 ++  on-fail   on-fail:def
 --
@@ -1409,6 +1464,69 @@
 ::  that room's stale (past present-ttl) heartbeats pruned. Pruning on
 ::  read is why presence needs no timers: a client that dropped without
 ::  saying %left ages out on the next %occupancy read.
+::  +on-line-cards: tell a line's members who is on it. Same audience
+::  and same gate as the %occupancy answer — a blocked or role-less
+::  member could not ask, so it must not be told either.
+::
+::  The host's own client is told with a fact; it is not a peer of its
+::  own room, exactly as in +announce.
+::
+++  on-line-cards
+  |=  [name=@t who=(set ship)]
+  ^-  (list card)
+  =/  got  (~(get by hosted.state) name)
+  ?~  got  ~
+  :-  (fact [%on-line our.bowl name who])
+  %+  murn  ~(tap in (~(del in members.u.got) our.bowl))
+  |=  target=ship
+  ^-  (unit card)
+  ?:  (~(has in block.pol.state) target)  ~
+  ?.  (may-join u.got target)  ~
+  :-  ~
+  :*  %pass  /room/(scot %p target)
+      %agent  [target %trunk]
+      %poke  %trunk-room  !>(`room-sig:trunk`[%on-line name who])
+  ==
+::
+::  +presence-sweep: prune every line we host and announce the ones
+::  whose roster actually changed. `was` is the presence map before
+::  whatever just happened, already pruned as of the last sweep, so a
+::  ship missing from the new set really did leave.
+::
+::  Presence was pull-only through wire 8: a client asked, the host
+::  answered. That charged every member a poll interval forever and
+::  charged the host that times its roster, to learn a thing that
+::  changes when somebody joins — which is rare. Announcing inverts
+::  it. A heartbeat from a ship already on the line moves its stamp,
+::  not the set, and so sends nothing at all.
+::
+++  presence-sweep
+  |=  was=(map @t (map ship @da))
+  ^-  [(list card) (map @t (map ship @da))]
+  =/  names  ~(tap in ~(key by hosted.state))
+  =|  cards=(list card)
+  =/  present  present.state
+  |-
+  ?~  names  [cards present]
+  =^  n  present  (occupancy-of i.names present)
+  =/  after  ~(key by (~(gut by present) i.names *(map ship @da)))
+  =/  before  ~(key by (~(gut by was) i.names *(map ship @da)))
+  ?:  =(before after)  $(names t.names)
+  $(names t.names, cards (weld cards (on-line-cards i.names after)))
+::
+::  +arm-beat: keep one timer alive while anyone is on any line, and
+::  none when nobody is. The wake re-sweeps, which is the only thing
+::  that can notice a ship that stopped heartbeating without leaving.
+::
+++  arm-beat
+  |=  [beat=(unit @da) present=(map @t (map ship @da))]
+  ^-  [(list card) (unit @da)]
+  ?^  beat  [~ beat]
+  ?.  (lien ~(val by present) |=(m=(map ship @da) !=(~ m)))  [~ ~]
+  =/  when  (add now.bowl present-ttl)
+  :_  `when
+  ~[[%pass /presence %arvo %b %wait when]]
+::
 ++  occupancy-of
   |=  [name=@t present=(map @t (map ship @da))]
   ^-  [@ud (map @t (map ship @da))]
