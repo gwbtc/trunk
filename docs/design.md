@@ -362,13 +362,7 @@ getting sound out of it took opening settings, enabling "display
 audio-only", and pressing play on a panel. Hopeless for someone handed
 a link.
 
-`sidecar/listen/index.html` is a one-button page instead: the click is
-both the autoplay gesture and the connect, so there is no way to end up
-connected but silent. It reuses Galène's own `protocol.js` (served by
-the same server, so the wire protocol can't drift) and offers nothing a
-listener can't use — no publishing, chat, hand-raising, file transfer
-or device pickers. Serve it at `/listen/`; `+listen-url` mints
-`<base>/listen/?group=<group>/<host>-<room>&token=<jwt>`.
+`sidecar/listen/index.html` is a one-button page instead: the click is both the autoplay gesture and the connect, so there is no way to end up connected but silent. It reuses Galène's own `protocol.js` (served by the same server, so the wire protocol can't drift) and offers nothing a listener can't use: no publishing, chat, hand-raising, file transfer or device pickers. Serve it at `/listen/`. `+listen-url` mints `<base>/listen/?host=<host>&room=<room>&topic=<topic>&token=<jwt>`. The link carries no subgroup and no comet @p. The page reads the subgroup from the token's `aud`, and `host` is the host's name as Talon shows it.
 
 ```
 https://<your-sidecar-host>/group/talon/<host>-<room>/?token=<jwt>
@@ -410,11 +404,7 @@ only want to hear, and no protocol change: Galène names the publisher
 on each `offer`, which is the only place a stream is tied to a person
 (the roster is keyed by client, levels arrive per stream).
 
-**Names** are the reader's own. Talon resolves a `@p` through its
-contact map, so you see whatever you call that person. The listen page
-shows the bare `@p`: a browser has no Urbit and no contact book, and
-imposing the *host's* nicknames on strangers would be a different and
-worse thing than showing identity plainly.
+**Names** are the reader's own. Talon resolves a `@p` through its contact map, so you see whatever you call that person. The listen page has no Urbit and no contact book, and imposing the *host's* nicknames on strangers would be a different and worse thing than showing identity plainly. So it shows what Galène knows, which is the token's `sub`. Since wire 10 a comet's `sub` is its full mnemonym, with one dot when the host's Jael holds a Groundwire attestation for it and two otherwise. The page shortens it to `.first...last` the way Talon does, and Talon decodes it back to the `@p`. Anyone who isn't a comet is their `@p`.
 
 **The topic** is `room.title`, editable by admins. It reaches Talon
 members live through `%announce`, and listeners through a `topic=`
@@ -645,8 +635,7 @@ fixed in the same pass:
   so any later grant fails the check.
 - **Invitation list is remote-controlled**, so `%announce` is capped
   (`invite-cap`) rather than growing without bound.
-- Membership is checked host-side at mint time, and `sub` is always the
-  *asking* ship — a member cannot mint a ticket for anyone else.
+- Membership is checked host-side at mint time, and `sub` always names the *asking* ship (a comet by its mnemonym, which decodes to exactly one `@p`). A member cannot mint a ticket for anyone else.
 - Ticket TTL is 6h with no revocation: a member removed from a group
   keeps access until expiry. Rotating the SFU key is the only immediate
   revocation. Documented ceiling, not a v2 fix.

@@ -14,7 +14,7 @@
 ::  the trust boundary: local-only actions, and a signal's `from` is
 ::  the cryptographic ames src, never a claim in the payload.
 /-  trunk
-/+  default-agent, dbug, trunk-jwt, trunk-json
+/+  default-agent, dbug, mnemonym, trunk-jwt, trunk-json
 |%
 ::  Rooms as they were before state-6. Old state versions must pin the
 ::  shape they were actually saved with — referencing the evolving
@@ -219,7 +219,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  9
+++  wire-version  10
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -1442,7 +1442,7 @@
   =/  tok=@t
     %:  mint-with:trunk-jwt
       key:(room-sfu name)
-      (scot %p who)
+      (galene-name who)
       loc
       now-secs
       (add now-secs ticket-ttl)
@@ -1603,11 +1603,44 @@
   ::  way to ask the ship what the line is about, so this is a
   ::  snapshot taken when the link was minted.
   =/  topic  ?~(got '' title.u.got)
+  ::  No @p and no subgroup: the page reads the subgroup out of the
+  ::  token's aud, and a comet host is named the way Talon names it.
+  =/  host
+    (fall (short:mnemonym our.bowl (on-groundwire our.bowl)) (scot %p our.bowl))
   %+  rap  3
-  :~  base.cfg  '/listen/?group='  (room-subgroup name)
+  :~  base.cfg  '/listen/?host='  (crip (en-urlt:html (trip host)))
+      '&room='  (crip (en-urlt:html (trip name)))
       '&topic='  (crip (en-urlt:html (trip topic)))
       '&token='  tok
   ==
+::
+::  +galene-name: who Galène says a ship is, from the token's sub.
+::  A comet goes by its full mnemonym (wire 10), so a listener's page
+::  can show the name Talon shows with no word list and no ship to
+::  ask. Talon decodes it back to the @p. Anyone else is their @p.
+++  galene-name
+  |=  who=ship
+  ^-  @t
+  ?.  ?=(%pawn (clan:title who))  (scot %p who)
+  (fall (name:mnemonym who (on-groundwire who)) (scot %p who))
+::
+::  +on-groundwire: does our Jael hold a Groundwire attestation for
+::  `who`? That is what the single dot means, and the question Talon
+::  asks its own ship. %dome is Groundwire's Jael only. A stock Jael
+::  blocks on it, which crashes the event, and +mole does not catch a
+::  failed scry. So Jael is asked only on a ship that carries %gw-btc,
+::  the registry %dome answers with. Clay's desk list never fails.
+::  ponytail: the desk stands in for the kernel. A stock ship with a
+::  desk named %gw-btc would crash here. Probe the kernel if one exists.
+++  on-groundwire
+  |=  who=ship
+  ^-  ?
+  =/  desks  .^((set desk) %cd /(scot %p our.bowl)//(scot %da now.bowl))
+  ?.  (~(has in desks) %gw-btc)  %.n
+  ::  Our own entry comes from our boot, not from an attestation, so
+  ::  Jael may not say it. A comet carrying %gw-btc is on Groundwire.
+  ?:  =(who our.bowl)  %.y
+  !=(~ .^((unit @tas) %j /(scot %p our.bowl)/dome/(scot %da now.bowl)/(scot %p who)))
 ::
 ++  room-location
   |=  name=@t

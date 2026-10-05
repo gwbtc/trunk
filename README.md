@@ -74,6 +74,8 @@ websocket endpoint, then join with the token. That is Galène's own
 protocol from there on, and its `protocol.js` is a usable client
 library.
 
+Galène names everyone by the token's `sub`, so a username on the line is the ship's `@p`, with one exception. Since wire 10 a comet goes by its full mnemonym: up to twelve words joined by dots, with one dot in front when the host's Jael holds a Groundwire attestation for it and two otherwise. It decodes to exactly one `@p` (the scheme is gwbtc/mnemonyms, and `lib/mnemonym.hoon` here encodes it). Decode a username before you treat it as a ship.
+
 ### Three things that will bite you
 
 - **A ticket is a fact every device of the ship sees.** Only the device

@@ -134,8 +134,11 @@
 <script>
 (function () {
   var params = new URLSearchParams(location.search);
-  var group = params.get('group');
   var token = params.get('token');
+  // The subgroup rides in the token's aud (<base>/group/<subgroup>/),
+  // so the link doesn't spell it, nor the host @p inside it. A link
+  // minted before wire 10 still says group=.
+  var group = params.get('group') || audGroup(token);
 
   var goBtn = document.getElementById('go');
   var statusEl = document.getElementById('status');
@@ -158,6 +161,27 @@
   var elements = {};
   var ctx = null;
   var speakTimer = null;
+
+  function audGroup(tok) {
+    try {
+      var b = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      var aud = JSON.parse(atob(b)).aud;
+      var m = /\/group\/(.+?)\/?$/.exec(Array.isArray(aud) ? aud[0] : aud);
+      return m ? m[1] : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * A comet's Galène name is its full mnemonym (.a.b.….l), from the
+   * token's sub. Show the two-word form Talon shows. Anything else is
+   * a @p and is shown as it is.
+   */
+  function short(n) {
+    var m = /^(\.\.?)([a-z]+)\..*\.([a-z]+)$/.exec(n);
+    return m ? m[1] + m[2] + '...' + m[3] : n;
+  }
 
   /**
    * Take the gesture and hold it.
@@ -241,7 +265,11 @@
     say('This link is missing its room or its token.', true);
     return;
   }
-  roomEl.textContent = group.split('/').pop().replace(/-/g, ' ');
+  var host = params.get('host');
+  var room = params.get('room');
+  roomEl.textContent = room
+    ? (host ? host + ' ' : '') + room.replace(/-/g, ' ')
+    : group.split('/').pop().replace(/-/g, ' ');
   var topic = params.get('topic');
   if (topic) {
     document.getElementById('topic').textContent = topic;
@@ -277,7 +305,7 @@
       var dot = document.createElement('span');
       dot.className = speaking[n] ? 'dot on' : 'dot';
       li.appendChild(dot);
-      li.appendChild(document.createTextNode(n));
+      li.appendChild(document.createTextNode(short(n)));
       // Only the muted are marked: everyone here is expected to be able
       // to talk, so a mic on every row would be a column of noise.
       if (muted[n]) {
@@ -394,7 +422,11 @@
     // with no Talon clients simply never sets it.
     conn.onusermessage = function (source, dest, username, time, privileged, kind, error, value) {
       if (kind !== 'talon-mute' || !username) return;
-      muted[username] = !!value;
+      // Keyed by the name Galène gave the sending connection, which is
+      // the name the list shows. `username` is whatever the client
+      // wrote (Talon writes its @p), and Galène checks only `source`.
+      var u = conn.users[source];
+      muted[(u && u.username) || username] = !!value;
       renderWho();
     };
 
