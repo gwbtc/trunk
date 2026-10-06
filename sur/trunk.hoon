@@ -86,6 +86,18 @@
 ::  authorization to join one room: where it is, and a short-lived
 ::  token scoped to exactly that room.
 +$  ticket  [name=@t location=@t token=@t]
+::  where one of our devices takes push hints (wire 11). The ship
+::  sends them itself, so a device's +code never leaves it.
+::    %unifiedpush  POST straight to the distributor's endpoint url
+::    %ios-gateway  through an APNs gateway, which holds the device's
+::                  tokens behind `handle`: APNs needs HTTP/2 and
+::                  ES256, and iris has neither
+::  caps: what the app said it understands, e.g. 'read'.
++$  push-target
+  $%  [%unifiedpush endpoint=@t]
+      [%ios-gateway gateway=@t handle=@t secret=@t]
+  ==
++$  push-device  [target=push-target caps=(set @t)]
 ::  local client -> own agent
 +$  action
   $%  [%send =ship =sig]
@@ -154,6 +166,13 @@
       [%moderate-member host=ship name=@t who=ship mute=?]
       ::  ask a host for a line's current gates and mute set
       [%get-room-access host=ship name=@t]
+      ::  push hints (wire 11). `id` is minted by the device. Register
+      ::  is an upsert, so new caps or a new endpoint is a register
+      ::  again. Test sends one push to that device at once, past
+      ::  every filter, so the app can prove delivery end to end.
+      [%push-register id=@t =push-device]
+      [%push-unregister id=@t]
+      [%push-test id=@t nonce=@t]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]

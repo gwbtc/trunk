@@ -22,6 +22,12 @@
 ::            {"get-room-access":{"host":"~zod","name":n}}
 ::            {"set-call-mode":"open"} | {"allow":"~zod"}
 ::            {"unallow":"~zod"} | {"block":"~zod"} | {"unblock":"~zod"}
+::            {"push-register":{"id":d,"platform":"unifiedpush",
+::                              "endpoint":u,"caps":["read"]}}
+::            {"push-register":{"id":d,"platform":"ios-gateway",
+::                              "gateway":u,"handle":h,"secret":s,
+::                              "caps":[]}}
+::            {"push-unregister":d} | {"push-test":{"id":d,"nonce":n}}
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
 ::            {"hangup":{"id":i}}
@@ -56,6 +62,21 @@
   =,  dejs:format
   ^-  $-(json ice-server:trunk)
   (ot ~[url+so user+so cred+so])
+::
+::  +push-register-from-json: the platform names which fields follow.
+::  An unknown platform crashes, so the poke nacks.
+++  push-register-from-json
+  =,  dejs:format
+  |=  jon=json
+  ^-  [@t push-device:trunk]
+  =/  [id=@t platform=@t caps=(set @t)]
+    ((ot ~[id+so platform+so caps+(as so)]) jon)
+  :+  id
+    ?+  platform  !!
+      %unifiedpush  [%unifiedpush ((ot ~[endpoint+so]) jon)]
+      %ios-gateway  [%ios-gateway ((ot ~[gateway+so handle+so secret+so]) jon)]
+    ==
+  caps
 ::
 ++  action-from-json
   =,  dejs:format
@@ -97,6 +118,9 @@
       [%get-room-access (ot ~[host+ship-from-json name+so])]
       :-  %bind-room
       (ot ~[name+so group+(mu (ot ~[ship+ship-from-json name+so]))])
+      [%push-register push-register-from-json]
+      [%push-unregister so]
+      [%push-test (ot ~[id+so nonce+so])]
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]

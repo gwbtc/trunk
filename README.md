@@ -76,6 +76,62 @@ library.
 
 Galène names everyone by the token's `sub`, so a username on the line is the ship's `@p`, with one exception. Since wire 10 a comet goes by its full mnemonym: up to twelve words joined by dots, with one dot in front when the host's Jael holds a Groundwire attestation for it and two otherwise. It decodes to exactly one `@p` (the scheme is gwbtc/mnemonyms, and `lib/mnemonym.hoon` here encodes it). Decode a username before you treat it as a ship.
 
+### Push hints for an app that is asleep (wire 11)
+
+A phone whose app is suspended hears nothing on `/calls`. Since wire 11 the ship wakes it itself, with a push straight to each device the owner registered. This replaces Talon's off-ship relay, which logged in with the user's `+code` and kept a session cookie. Here nothing leaves the ship but the hint.
+
+Register from the device, with a `trunk-action` poke as the owner. `id` is the device's own, minted once. Registering again with the same `id` replaces the entry, so new caps, a new endpoint or a new handle is just another register. A ship keeps at most 32 devices.
+
+```jsonc
+// Android, through its UnifiedPush distributor
+{"push-register": {"id": "<device id>", "platform": "unifiedpush",
+                   "endpoint": "https://ntfy.example/up...", "caps": ["read"]}}
+// iPhone, through an APNs gateway that holds the device's tokens
+{"push-register": {"id": "<device id>", "platform": "ios-gateway",
+                   "gateway": "https://relay.nisfeb.com", "handle": "<h>",
+                   "secret": "<s>", "caps": []}}
+{"push-unregister": "<device id>"}
+// one push to that device at once, past every filter, to prove the path
+{"push-test": {"id": "<device id>", "nonce": "<random>"}}
+```
+
+An unknown platform, an endpoint or gateway that is not a URL, an empty handle or secret, and a `push-test` for an unknown id all nack.
+
+What gets pushed:
+
+- **ring** when a peer rings us and the policy lets it through, and **ring-cancel** when that ring ends: the caller hangs up (`"reason": "hangup"`), or one of our devices answers or declines (`"answered"`). A cancel goes only for a ring the ship pushed, within a minute of it, or within four hours once a device took the call.
+- **new-message** for each post or thread reply that `%activity` marks notified, as long as Talon's per-chat level allows it. The level comes from `%settings`, desk `talon`, bucket `notify-prefs`, and is `all`, `mentions` or `none`. Posts more than 5 minutes old never notify, and none is pushed twice. A reply carries `parent`, the id of the post it answers.
+- **read** when a chat is read to the end on any client. Only to UnifiedPush devices whose `caps` include `read`, since an older app shows any push it does not know as a new message.
+- **push-test** on request.
+
+UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, everything else with `TTL: 86400` and `Urgency: normal`.
+
+```jsonc
+{"event": "new-message", "patp": "~ship", "whom": "<chat>", "id": "<post id>"}
+{"event": "new-message", "patp": "~ship", "whom": "<chat>", "id": "<reply id>", "parent": "<post id>"}
+{"event": "read", "patp": "~ship", "whom": "<chat>"}
+{"event": "ring", "patp": "~ship", "from": "~caller", "id": "<call id>"}
+{"event": "ring-cancel", "patp": "~ship", "id": "<call id>", "reason": "hangup"}
+{"event": "push-test", "patp": "~ship", "nonce": "<nonce>"}
+```
+
+`whom` is `~ship` for a DM, `0v...` for a group DM and the nest for a channel.
+
+An iPhone needs APNs, which speaks only HTTP/2 with ES256 tokens. Iris has neither, so the ship asks a gateway, `POST <gateway>/gateway/push`, and the gateway maps `handle` to the device's APNs tokens:
+
+```jsonc
+// a message, or a test (title "Talon", empty whom and postId, plus "nonce")
+{"handle": "<h>", "secret": "<s>", "kind": "alert", "patp": "~ship",
+ "whom": "<chat>", "postId": "<post id>", "title": "~author",
+ "body": "<the first 140 characters>"}          // plus "parent" on a reply
+// a ring or its cancel: payload is exactly the UnifiedPush body above
+{"handle": "<h>", "secret": "<s>", "kind": "voip", "payload": {"event": "ring", ...}}
+```
+
+An iPhone gets no read push. Its alert stays until the app can clear it.
+
+The ship never retries a push. A late ring is worse than none, and messages sync when the app opens. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept. Any other answer is only logged.
+
 ### Three things that will bite you
 
 - **A ticket is a fact every device of the ship sees.** Only the device

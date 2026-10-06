@@ -14,7 +14,7 @@
 ::  the trust boundary: local-only actions, and a signal's `from` is
 ::  the cryptographic ames src, never a claim in the payload.
 /-  trunk
-/+  default-agent, dbug, mnemonym, trunk-jwt, trunk-json
+/+  default-agent, dbug, mnemonym, trunk-jwt, trunk-json, trunk-push
 |%
 ::  Rooms as they were before state-6. Old state versions must pin the
 ::  shape they were actually saved with — referencing the evolving
@@ -58,6 +58,7 @@
       state-11
       state-12
       state-13
+      state-14
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -205,6 +206,27 @@
       recording=(map @t (map ship @da))
       beat=(unit @da)
   ==
+::  %14 sends push hints to our own devices (wire 11), so the ship
+::  replaces Talon's off-ship relay and no +code leaves it.
+::    push  our devices, by the id each one minted
+::    seen  posts already pushed, so a re-watch never pushes twice;
+::          pruned to +fresh-for:trunk-push
+::    rung  rings we pushed, so a cancel goes only where one rang
++$  state-14
+  $:  %14
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
+      hosted=(map @t room:trunk)
+      known=lines:trunk
+      asked=(map [=ship name=@t] @da)
+      pol=policy:trunk
+      present=(map @t (map ship @da))
+      recording=(map @t (map ship @da))
+      beat=(unit @da)
+      push=(map @t push-device:trunk)
+      seen=(map @t @da)
+      rung=rung:trunk-push
+  ==
 +$  card  card:agent:gall
 ::  how long a minted ticket stays valid. Long enough for a call that
 ::  outlasts a conversation, short enough that a removed member loses
@@ -219,7 +241,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  10
+++  wire-version  11
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -313,7 +335,7 @@
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
 %-  agent:dbug
-=|  state-13
+=|  state-14
 =*  state  -
 ^-  agent:gall
 =<
@@ -336,15 +358,15 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-vase)
   ?-  -.old
-    %0  `this(state [%13 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~ ~])
-    %1  `this(state [%13 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~ ~])
-    %2  `this(state [%13 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~ ~])
+    %0  `this(state [%14 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~])
+    %1  `this(state [%14 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~])
+    %2  `this(state [%14 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~ ~ ~ ~ ~])
     %3
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  ~  open-policy  ~  ~  ~
+  :*  %14  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  ~  open-policy  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
   ::  ship keeps ringing for anyone until its owner says otherwise.
@@ -352,8 +374,8 @@
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~  ~
+  :*  %14  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
   ::  are things you opt into, never things an upgrade turns on.
@@ -361,8 +383,8 @@
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
+  :*  %14  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
   ::  per-room SFU, unset.
@@ -370,16 +392,16 @@
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
+  :*  %14  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
     %7
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
+  :*  %14  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
   ::  seat-roles. Sweep the group mirror now if its watch is live:
@@ -388,8 +410,8 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %13  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
-        known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
+    :*  %14  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+        known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
   ?.  ?~(w %.n acked.u.w)  `this
@@ -400,35 +422,45 @@
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  hosted.old
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~
+  :*  %14  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %10 gains the recording set, unset.
     %10
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  hosted.old
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~  ~
+  :*  %14  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~  ~  ~  ~  ~
   ==  ==
   ::  %11 gains dated asks so they can be pruned.
     %11
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  hosted.old
+  :*  %14  ice.old  sfu.old  hosted.old
       known.old  (stamp-asked asked.old now.bowl)  pol.old
-      present.old  recording.old  ~
+      present.old  recording.old  ~  ~  ~  ~
   ==  ==
     %12
   :-  ~
   %=  this
     state
-  :*  %13  ice.old  sfu.old  hosted.old
+  :*  %14  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
-      present.old  recording.old  ~
+      present.old  recording.old  ~  ~  ~  ~
   ==  ==
-    %13  `this(state old)
+  ::  %13 gains the push registry, empty.
+    %13
+  :-  ~
+  %=  this
+    state
+  :*  %14  ice.old  sfu.old  hosted.old
+      known.old  asked.old  pol.old
+      present.old  recording.old  beat.old  ~  ~  ~
+  ==  ==
+  ::  a reload: re-arm the activity watch if it went missing.
+    %14  [(activity-cards:hc push.old) this(state old)]
   ==
 
 ::
@@ -444,6 +476,29 @@
     ?-    -.act
         %set-ice  `this(ice.state servers.act)
         %set-sfu  `this(sfu.state sfu-config.act)
+    ::
+    ::  push hints (wire 11). The registry is the owner's alone, by the
+    ::  src check above. A device that iris could never reach is
+    ::  refused here rather than failing on every push.
+        %push-register
+      ?>  (valid-device:trunk-push push-device.act)
+      ?>  ?|  (~(has by push.state) id.act)
+              (lth ~(wyt by push.state) device-cap:trunk-push)
+          ==
+      =.  push.state  (~(put by push.state) id.act push-device.act)
+      :_(this (activity-cards:hc push.state))
+    ::
+        %push-unregister
+      =.  push.state  (~(del by push.state) id.act)
+      :_(this (activity-cards:hc push.state))
+    ::
+    ::  one push to one device at once, past the level and the
+    ::  freshness checks, so the app can prove the whole path before
+    ::  it leaves the old relay. An unknown id crashes: a nack.
+        %push-test
+      =/  dev  (~(got by push.state) id.act)
+      :_  this
+      (push-cards:hc (my [id.act dev]~) [%test nonce.act])
     ::
     ::  policy edits. Each echoes the whole policy back on /calls so a
     ::  ship's other devices converge without re-scrying.
@@ -577,6 +632,11 @@
       =/  extra=(list card)
         ?~  settled  ~
         ~[(fact:hc [%handled u.settled])]
+      ::  ...and un-rings any device we woke with a push, whose app may
+      ::  be asleep and never see the %handled.
+      =^  cancel  rung.state
+        ?~  settled  [~ rung.state]
+        (settle-cards:hc u.settled %.y push.state rung.state)
       ::  the wire carries the call id: a nacked relay comes back as a
       ::  %reject on /calls, and the client drops any %reject whose id
       ::  it did not mint — so a made-up id never matched, and the
@@ -596,7 +656,7 @@
                 %agent  [ship.act %trunk]
                 %poke  %trunk-signal  !>(sig.act)
         ==  ==
-      :_(this (weld extra relay))
+      :_(this :(weld extra cancel relay))
     ::
         %configure-room
       ::  Hosting it ourselves? Apply directly. Creating is allowed
@@ -864,9 +924,12 @@
         ==
       %-  (slog leaf+"trunk: refused ring from {<src.bowl>}" ~)
       `this
+    ::  a device whose app is asleep hears the ring only by push
+    =^  pushed  rung.state
+      (signal-cards:hc src.bowl sig push.state rung.state)
     :_  this
-    :~  [%give %fact ~[/calls] %trunk-update !>(`update:trunk`[%recv src.bowl sig])]
-    ==
+    :-  [%give %fact ~[/calls] %trunk-update !>(`update:trunk`[%recv src.bowl sig])]
+    pushed
   ::
   ::  room negotiation with a peer ship
       %trunk-room
@@ -1206,6 +1269,27 @@
 ++  on-agent
   |=  [=wire =sign:agent:gall]
   ^-  (quip card _this)
+  ::  our own %activity, watched while any device is registered
+  ?:  ?=([%push %activity ~] wire)
+    ?-    -.sign
+        %poke-ack  `this
+        %kick      :_(this (activity-cards:hc push.state))
+    ::
+        %watch-ack
+      ?~  p.sign  `this
+      %-  (slog leaf+"trunk: no %activity to watch, so no message pushes" ~)
+      `this
+    ::
+    ::  never crash on a fact: gall would close the subscription.
+        %fact
+      =/  res
+        (mule |.((activity-hints:hc cage.sign push.state seen.state)))
+      ?:  ?=(%| -.res)
+        %-  (slog leaf+"trunk: could not read an activity fact" ~)
+        `this
+      =^  cards  seen.state  p.res
+      [cards this]
+    ==
   ::  ?- rather than ?+: all four sign types now have cases, and an
   ::  exhaustive ?+ is a mint-vain.
   ?-    -.sign
@@ -1310,6 +1394,24 @@
 ++  on-arvo
   |=  [=wire =sign-arvo]
   ^-  (quip card _this)
+  ::  a push hint's answer. Only "gone for good" changes anything;
+  ::  iris's progress and cancels are absorbed, not crashed on.
+  ?:  ?=([%push %send @ @ @ ~] wire)
+    ?.  ?=([%iris %http-response %finished *] sign-arvo)  `this
+    =/  code  status-code.response-header.client-response.sign-arvo
+    ?:  (lth code 300)  `this
+    =/  id  (slav %t i.t.t.wire)
+    =/  dev  (~(get by push.state) id)
+    ?~  dev  `this
+    ::  a device re-registered since the push left keeps its new target
+    ?.  ?&  (dead:trunk-push target.u.dev code)
+            =((slav %uv i.t.t.t.wire) (mug target.u.dev))
+        ==
+      %-  (slog leaf+"trunk: push to {(trip id)} answered {<code>}" ~)
+      `this
+    %-  (slog leaf+"trunk: push device {(trip id)} is gone ({<code>}), dropped" ~)
+    =.  push.state  (~(del by push.state) id)
+    :_(this (activity-cards:hc push.state))
   ?.  ?=([%presence ~] wire)  (on-arvo:def wire sign-arvo)
   ?.  ?=([%behn %wake *] sign-arvo)  (on-arvo:def wire sign-arvo)
   =.  beat.state  ~
@@ -1895,4 +1997,126 @@
   ?:  &(!want has)
     [%pass /groups-mirror %agent [our.bowl %groups] %leave ~]~
   ~
+::
+::  +activity-cards: watch our own %activity while any device is
+::  registered, and only then. A nack (no Tlon here) leaves it
+::  unwatched until the next register.
+::
+++  activity-cards
+  |=  push=(map @t push-device:trunk)
+  ^-  (list card)
+  =/  want=?  ?=(^ push)
+  =/  has=?
+    (~(has by wex.bowl) [/push/activity our.bowl %activity])
+  ?:  &(want !has)
+    [%pass /push/activity %agent [our.bowl %activity] %watch /v4]~
+  ?:  &(!want has)
+    [%pass /push/activity %agent [our.bowl %activity] %leave ~]~
+  ~
+::
+::  +push-cards: one iris request for each device that takes `hint`.
+::  The wire names the device and the target it went to, so a "gone"
+::  answer drops only a device not re-registered since. Nothing waits
+::  on these and nothing retries, as on the relay: a late ring is
+::  worse than none, and messages sync when the app opens.
+::
+::  ponytail: no timeout, so a hung endpoint holds one iris request
+::  open. Arm a behn timer and %cancel-request if those pile up.
+::
+++  push-cards
+  |=  [push=(map @t push-device:trunk) =hint:trunk-push]
+  ^-  (list card)
+  %+  murn  ~(tap by push)
+  |=  [id=@t dev=push-device:trunk]
+  ^-  (unit card)
+  =/  req  (request:trunk-push our.bowl dev hint)
+  ?~  req  ~
+  =/  =wire
+    :~  %push  %send  (scot %t id)
+        (scot %uv (mug target.dev))
+        (scot %uv (sham eny.bowl id hint))
+    ==
+  `[%pass wire %arvo %i %request u.req *outbound-config:iris]
+::
+::  +activity-hints: what one %activity fact asks of our devices. The
+::  fact becomes JSON through %activity's own desk, the same grow eyre
+::  ran for the off-ship relay, so trunk never casts Tlon's types and
+::  rides out their mark bumps. Runs under mule in +on-agent.
+::
+++  activity-hints
+  |=  [=cage push=(map @t push-device:trunk) seen=(map @t @da)]
+  ^-  (quip card (map @t @da))
+  ::  the trailing $ asks gall itself, not the agent. Without it the
+  ::  scry blocks, and a block gets past mule and closes the watch.
+  =/  dek  .^(desk %gd /(scot %p our.bowl)/activity/(scot %da now.bowl)/$)
+  =/  pax=path
+    /(scot %p our.bowl)/[dek]/(scot %da now.bowl)/[p.cage]/json
+  =/  tub  .^(tube:clay %cc pax)
+  =/  jon  !<(json (tub q.cage))
+  =/  read  (read-whom:trunk-push jon)
+  ?^  read  [(push-cards push [%read u.read]) seen]
+  =/  post  (add-post:trunk-push jon)
+  ?~  post  [~ seen]
+  =.  seen  (prune-seen:trunk-push seen now.bowl)
+  ?:  (~(has by seen) id.u.post)  [~ seen]
+  ?.  (fresh:trunk-push id.u.post now.bowl)  [~ seen]
+  =.  seen  (~(put by seen) id.u.post now.bowl)
+  =/  level  (notify-level whom.u.post)
+  ?.  (allows:trunk-push whom.u.post level mention.u.post)  [~ seen]
+  :_  seen
+  %+  push-cards  push
+  :*  %message
+      whom.u.post
+      id.u.post
+      parent.u.post
+      (author:trunk-push id.u.post)
+      ?~(content.u.post ~ (preview:trunk-push u.content.u.post))
+  ==
+::
+::  +notify-level: Talon's level for one chat, kept in %settings
+::  (desk %talon, bucket notify-prefs). ~ when %settings is not
+::  running or holds nothing for the chat.
+::
+++  notify-level
+  |=  whom=@t
+  ^-  (unit @t)
+  =/  base=path  /(scot %p our.bowl)/settings/(scot %da now.bowl)
+  ?.  .^(? %gu (snoc base %$))  ~
+  =/  jon  (mole |.(.^(json %gx (weld base /desk/talon/json))))
+  ?~  jon  ~
+  (level-of:trunk-push u.jon whom)
+::
+::  +signal-cards: a peer's ring wakes our devices, and its hangup
+::  un-rings any device we woke.
+::
+++  signal-cards
+  |=  $:  from=ship
+          =sig:trunk
+          push=(map @t push-device:trunk)
+          =rung:trunk-push
+      ==
+  ^-  (quip card rung:trunk-push)
+  ?+  -.sig  [~ rung]
+      %ring
+    :-  (push-cards push [%ring from id.sig])
+    (rang:trunk-push rung id.sig now.bowl)
+  ::
+    %hangup  (settle-cards id.sig %.n push rung)
+  ==
+::
+::  +settle-cards: a cancel for a ring we pushed, if it could still
+::  be ringing. `answered`: one of our devices took the call.
+::
+++  settle-cards
+  |=  $:  id=@t
+          answered=?
+          push=(map @t push-device:trunk)
+          =rung:trunk-push
+      ==
+  ^-  (quip card rung:trunk-push)
+  =/  [cancel=? new=rung:trunk-push]
+    (settle:trunk-push rung id answered now.bowl)
+  :_  new
+  ?.  cancel  ~
+  (push-cards push [%ring-cancel id ?:(answered 'answered' 'hangup')])
 --
