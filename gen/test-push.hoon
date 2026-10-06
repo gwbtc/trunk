@@ -246,6 +246,21 @@
           =(~ (level-of s '~nec'))
       ==
     ::
+      :-  'level from settings, as Talon stores it on a live ship'
+      =/  s
+        %-  j
+        %+  rap  3
+        :~  '{"desk":{"notify-prefs":{'
+            '"chat/~darduc-mitfen/chat":"{\\"level\\":\\"mentions\\"}",'
+            '"~martyr-sanryg":"{\\"level\\":\\"all\\"}",'
+            '"~bus":"not json"}}}'
+        ==
+      ?&  =(`'mentions' (level-of s 'chat/~darduc-mitfen/chat'))
+          =(`'all' (level-of s '~martyr-sanryg'))
+          =(~ (level-of s '~bus'))
+          =(~ (level-of s '~nec'))
+      ==
+    ::
       :-  'dm-post notifies'
       =/  p  (add-post dm-post)
       ?&  ?=(^ p)

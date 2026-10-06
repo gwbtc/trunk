@@ -398,14 +398,22 @@
   ==
 ::
 ::  +level-of: a chat's level from %settings' JSON for desk %talon,
-::  bucket notify-prefs, {"<whom>":{"level":"all"|"mentions"|"none"}}
+::  bucket notify-prefs. %settings holds no objects, so Talon stores
+::  each entry as a string of JSON:
+::    {"desk":{"notify-prefs":{"<whom>":"{\"level\":\"mentions\"}"}}}
+::  An object in its place is read the same way.
 ::
 ++  level-of
   |=  [jon=json whom=@t]
   ^-  (unit @t)
-  =/  got  (cord-at jon ~['desk' 'notify-prefs' whom 'level'])
-  ?^  got  got
-  (cord-at jon ~['notify-prefs' whom 'level'])
+  =/  v  (at jon ~['desk' 'notify-prefs' whom])
+  =/  w  ?^(v v (at jon ~['notify-prefs' whom]))
+  ?~  w  ~
+  =/  entry=(unit json)
+    ?.  ?=([%s *] u.w)  w
+    (de:json:html p.u.w)
+  ?~  entry  ~
+  (cord-at u.entry ~['level'])
 ::
 ::  +preview: a one-line text preview of a post's content for an iOS
 ::  alert: the words and the ship names, at most 140 characters.

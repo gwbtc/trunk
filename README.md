@@ -100,7 +100,7 @@ An unknown platform, an endpoint or gateway that is not a URL, an empty handle o
 What gets pushed:
 
 - **ring** when a peer rings us and the policy lets it through, and **ring-cancel** when that ring ends: the caller hangs up (`"reason": "hangup"`), or one of our devices answers or declines (`"answered"`). A cancel goes only for a ring the ship pushed, within a minute of it, or within four hours once a device took the call.
-- **new-message** for each post or thread reply that `%activity` marks notified, as long as Talon's per-chat level allows it. The level comes from `%settings`, desk `talon`, bucket `notify-prefs`, and is `all`, `mentions` or `none`. Posts more than 5 minutes old never notify, and none is pushed twice. A reply carries `parent`, the id of the post it answers.
+- **new-message** for each post or thread reply that `%activity` marks notified, as long as Talon's per-chat level allows it. The level comes from `%settings`, desk `talon`, bucket `notify-prefs`, where each entry is a string of JSON such as `{"level":"mentions"}`. It is `all`, `mentions` or `none`. Posts more than 5 minutes old never notify, and none is pushed twice. A reply carries `parent`, the id of the post it answers.
 - **read** when a chat is read to the end on any client. Only to UnifiedPush devices whose `caps` include `read`, since an older app shows any push it does not know as a new message.
 - **push-test** on request.
 
