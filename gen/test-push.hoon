@@ -123,9 +123,28 @@
       .=  (body zod [%test 'n1'])
       '{"event":"push-test","patp":"~zod","nonce":"n1"}'
     ::
-      :-  'body escapes only backslash and quote'
+      :-  'body escapes backslash and quote as Push.kt did'
       .=  (body zod [%read 'a"b\\c'])
       '{"event":"read","patp":"~zod","whom":"a\\"b\\\\c"}'
+    ::
+      :-  'body escapes control characters'
+      =('"a\\nb\\u0001c\\td\\re\\u001b"' (qt 'a\0ab\01c\09d\0de\1b'))
+    ::
+      :-  'a call id with a line feed still makes JSON'
+      =/  out  (body zod [%ring ~nec 'x\0ay'])
+      ?&  =('{"event":"ring","patp":"~zod","from":"~nec","id":"x\\ny"}' out)
+          ?=(^ (de:json:html out))
+      ==
+    ::
+      :-  'the drop guard'
+      =/  sent  (sham target.up)
+      ?&  (gone up sent 410)
+          (gone up sent 404)
+          !(gone up (sham [%unifiedpush 'https://elsewhere.example']) 410)
+          !(gone up sent 401)
+          !(gone up sent 500)
+          (gone gw (sham target.gw) 401)
+      ==
     ::
       :-  'gateway voip carries the ring body'
       .=  (gateway-body zod 'h' 's' [%ring ~nec 'abc'])
@@ -298,6 +317,22 @@
           =(`'~nec/170.1' parent.u.p)
       ==
     ::
+      :-  'a 1:1 thread reply is its DM'
+      =/  p
+        %-  add-post
+        %-  j
+        %+  rap  3
+        :~  '{"add":{"source":{"dm-thread":{"key":{"id":"~nec/170.1",'
+            '"time":"170.1"},"whom":{"ship":"~nec"}}},"event":{"notified":true,'
+            '"child":true,"dm-reply":{"key":{"id":"~nec/170.6","time":"170.6"},'
+            '"parent":{"id":"~nec/170.1","time":"170.1"},"whom":{"ship":"~nec"},'
+            '"content":[],"mention":false}}}}'
+        ==
+      ?&  ?=(^ p)
+          =('~nec' whom.u.p)
+          =(`'~nec/170.1' parent.u.p)
+      ==
+    ::
       :-  'not notified, or not a post: nothing'
       ?&  =(~ (add-post quiet-post))
           =(~ (add-post invite))
@@ -312,6 +347,14 @@
     ::
       :-  'not read: unread left, a thread, an add'
       ?&  =(~ (read-whom (read '{"dm":{"ship":"~bus"}}' '2')))
+          .=  ~
+          %-  read-whom
+          %-  j
+          %+  rap  3
+          :~  '{"read":{"source":{"dm":{"ship":"~bus"}},"activity":'
+              '{"recency":1,"count":0,"notify-count":1,"notify":true,'
+              '"unread":null,"children":[]}}}'
+          ==
           =(~ (read-whom (read '{"thread":{"channel":"chat/~nec/x","group":"~nec/g"}}' '0')))
           =(~ (read-whom dm-post))
       ==
@@ -321,6 +364,13 @@
     ::
       :-  'preview: whitespace folds'
       =(`'a b' (preview (j '["  a \\n\\n b  "]')))
+    ::
+      :-  'preview: other control characters go'
+      =(`'a[31mred!' (preview [%a [%s 'a\1b[31mred\00!'] ~]))
+    ::
+      :-  'preview: bytes that are not UTF-8 cost only the preview'
+      =/  r  (preview [%a [%s (cat 3 'ok ' 0xff)] ~])
+      |(=(~ r) ?=(^ r))
     ::
       :-  'preview: sect, link, cite'
       .=  `'@all @admin c [quote]'

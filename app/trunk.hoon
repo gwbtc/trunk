@@ -14,7 +14,7 @@
 ::  the trust boundary: local-only actions, and a signal's `from` is
 ::  the cryptographic ames src, never a claim in the payload.
 /-  trunk
-/+  default-agent, dbug, mnemonym, trunk-jwt, trunk-json, trunk-push
+/+  default-agent, mnemonym, trunk-jwt, trunk-json, trunk-push
 |%
 ::  Rooms as they were before state-6. Old state versions must pin the
 ::  shape they were actually saved with — referencing the evolving
@@ -334,7 +334,6 @@
 ::  +$ policy, which forks to %allow and locks the ship down.
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
-%-  agent:dbug
 =|  state-14
 =*  state  -
 ^-  agent:gall
@@ -1269,21 +1268,27 @@
 ++  on-agent
   |=  [=wire =sign:agent:gall]
   ^-  (quip card _this)
-  ::  our own %activity, watched while any device is registered
-  ?:  ?=([%push %activity ~] wire)
+  ::  our own %activity, watched while any device is registered: /v4
+  ::  for new posts, /v4/reads for reads, which %activity gives only
+  ::  there.
+  ?:  ?=([%push ?(%activity %reads) ~] wire)
+    =/  reads=?  ?=(%reads i.t.wire)
     ?-    -.sign
         %poke-ack  `this
         %kick      :_(this (activity-cards:hc push.state))
     ::
         %watch-ack
       ?~  p.sign  `this
-      %-  (slog leaf+"trunk: no %activity to watch, so no message pushes" ~)
+      =/  what  ?:(reads "/v4/reads, so no read pushes" "/v4, so no message pushes")
+      %-  (slog leaf+"trunk: no %activity {what}" ~)
       `this
     ::
-    ::  never crash on a fact: gall would close the subscription.
+    ::  a crash here closes the subscription (gall kicks, and we watch
+    ::  again). mule catches trunk's own crashes but not a scry that
+    ::  blocks or fails, so +activity-hints scries only what cannot.
         %fact
       =/  res
-        (mule |.((activity-hints:hc cage.sign push.state seen.state)))
+        (mule |.((activity-hints:hc reads cage.sign push.state seen.state)))
       ?:  ?=(%| -.res)
         %-  (slog leaf+"trunk: could not read an activity fact" ~)
         `this
@@ -1397,15 +1402,16 @@
   ::  a push hint's answer. Only "gone for good" changes anything;
   ::  iris's progress and cancels are absorbed, not crashed on.
   ?:  ?=([%push %send @ @ @ ~] wire)
+    =/  id  (slav %t i.t.t.wire)
+    ?:  ?=([%iris %http-response %cancel *] sign-arvo)
+      %-  (slog leaf+"trunk: push to {(trip id)} got no answer" ~)
+      `this
     ?.  ?=([%iris %http-response %finished *] sign-arvo)  `this
     =/  code  status-code.response-header.client-response.sign-arvo
     ?:  (lth code 300)  `this
-    =/  id  (slav %t i.t.t.wire)
     =/  dev  (~(get by push.state) id)
-    ?~  dev  `this
-    ::  a device re-registered since the push left keeps its new target
-    ?.  ?&  (dead:trunk-push target.u.dev code)
-            =((slav %uv i.t.t.t.wire) (mug target.u.dev))
+    ?.  ?&  ?=(^ dev)
+            (gone:trunk-push u.dev (slav %uv i.t.t.t.wire) code)
         ==
       %-  (slog leaf+"trunk: push to {(trip id)} answered {<code>}" ~)
       `this
@@ -1998,20 +2004,22 @@
     [%pass /groups-mirror %agent [our.bowl %groups] %leave ~]~
   ~
 ::
-::  +activity-cards: watch our own %activity while any device is
-::  registered, and only then. A nack (no Tlon here) leaves it
-::  unwatched until the next register.
+::  +activity-cards: watch our own %activity, /v4 and /v4/reads,
+::  while any device is registered, and only then. A nack (no Tlon
+::  here) leaves that path unwatched until the next register.
 ::
 ++  activity-cards
   |=  push=(map @t push-device:trunk)
   ^-  (list card)
   =/  want=?  ?=(^ push)
-  =/  has=?
-    (~(has by wex.bowl) [/push/activity our.bowl %activity])
+  %+  murn  `(list [wire path])`~[[/push/activity /v4] [/push/reads /v4/reads]]
+  |=  [=wire =path]
+  ^-  (unit card)
+  =/  has=?  (~(has by wex.bowl) [wire our.bowl %activity])
   ?:  &(want !has)
-    [%pass /push/activity %agent [our.bowl %activity] %watch /v4]~
+    `[%pass wire %agent [our.bowl %activity] %watch path]
   ?:  &(!want has)
-    [%pass /push/activity %agent [our.bowl %activity] %leave ~]~
+    `[%pass wire %agent [our.bowl %activity] %leave ~]
   ~
 ::
 ::  +push-cards: one iris request for each device that takes `hint`.
@@ -2019,9 +2027,6 @@
 ::  answer drops only a device not re-registered since. Nothing waits
 ::  on these and nothing retries, as on the relay: a late ring is
 ::  worse than none, and messages sync when the app opens.
-::
-::  ponytail: no timeout, so a hung endpoint holds one iris request
-::  open. Arm a behn timer and %cancel-request if those pile up.
 ::
 ++  push-cards
   |=  [push=(map @t push-device:trunk) =hint:trunk-push]
@@ -2033,19 +2038,24 @@
   ?~  req  ~
   =/  =wire
     :~  %push  %send  (scot %t id)
-        (scot %uv (mug target.dev))
+        (scot %uv (sham target.dev))
         (scot %uv (sham eny.bowl id hint))
     ==
   `[%pass wire %arvo %i %request u.req *outbound-config:iris]
 ::
-::  +activity-hints: what one %activity fact asks of our devices. The
-::  fact becomes JSON through %activity's own desk, the same grow eyre
-::  ran for the off-ship relay, so trunk never casts Tlon's types and
-::  rides out their mark bumps. Runs under mule in +on-agent.
+::  +activity-hints: what one %activity fact asks of our devices: a
+::  read from /v4/reads (`reads`), a new post from /v4. A deleted
+::  chat's dummy read comes on both, so /v4's reads are ignored.
+::
+::  Only the head of the noun is looked at before the fact becomes
+::  JSON, through %activity's own desk: the same grow eyre ran for the
+::  off-ship relay, so trunk never casts Tlon's types and rides out
+::  their mark bumps. Runs under mule in +on-agent.
 ::
 ++  activity-hints
-  |=  [=cage push=(map @t push-device:trunk) seen=(map @t @da)]
+  |=  [reads=? =cage push=(map @t push-device:trunk) seen=(map @t @da)]
   ^-  (quip card (map @t @da))
+  ?.  ?:(reads ?=([%read *] q.q.cage) ?=([%add *] q.q.cage))  [~ seen]
   ::  the trailing $ asks gall itself, not the agent. Without it the
   ::  scry blocks, and a block gets past mule and closes the watch.
   =/  dek  .^(desk %gd /(scot %p our.bowl)/activity/(scot %da now.bowl)/$)
@@ -2053,8 +2063,10 @@
     /(scot %p our.bowl)/[dek]/(scot %da now.bowl)/[p.cage]/json
   =/  tub  .^(tube:clay %cc pax)
   =/  jon  !<(json (tub q.cage))
-  =/  read  (read-whom:trunk-push jon)
-  ?^  read  [(push-cards push [%read u.read]) seen]
+  ?:  reads
+    =/  read  (read-whom:trunk-push jon)
+    ?~  read  [~ seen]
+    [(push-cards push [%read u.read]) seen]
   =/  post  (add-post:trunk-push jon)
   ?~  post  [~ seen]
   =.  seen  (prune-seen:trunk-push seen now.bowl)
@@ -2063,6 +2075,9 @@
   =.  seen  (~(put by seen) id.u.post now.bowl)
   =/  level  (notify-level whom.u.post)
   ?.  (allows:trunk-push whom.u.post level mention.u.post)  [~ seen]
+  ::  only an iPhone's alert shows the text, so only then is it read
+  =/  ios=?
+    (lien ~(val by push) |=(d=push-device:trunk ?=(%ios-gateway -.target.d)))
   :_  seen
   %+  push-cards  push
   :*  %message
@@ -2070,21 +2085,22 @@
       id.u.post
       parent.u.post
       (author:trunk-push id.u.post)
-      ?~(content.u.post ~ (preview:trunk-push u.content.u.post))
+      ?.(ios ~ (biff content.u.post preview:trunk-push))
   ==
 ::
 ::  +notify-level: Talon's level for one chat, kept in %settings
 ::  (desk %talon, bucket notify-prefs). ~ when %settings is not
-::  running or holds nothing for the chat.
+::  running or holds nothing for the chat. Neither scry can fail: %gu
+::  answers for any agent, and %settings answers a desk it has never
+::  seen with an empty one. Its bucket scry fails on a missing bucket,
+::  so the whole desk is read.
 ::
 ++  notify-level
   |=  whom=@t
   ^-  (unit @t)
   =/  base=path  /(scot %p our.bowl)/settings/(scot %da now.bowl)
   ?.  .^(? %gu (snoc base %$))  ~
-  =/  jon  (mole |.(.^(json %gx (weld base /desk/talon/json))))
-  ?~  jon  ~
-  (level-of:trunk-push u.jon whom)
+  (level-of:trunk-push .^(json %gx (weld base /desk/talon/json)) whom)
 ::
 ::  +signal-cards: a peer's ring wakes our devices, and its hangup
 ::  un-rings any device we woke.
@@ -2098,6 +2114,11 @@
   ^-  (quip card rung:trunk-push)
   ?+  -.sig  [~ rung]
       %ring
+    ::  nothing to wake, an id too long to be a real one, or a ring
+    ::  already pushed and still live: keep nothing new, push nothing
+    ?:  |(?=(~ push) (gth (met 3 id.sig) id-cap:trunk-push))  [~ rung]
+    =/  live  (~(get by rung) id.sig)
+    ?:  &(?=(^ live) (live-rung:trunk-push u.live now.bowl))  [~ rung]
     :-  (push-cards push [%ring from id.sig])
     (rang:trunk-push rung id.sig now.bowl)
   ::

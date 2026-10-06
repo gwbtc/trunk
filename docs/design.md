@@ -138,7 +138,7 @@ one upgrades every call made *to* you.
   and mints room tickets; `lib/trunk-jwt.hoon` signs the Galène JWTs;
   `lib/trunk-json.hoon` is the wire's source of truth; `mar/trunk/*`
   are the eyre-facing and ship-to-ship marks. Not self-contained yet:
-  installing it needs `default-agent`, `dbug`, `skeleton` and the
+  installing it needs `default-agent`, `skeleton` and the
   `bill`/`mime`/`json` marks copied from `%base`.
 - `call/TrunkWire.kt` — JSON wire, mirrors `lib/trunk-json.hoon`.
 - `call/CallController.kt` — 1:1 signaling state machine + metrics.
@@ -478,7 +478,7 @@ Copy `urbit/trunk/{app,sur,lib,mar,desk.bill,sys.kelvin}` into the
 mounted desk, then copy from `%base` (the desk is not self-contained):
 
 ```
-lib/default-agent.hoon  lib/dbug.hoon  lib/skeleton.hoon
+lib/default-agent.hoon  lib/skeleton.hoon
 mar/bill.hoon  mar/mime.hoon  mar/json.hoon
 ```
 

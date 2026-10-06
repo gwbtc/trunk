@@ -78,7 +78,7 @@ Galène names everyone by the token's `sub`, so a username on the line is the sh
 
 ### Push hints for an app that is asleep (wire 11)
 
-A phone whose app is suspended hears nothing on `/calls`. Since wire 11 the ship wakes it itself, with a push straight to each device the owner registered. This replaces Talon's off-ship relay, which logged in with the user's `+code` and kept a session cookie. Here nothing leaves the ship but the hint.
+A phone whose app is suspended hears nothing on `/calls`. Since wire 11 the ship wakes it itself, with a push straight to each device the owner registered. This replaces Talon's off-ship relay, which logged in with the user's `+code` and kept a session cookie. Here the `+code` never leaves the ship. An Android push carries only the hint. An iPhone's alert also carries the author and up to 140 characters of the post, through the gateway and APNs, so iOS can show it.
 
 Register from the device, with a `trunk-action` poke as the owner. `id` is the device's own, minted once. Registering again with the same `id` replaces the entry, so new caps, a new endpoint or a new handle is just another register. A ship keeps at most 32 devices.
 
@@ -233,8 +233,8 @@ docs/design.md             how it works and why
 
 ## The desk
 
-**It is not self-contained.** Installing needs `default-agent`, `dbug`
-and `skeleton` from `%base`, plus the `bill`, `hoon`, `kelvin`, `mime`,
+**It is not self-contained.** Installing needs `default-agent` and
+`skeleton` from `%base`, plus the `bill`, `hoon`, `kelvin`, `mime`,
 `noun` and `txt` marks. That list is from a working install, not from
 memory; a missing mark fails the commit with a mark error rather than
 anything helpful.
@@ -248,7 +248,7 @@ anything helpful.
 ```bash
 PIER=/path/to/your/pier
 cp -r app lib mar sur gen desk.bill "$PIER/trunk/"
-cp "$PIER"/base/lib/{dbug,default-agent,skeleton}.hoon      "$PIER/trunk/lib/"
+cp "$PIER"/base/lib/{default-agent,skeleton}.hoon           "$PIER/trunk/lib/"
 cp "$PIER"/base/mar/{bill,hoon,kelvin,mime,noun,txt}.hoon   "$PIER/trunk/mar/"
 # Take the kelvin from YOUR ship. The checked-in one matches whatever
 # it was last developed against; a ship on a different one refuses.

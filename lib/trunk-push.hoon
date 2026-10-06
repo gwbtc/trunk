@@ -23,6 +23,9 @@
 ::  how many devices one ship keeps. Every hint fans out to all of
 ::  them, so this bounds the work one event can do.
 ++  device-cap  32
+::  the longest call id a ring may carry and still be pushed. A peer
+::  picks the id, and it goes into state and onto every device.
+++  id-cap  128
 ::
 ::  one hint for our devices
 +$  hint
@@ -49,8 +52,9 @@
 ::  rings we pushed, by call id
 +$  rung  (map @t [at=@da answered=?])
 ::
-::  +qt: a JSON string, escaped as Push.kt's escape does: only
-::  backslash and double quote.
+::  +qt: a JSON string. Push.kt escaped only backslash and double
+::  quote; control characters are escaped too, since a peer picks a
+::  call id. Any string Push.kt ever sent comes out the same.
 ::
 ++  qt
   |=  v=@t
@@ -62,6 +66,10 @@
     ^-  tape
     ?:  =(c '\\')  "\\\\"
     ?:  =(c '"')  "\\\""
+    ?:  =(c '\0a')  "\\n"
+    ?:  =(c '\0d')  "\\r"
+    ?:  =(c '\09')  "\\t"
+    ?:  (lth c 32)  (weld "\\u" ((x-co:co 4) c))
     [c ~]
   (crip (weld "\"" (weld in "\"")))
 ::
@@ -225,6 +233,15 @@
       =(410 code)
       &(?=(%ios-gateway -.push-target) =(401 code))
   ==
+::
+::  +gone: does an answer drop this device? Only if it is dead and
+::  still the target the push went to (`sent` is that target's
+::  +sham), so a device registered again since then keeps its new one.
+::
+++  gone
+  |=  [dev=push-device:trunk sent=@ code=@ud]
+  ^-  ?
+  &((dead target.dev code) =(sent (sham target.dev)))
 ::
 ::  +valid-device: refuse at the door what iris could never send to
 ::
@@ -419,7 +436,14 @@
 ::  alert: the words and the ship names, at most 140 characters.
 ::
 ++  preview-max  140
+::  +tuba crashes on bytes that are not UTF-8, which would cost the
+::  push its preview, not the push itself.
 ++  preview
+  |=  content=json
+  ^-  (unit @t)
+  (fall (mole |.((make-preview content))) ~)
+::
+++  make-preview
   |=  content=json
   ^-  (unit @t)
   =/  raw=tape  (walk content ~)
@@ -471,7 +495,7 @@
   ==
 ::
 ::  +squeeze: every run of whitespace becomes one space, and none at
-::  either end
+::  either end. Any other control character goes: +tuba refuses them.
 ::
 ++  squeeze
   |=  t=tape
@@ -482,6 +506,7 @@
   |-
   ?~  t  (flop out)
   ?:  (white i.t)  $(t t.t, gap %.y)
+  ?:  (lth i.t 32)  $(t t.t)
   =?  out  &(gap ?=(^ out))  [' ' out]
   $(t t.t, out [i.t out], gap %.n)
 ::
