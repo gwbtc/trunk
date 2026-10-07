@@ -517,8 +517,8 @@
     ::
       :-  'switches: channel posts by mention'
       =/  k  all-kinds
-      =/  quiet=post  ['chat/~nec/x' '~bus/1' ~ %.n ~]
-      =/  loud=post  ['chat/~nec/x' '~bus/1' ~ %.y ~]
+      =/  quiet=post  ['chat/~nec/x' '~bus/1' ~ %.n ~ ~]
+      =/  loud=post  ['chat/~nec/x' '~bus/1' ~ %.y ~ ~]
       ?&  (wants k(channel %mentions) loud)
           !(wants k(channel %mentions) quiet)
           (wants k quiet)
