@@ -404,7 +404,7 @@ only want to hear, and no protocol change: Galène names the publisher
 on each `offer`, which is the only place a stream is tied to a person
 (the roster is keyed by client, levels arrive per stream).
 
-**Names** are the reader's own. Talon resolves a `@p` through its contact map, so you see whatever you call that person. The listen page has no Urbit and no contact book, and imposing the *host's* nicknames on strangers would be a different and worse thing than showing identity plainly. So it shows what Galène knows, which is the token's `sub`. Since wire 10 a comet's `sub` is its full mnemonym, with one dot when the host's Jael holds a Groundwire attestation for it and two otherwise. The page shortens it to `.first...last` the way Talon does, and Talon decodes it back to the `@p`. Anyone who isn't a comet is their `@p`.
+**Names** are the reader's own. Talon resolves a `@p` through its contact map, so you see whatever you call that person. The listen page has no Urbit and no contact book, and imposing the *host's* nicknames on strangers would be a different and worse thing than showing identity plainly. So it shows the name a client put in Galène's per-user data (`{"name": ...}`) when there is one, and otherwise what Galène knows, which is the token's `sub`: the `@p`. Wire 10 to 12 made a comet's `sub` its full mnemonym, which Galène's "spoofed username" check then held against every message the comet sent, so wire 13 signs comets in as their `@p` like everyone else. The page still shortens a mnemonym to `.first...last`, for hosts on those wires.
 
 **The topic** is `room.title`, editable by admins. It reaches Talon
 members live through `%announce`, and listeners through a `topic=`
@@ -635,7 +635,7 @@ fixed in the same pass:
   so any later grant fails the check.
 - **Invitation list is remote-controlled**, so `%announce` is capped
   (`invite-cap`) rather than growing without bound.
-- Membership is checked host-side at mint time, and `sub` always names the *asking* ship (a comet by its mnemonym, which decodes to exactly one `@p`). A member cannot mint a ticket for anyone else.
+- Membership is checked host-side at mint time, and `sub` always names the *asking* ship by its `@p`. A member cannot mint a ticket for anyone else.
 - Ticket TTL is 6h with no revocation: a member removed from a group
   keeps access until expiry. Rotating the SFU key is the only immediate
   revocation. Documented ceiling, not a v2 fix.

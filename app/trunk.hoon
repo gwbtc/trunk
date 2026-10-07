@@ -276,7 +276,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  12
+++  wire-version  13
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -1772,9 +1772,15 @@
   =/  loc=@t  (room-location name)
   =/  now-secs  (unix-secs:trunk-jwt now.bowl)
   =/  tok=@t
+    ::  The sub is the @p, comets too (wire 13). Galene names the
+    ::  connection by it and refuses any later message whose username
+    ::  differs ("spoofed username"), and every client writes its @p.
+    ::  Wire 10 to 12 put a comet's mnemonym here, so a comet's offers
+    ::  were refused and it could not speak. A readable name travels in
+    ::  Galene's per-user data instead, which the client sends.
     %:  mint-with:trunk-jwt
       key:(room-sfu name)
-      (galene-name who)
+      (scot %p who)
       loc
       now-secs
       (add now-secs ticket-ttl)
@@ -1945,16 +1951,6 @@
       '&topic='  (crip (en-urlt:html (trip topic)))
       '&token='  tok
   ==
-::
-::  +galene-name: who Galène says a ship is, from the token's sub.
-::  A comet goes by its full mnemonym (wire 10), so a listener's page
-::  can show the name Talon shows with no word list and no ship to
-::  ask. Talon decodes it back to the @p. Anyone else is their @p.
-++  galene-name
-  |=  who=ship
-  ^-  @t
-  ?.  ?=(%pawn (clan:title who))  (scot %p who)
-  (fall (name:mnemonym who (on-groundwire who)) (scot %p who))
 ::
 ::  +on-groundwire: does our Jael hold a Groundwire attestation for
 ::  `who`? That is what the single dot means, and the question Talon

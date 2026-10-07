@@ -74,7 +74,7 @@ websocket endpoint, then join with the token. That is Galène's own
 protocol from there on, and its `protocol.js` is a usable client
 library.
 
-Galène names everyone by the token's `sub`, so a username on the line is the ship's `@p`, with one exception. Since wire 10 a comet goes by its full mnemonym: up to twelve words joined by dots, with one dot in front when the host's Jael holds a Groundwire attestation for it and two otherwise. It decodes to exactly one `@p` (the scheme is gwbtc/mnemonyms, and `lib/mnemonym.hoon` here encodes it). Decode a username before you treat it as a ship.
+Galène names everyone by the token's `sub`, so a username on the line is the ship's `@p`, comets included. Galène refuses any later message whose username differs from the token's, so a client must send its `@p` and nothing else. A readable name, such as a nickname or a comet's mnemonym, travels in Galène's per-user data as `"data": {"name": "..."}` on the join, and other clients get it in `user` messages. Hosts on wire 10 to 12 signed a comet in as its full mnemonym instead (up to twelve words joined by dots, one dot in front when the host's Jael holds a Groundwire attestation and two otherwise), and Galène then refused that comet's every message, so comets could not speak there. Wire 13 puts the `@p` back.
 
 ### Push hints for an app that is asleep (wire 11)
 

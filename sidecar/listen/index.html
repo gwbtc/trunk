@@ -174,10 +174,18 @@
   }
 
   /**
-   * A comet's Galène name is its full mnemonym (.a.b.….l), from the
-   * token's sub. Show the two-word form Talon shows. Anything else is
-   * a @p and is shown as it is.
+   * The name to show for a username. Galène's username is the @p the
+   * host signed into the token. A client may add a readable name in
+   * its per-user data ({"name": ...}), which wins. Hosts on wire 10 to
+   * 12 signed a comet in as its full mnemonym (.a.b.….l), shown in the
+   * two-word form Talon shows.
    */
+  function label(u, n) {
+    var d = u && u.data;
+    if (d && typeof d.name === 'string' && d.name) return d.name;
+    return short(n);
+  }
+
   function short(n) {
     var m = /^(\.\.?)([a-z]+)\..*\.([a-z]+)$/.exec(n);
     return m ? m[1] + m[2] + '...' + m[3] : n;
@@ -285,27 +293,33 @@
   function renderWho() {
     var us = (conn && conn.users) || {};
     var names = [];
+    var labels = {};
     var others = 0;
     Object.keys(us).forEach(function (id) {
       var u = us[id] || {};
       var perms = u.permissions || [];
       if (perms.indexOf('present') >= 0) {
         // One row per person, not per connection. Someone signed in
-        // on two devices is still one person on the line.
+        // on two devices is still one person on the line. Rows are
+        // keyed by username, the signed identity, never by the name
+        // shown, which anyone can choose.
         var n = u.username || id;
         if (names.indexOf(n) < 0) names.push(n);
+        if (!labels[n] || labels[n] === short(n)) labels[n] = label(u, n);
       } else {
         others++;
       }
     });
     whoEl.hidden = names.length === 0 && others === 0;
     whoList.innerHTML = '';
-    names.sort().forEach(function (n) {
+    names.sort(function (a, b) {
+      return labels[a] < labels[b] ? -1 : labels[a] > labels[b] ? 1 : 0;
+    }).forEach(function (n) {
       var li = document.createElement('li');
       var dot = document.createElement('span');
       dot.className = speaking[n] ? 'dot on' : 'dot';
       li.appendChild(dot);
-      li.appendChild(document.createTextNode(short(n)));
+      li.appendChild(document.createTextNode(labels[n]));
       // Only the muted are marked: everyone here is expected to be able
       // to talk, so a mic on every row would be a column of noise.
       if (muted[n]) {
