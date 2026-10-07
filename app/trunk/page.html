@@ -58,6 +58,7 @@
   .device .name { font-weight: 600; word-break: break-all; }
   .device .meta { color: var(--muted); font-size: 13px; word-break: break-all; }
   .device .actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .dropped { color: var(--muted); font-size: 13px; padding-top: 6px; }
   .ok { color: var(--good); }
   .err { color: var(--bad); }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
@@ -99,7 +100,8 @@
     </div>
     <div class="row"><label for="k-replies">Thread replies</label><input type="checkbox" id="k-replies"></div>
     <div class="row"><label for="k-calls">Calls</label><input type="checkbox" id="k-calls"></div>
-    <div class="row"><label for="k-reads">Clear a notification when you read the chat elsewhere<span class="hint">Android only.</span></label><input type="checkbox" id="k-reads"></div>
+    <div class="row"><label for="k-reads">Clear a notification when you read the chat elsewhere</label><input type="checkbox" id="k-reads"></div>
+    <div class="row"><label for="k-notices">Alerts from other apps on this ship<span class="hint">Reminders and alerts that apps such as a calendar send through trunk.</span></label><input type="checkbox" id="k-notices"></div>
   </section>
 
   <section>
@@ -191,7 +193,7 @@ async function act(body) {
 
 function render() {
   const k = data.kinds;
-  for (const f of ['dm', 'club', 'replies', 'calls', 'reads']) $('k-' + f).checked = !!k[f];
+  for (const f of ['dm', 'club', 'replies', 'calls', 'reads', 'notices']) $('k-' + f).checked = !!k[f];
   $('k-channel').value = k.channel;
   $('version').textContent = 'Wire ' + data.wire + ', desk …' + String(data['desk-hash']).slice(-5);
 
@@ -205,13 +207,14 @@ function render() {
     const kind = d.platform === 'ios-gateway' ? 'iPhone, through ' : 'Android, through ';
     box.append(el('div', 'name', d.id));
     box.append(el('div', 'meta', kind + d.host + (d.caps.length ? ' · understands ' + d.caps.join(', ') : '')));
+    if (d.registered) box.append(el('div', 'meta', 'Registered ' + ago(d.registered)));
     const last = el('div', 'meta');
+    if (d.sent) last.append('Last push: ' + d.sent.kind + ', ' + ago(d.sent.at));
+    else last.append('No push sent yet');
     if (d.last) {
-      const okay = d.last.code < 300;
-      const code = el('span', okay ? 'ok' : 'err', okay ? 'delivered' : 'answered ' + d.last.code);
-      last.append('Last push: ', code, ', ' + ago(d.last.at));
-    } else {
-      last.textContent = 'No push sent yet';
+      const okay = d.last.code >= 200 && d.last.code < 300;
+      const said = okay ? 'delivered' : d.last.code === 0 ? 'no answer' : 'answered ' + d.last.code;
+      last.append(' · ', el('span', okay ? 'ok' : 'err', said));
     }
     box.append(last);
     const actions = el('div', 'actions');
@@ -231,6 +234,13 @@ function render() {
     box.append(actions);
     dev.append(box);
   }
+  if (data.drops.length) {
+    dev.append(el('div', 'dropped', 'Removed by the ship lately, because their push server said they were gone:'));
+    for (const x of data.drops) {
+      const kind = x.platform === 'ios-gateway' ? 'iPhone' : 'Android';
+      dev.append(el('div', 'dropped', x.id + ' (' + kind + '), answered ' + x.reason + ', ' + ago(x.at)));
+    }
+  }
 
   const st = $('status');
   st.replaceChildren();
@@ -242,6 +252,7 @@ function render() {
   add('Messages (/v4)', data.watches['/v4'], data.watches['/v4'] === 'live' || !data.devices.length);
   add('Reads (/v4/reads)', data.watches['/v4/reads'], data.watches['/v4/reads'] === 'live' || !data.devices.length);
   add('Talon settings', data.apps.settings ? 'found' : 'not found');
+  add('Badge count', data.badge === null ? 'not known yet' : String(data.badge));
   add('Wire', String(data.wire));
   add('Desk hash', data['desk-hash']);
 
@@ -265,11 +276,12 @@ async function saveKinds() {
     replies: $('k-replies').checked,
     calls: $('k-calls').checked,
     reads: $('k-reads').checked,
+    notices: $('k-notices').checked,
   } };
   await act(body);
   load();
 }
-for (const f of ['dm', 'club', 'channel', 'replies', 'calls', 'reads']) $('k-' + f).addEventListener('change', saveKinds);
+for (const f of ['dm', 'club', 'channel', 'replies', 'calls', 'reads', 'notices']) $('k-' + f).addEventListener('change', saveKinds);
 
 $('copy').onclick = async () => {
   if (!data) return;

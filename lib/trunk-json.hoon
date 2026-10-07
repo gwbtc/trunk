@@ -29,8 +29,10 @@
 ::                              "caps":[]}}
 ::            {"push-unregister":d} | {"push-test":{"id":d,"nonce":n}}
 ::            {"push-kinds":{"dm":true,"club":true,"channel":"all",
-::                           "replies":true,"calls":true,"reads":true}}
+::                           "replies":true,"calls":true,"reads":true,
+::                           "notices":true}}
 ::                           (channel: "all" | "mentions" | "none")
+::            {"push-notice":{"tag":t,"title":t,"body":b,"open":j|null}}
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
 ::            {"hangup":{"id":i}}
@@ -127,8 +129,11 @@
       :-  %push-kinds
       %-  ot
       :~  dm+bo  club+bo  channel+(su (perk %all %mentions %none ~))
-          replies+bo  calls+bo  reads+bo
+          replies+bo  calls+bo  reads+bo  notices+bo
       ==
+      ::  open may be left out, which is null
+      :-  %push-notice
+      (ou ~[tag+(un so) title+(un so) body+(un so) open+(uf ~ same)])
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]

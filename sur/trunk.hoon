@@ -111,6 +111,8 @@
       replies=?
       calls=?
       reads=?
+      ::  alerts from other agents on our ship (+push-notice)
+      notices=?
   ==
 ::  one line of the push log, for the debug page
 +$  push-note  [at=@da what=@t]
@@ -190,6 +192,11 @@
       [%push-unregister id=@t]
       [%push-test id=@t nonce=@t]
       [%push-kinds =push-kinds]
+      ::  an alert for our devices from any agent on our ship, e.g.
+      ::  a calendar reminder. `tag` groups and replaces alerts on the
+      ::  phone; `open` is for the app to act on when it is tapped.
+      ::  Only devices whose caps include "notice" get one.
+      [%push-notice tag=@t title=@t body=@t open=json]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]

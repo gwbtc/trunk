@@ -93,8 +93,9 @@
   [[%ios-gateway 'https://relay.example/' 'h' 's'] ~]
 =/  ring-body  '{"event":"ring","patp":"~zod","from":"~nec","id":"abc"}'
 ::
-=/  r1  (rang ~ 'a' t0)
-=/  [took=? r2=rung]  (settle r1 'a' %.y (add t0 ~s10))
+=/  p1  (sy 'p1' ~)
+=/  r1  (rang ~ 'a' t0 p1)
+=/  [took=(set @t) r2=rung]  (settle r1 'a' %.y (add t0 ~s10))
 ::
 =/  cases=(list [@t ?])
   :~  :-  'body new-message'
@@ -147,7 +148,7 @@
       ==
     ::
       :-  'gateway voip carries the ring body'
-      .=  (gateway-body zod 'h' 's' [%ring ~nec 'abc'])
+      .=  (gateway-body zod 'h' 's' ~ ~ [%ring ~nec 'abc'])
       :-  ~
       %+  rap  3
       :~  '{"handle":"h","secret":"s","kind":"voip","payload":'
@@ -156,7 +157,7 @@
       ==
     ::
       :-  'gateway alert'
-      .=  %:  gateway-body  zod  'h'  's'
+      .=  %:  gateway-body  zod  'h'  's'  ~  ~
             [%message '~nec' '~nec/1' ~ `'~nec' `'hi']
           ==
       :-  ~
@@ -166,7 +167,7 @@
       ==
     ::
       :-  'gateway alert defaults and parent'
-      .=  %:  gateway-body  zod  'h'  's'
+      .=  %:  gateway-body  zod  'h'  's'  ~  ~
             [%message 'chat/~nec/x' '~bus/2' `'~nec/1' ~ ~]
           ==
       :-  ~
@@ -177,7 +178,7 @@
       ==
     ::
       :-  'gateway test alert'
-      .=  (gateway-body zod 'h' 's' [%test 'n1'])
+      .=  (gateway-body zod 'h' 's' ~ ~ [%test 'n1'])
       :-  ~
       %+  rap  3
       :~  '{"handle":"h","secret":"s","kind":"alert","patp":"~zod",'
@@ -187,10 +188,10 @@
       ==
     ::
       :-  'gateway takes no read'
-      =(~ (gateway-body zod 'h' 's' [%read '~nec']))
+      =(~ (gateway-body zod 'h' 's' ~ ~ [%read '~nec']))
     ::
       :-  'unifiedpush read: normal, a day'
-      .=  (request zod up [%read 'x'])
+      .=  (request zod up ~ [%read 'x'])
       :-  ~
       :^  %'POST'  'https://ntfy.example/up1'
         :~  ['content-type' 'application/json']
@@ -200,10 +201,10 @@
       (oc '{"event":"read","patp":"~zod","whom":"x"}')
     ::
       :-  'unifiedpush read only with the read cap'
-      =(~ (request zod up-old [%read 'x']))
+      =(~ (request zod up-old ~ [%read 'x']))
     ::
       :-  'unifiedpush ring: urgent, a minute'
-      .=  (request zod up-old [%ring ~nec 'abc'])
+      .=  (request zod up-old ~ [%ring ~nec 'abc'])
       :-  ~
       :^  %'POST'  'https://ntfy.example/up1'
         :~  ['content-type' 'application/json']
@@ -213,17 +214,17 @@
       (oc ring-body)
     ::
       :-  'gateway ring goes to /gateway/push'
-      .=  (request zod gw [%ring ~nec 'abc'])
+      .=  (request zod gw ~ [%ring ~nec 'abc'])
       :-  ~
       :^  %'POST'  'https://relay.example/gateway/push'
         ~[['content-type' 'application/json']]
-      (oc (need (gateway-body zod 'h' 's' [%ring ~nec 'abc'])))
+      (oc (need (gateway-body zod 'h' 's' ~ ~ [%ring ~nec 'abc'])))
     ::
       :-  'gateway url without a slash'
       =('https://r.example/gateway/push' (gateway-url 'https://r.example'))
     ::
       :-  'gateway takes no read request'
-      =(~ (request zod gw [%read 'x']))
+      =(~ (request zod gw ~ [%read 'x']))
     ::
       :-  'dead answers'
       ?&  (dead [%unifiedpush 'x'] 404)
@@ -411,19 +412,19 @@
       (prune-seen (my ~[['~a/1' (sub t0 ~m1)] ['~a/2' (sub t0 ~m6)]]) t0)
     ::
       :-  'rung: a hangup cancels a fresh ring only'
-      ?&  =([%.y ~] (settle r1 'a' %.n (add t0 ~s30)))
-          =([%.n ~] (settle r1 'a' %.n (add t0 ~s90)))
-          =([%.n r1] (settle r1 'b' %.n t0))
+      ?&  =([p1 ~] (settle r1 'a' %.n (add t0 ~s30)))
+          =([~ ~] (settle r1 'a' %.n (add t0 ~s90)))
+          =([~ r1] (settle r1 'b' %.n t0))
       ==
     ::
       :-  'rung: an answer keeps the call for its hangup'
-      ?&  took
-          =(`[(add t0 ~s10) %.y] (~(get by r2) 'a'))
-          =([%.y ~] (settle r2 'a' %.n (add t0 ~h1)))
+      ?&  =(p1 took)
+          =(`[(add t0 ~s10) %.y p1] (~(get by r2) 'a'))
+          =([p1 ~] (settle r2 'a' %.n (add t0 ~h1)))
       ==
     ::
       :-  'rung: a new ring prunes the old'
-      =(~[%b] ~(tap in ~(key by (rang r1 'b' (add t0 ~m2)))))
+      =(~[%b] ~(tap in ~(key by (rang r1 'b' (add t0 ~m2) p1))))
     ::
       :-  'json: push-register unifiedpush'
       .=  %-  action-from-json:trunk-json
@@ -458,12 +459,12 @@
       ?=(%| -.r)
     ::
       :-  'json: push-kinds'
-      .=  `action:trunk`[%push-kinds [%.n %.y %mentions %.y %.n %.y]]
+      .=  `action:trunk`[%push-kinds [%.n %.y %mentions %.y %.n %.y %.n]]
       %-  action-from-json:trunk-json
       %-  j
       %+  rap  3
       :~  '{"push-kinds":{"dm":false,"club":true,"channel":"mentions",'
-          '"replies":true,"calls":false,"reads":true}}'
+          '"replies":true,"calls":false,"reads":true,"notices":false}}'
       ==
     ::
       :-  'switches: all on lets every kind through'
@@ -533,7 +534,9 @@
         %-  trip
         %-  en:json:html
         %:  debug-json  12  0v1  t0  all-kinds  devs
-          (my ['phone' [t0 200]] ~)
+          (my ['phone' [t0 `[t0 %message] `[t0 200]]] ~)
+          ~[[t0 'gone' %ios-gateway '410']]
+          `3
           ~[['/v4' 'live']]
           ~[['activity' %.y]]
           (note ~ t0 "DM: pushed to 2 devices")
@@ -545,6 +548,114 @@
           ?=(^ (find "ntfy.example" out))
           ?=(^ (find "relay.example" out))
           ?=(^ (find "pushed to 2 devices" out))
+      ==
+    ::
+      :-  'the report has the status of each device and the drops'
+      =/  out=tape
+        %-  trip
+        %-  en:json:html
+        %:  debug-json  12  0v1  t0  all-kinds
+          (my ['phone' [[%unifiedpush 'https://n.example/u'] ~]] ~)
+          (my ['phone' [t0 `[t0 %message] `[t0 200]]] ~)
+          ~[[t0 'gone' %ios-gateway '410']]
+          `3
+          ~
+          ~
+          ~
+        ==
+      ?&  ?=(^ (find "\"registered\"" out))
+          ?=(^ (find "\"kind\":\"message\"" out))
+          ?=(^ (find "\"code\":200" out))
+          ?=(^ (find "\"reason\":\"410\"" out))
+          ?=(^ (find "\"badge\":3" out))
+      ==
+    ::
+      :-  'gateway clear, only for a device that takes reads'
+      ?&  .=  `'{"handle":"h","secret":"s","kind":"clear","patp":"~zod","whom":"~nec"}'
+              (gateway-body zod 'h' 's' (sy 'read' ~) ~ [%read '~nec'])
+          =(~ (gateway-body zod 'h' 's' ~ ~ [%read '~nec']))
+      ==
+    ::
+      :-  'gateway badge, only for a device that shows one'
+      ?&  .=  `'{"handle":"h","secret":"s","kind":"badge","badge":12}'
+              (gateway-body zod 'h' 's' (sy 'badge' ~) ~ [%badge 12])
+          =(~ (gateway-body zod 'h' 's' ~ ~ [%badge 12]))
+      ==
+    ::
+      :-  'an alert to a counting iPhone carries the count'
+      .=  %:  gateway-body  zod  'h'  's'  (sy 'badge' ~)  `4
+            [%message '~nec' '~nec/1' ~ `'~nec' `'hi']
+          ==
+      :-  ~
+      %+  rap  3
+      :~  '{"handle":"h","secret":"s","kind":"alert","patp":"~zod",'
+          '"whom":"~nec","postId":"~nec/1","title":"~nec","body":"hi",'
+          '"badge":4}'
+      ==
+    ::
+      :-  'a notice, to the gateway'
+      =/  open  (j '{"app":"calendar","event":"e1"}')
+      .=  %:  gateway-body  zod  'h'  's'  (sy 'notice' ~)  `0
+            [%notice 'cal-e1' 'Leave now' 'Meeting at 3' open]
+          ==
+      :-  ~
+      %+  rap  3
+      :~  '{"handle":"h","secret":"s","kind":"alert","patp":"~zod",'
+          '"whom":"cal-e1","postId":"","title":"Leave now",'
+          '"body":"Meeting at 3","event":"notice",'
+          (cat 3 '"open":' (en:json:html open))
+          '}'
+      ==
+    ::
+      :-  'a notice, to UnifiedPush: urgent, an hour, caps only'
+      =/  dev=push-device:trunk  [[%unifiedpush 'https://n.example/u'] (sy 'notice' ~)]
+      =/  =hint  [%notice 'cal-e1' 'Leave now' 'Meeting at 3' ~]
+      ?&  .=  (request zod dev ~ hint)
+              :-  ~
+              :^  %'POST'  'https://n.example/u'
+                :~  ['content-type' 'application/json']
+                    ['ttl' '3600']
+                    ['urgency' 'high']
+                ==
+              %-  oc
+              %+  rap  3
+              :~  '{"event":"notice","patp":"~zod","tag":"cal-e1",'
+                  '"title":"Leave now","body":"Meeting at 3","open":null}'
+              ==
+          =(~ (request zod up ~ hint))
+          =(~ (request zod gw ~ hint))
+      ==
+    ::
+      :-  'no badge to UnifiedPush'
+      =(~ (request zod up ~ [%badge 1]))
+    ::
+      :-  'what goes again, and on what answer'
+      ?&  (retryable [%message '~nec' '~nec/1' ~ ~ ~])
+          (retryable [%read '~nec'])
+          (retryable [%badge 1])
+          (retryable [%notice 't' 't' 'b' ~])
+          !(retryable [%ring ~nec 'c'])
+          !(retryable [%ring-cancel 'c' 'hangup'])
+          !(retryable [%test 'n'])
+          (retry-code 500)
+          (retry-code 503)
+          (retry-code 429)
+          (retry-code 0)
+          !(retry-code 404)
+          !(retry-code 410)
+          !(retry-code 401)
+          !(retry-code 409)
+          =(~s30 (retry-after 0))
+          =(~m5 (retry-after 1))
+      ==
+    ::
+      :-  'json: push-notice, with and without open'
+      ?&  .=  `action:trunk`[%push-notice 't' 'ti' 'b' (j '{"a":1}')]
+              %-  action-from-json:trunk-json
+              (j '{"push-notice":{"tag":"t","title":"ti","body":"b","open":{"a":1}}}')
+          .=  `action:trunk`[%push-notice 't' 'ti' 'b' ~]
+              %-  action-from-json:trunk-json
+              (j '{"push-notice":{"tag":"t","title":"ti","body":"b"}}')
       ==
   ==
 =/  bad  (murn cases |=([n=@t o=?] ?:(o ~ `n)))

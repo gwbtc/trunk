@@ -99,12 +99,21 @@ An unknown platform, an endpoint or gateway that is not a URL, an empty handle o
 
 What gets pushed:
 
-- **ring** when a peer rings us and the policy lets it through, and **ring-cancel** when that ring ends: the caller hangs up (`"reason": "hangup"`), or one of our devices answers or declines (`"answered"`). A cancel goes only for a ring the ship pushed, within a minute of it, or within four hours once a device took the call.
+- **ring** when a peer rings us and the policy lets it through, and **ring-cancel** when that ring ends: the caller hangs up (`"reason": "hangup"`), or one of our devices answers or declines (`"answered"`). A cancel goes only to the devices that ring went to, within a minute of it, or within four hours once a device took the call.
 - **new-message** for each post or thread reply that `%activity` marks notified, as long as Talon's per-chat level allows it. The level comes from `%settings`, desk `talon`, bucket `notify-prefs`, where each entry is a string of JSON such as `{"level":"mentions"}`. It is `all`, `mentions` or `none`. Posts more than 5 minutes old never notify, and none is pushed twice. A reply carries `parent`, the id of the post it answers.
-- **read** when a chat is read to the end on any client. Only to UnifiedPush devices whose `caps` include `read`, since an older app shows any push it does not know as a new message.
+- **read** when a chat is read to the end on any client, to devices whose `caps` include `read`, since an older app shows any push it does not know as a new message. An iPhone gets it as a **clear**.
+- **notice** when another agent on our ship asks (wire 12), to devices whose `caps` include `notice`. Talon's levels do not apply; the agent decides what is worth it.
+- **badge**, an iPhone's app-icon count (wire 12), to iPhones whose `caps` include `badge`. Android has none.
 - **push-test** on request.
 
-UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, everything else with `TTL: 86400` and `Urgency: normal`.
+Any agent on our ship can send a notice, such as a calendar reminder or a time to leave. Another ship cannot. `tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. All four fields together may be 4 KiB at most.
+
+```jsonc
+{"push-notice": {"tag": "cal-e1", "title": "Leave now", "body": "Meeting at 3",
+                 "open": {"app": "calendar", "event": "e1"}}}   // open may be null or left out
+```
+
+UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, notices with `TTL: 3600` and `Urgency: high`, and everything else with `TTL: 86400` and `Urgency: normal`.
 
 ```jsonc
 {"event": "new-message", "patp": "~ship", "whom": "<chat>", "id": "<post id>"}
@@ -113,6 +122,7 @@ UnifiedPush devices get these bodies, built in the off-ship relay's key order, a
 {"event": "ring", "patp": "~ship", "from": "~caller", "id": "<call id>"}
 {"event": "ring-cancel", "patp": "~ship", "id": "<call id>", "reason": "hangup"}
 {"event": "push-test", "patp": "~ship", "nonce": "<nonce>"}
+{"event": "notice", "patp": "~ship", "tag": "<tag>", "title": "<title>", "body": "<body>", "open": <json>}
 ```
 
 `whom` is `~ship` for a DM, `0v...` for a group DM and the nest for a channel.
@@ -124,34 +134,47 @@ An iPhone needs APNs, which speaks only HTTP/2 with ES256 tokens. Iris has neith
 {"handle": "<h>", "secret": "<s>", "kind": "alert", "patp": "~ship",
  "whom": "<chat>", "postId": "<post id>", "title": "~author",
  "body": "<the first 140 characters>"}          // plus "parent" on a reply
+// a notice: an alert with whom = its tag
+{"handle": "<h>", "secret": "<s>", "kind": "alert", "patp": "~ship",
+ "whom": "<tag>", "postId": "", "title": "<title>", "body": "<body>",
+ "event": "notice", "open": <json>}
 // a ring or its cancel: payload is exactly the UnifiedPush body above
 {"handle": "<h>", "secret": "<s>", "kind": "voip", "payload": {"event": "ring", ...}}
+// a read: the app takes back that chat's notifications
+{"handle": "<h>", "secret": "<s>", "kind": "clear", "patp": "~ship", "whom": "<chat>"}
+// the app-icon count, with nothing shown
+{"handle": "<h>", "secret": "<s>", "kind": "badge", "badge": 3}
 ```
 
-An iPhone gets no read push. Its alert stays until the app can clear it.
+For an iPhone whose `caps` include `badge`, every message and notice alert also carries `"badge": n`. `n` is `%activity`'s base notify-count, which it gives on `/v4` after each post and read. A message alert carries the count it makes, one more than the last, and `%activity`'s next fact confirms it. When the count moves without an alert, after a read on another client say, it settles for 30 seconds and then goes as a `badge` push to each iPhone told another number.
 
-The ship never retries a push. A late ring is worse than none, and messages sync when the app opens. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept. Any other answer is only logged.
+The ship sends a message, read, notice or badge again when the answer is a 5xx, a 429 or nothing at all: after 30 seconds, then after 5 minutes, then it gives up and logs it. A ring, a cancel and a test are never sent twice, since they are stale in seconds. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept, and a retry goes only to the target it was meant for. Any other answer is only logged.
 
 ### The trunk page (wire 12)
 
 Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page, and only the tile's icon at `/apps/trunk/icon.svg` is public.
 
-The switches are one more `trunk-action`. Channel posts are `all` (every one `%activity` marks notified), `mentions` or `none`. A thread reply needs its chat's switch and `replies` both. An upgrade starts with everything on, which is how wire 11 behaved.
+The switches are one more `trunk-action`. Channel posts are `all` (every one `%activity` marks notified), `mentions` or `none`. A thread reply needs its chat's switch and `replies` both. `notices` covers alerts from other agents. An upgrade starts with everything on, which is how wire 11 behaved.
 
 ```jsonc
 {"push-kinds": {"dm": true, "club": true, "channel": "all",
-                "replies": true, "calls": true, "reads": true}}
+                "replies": true, "calls": true, "reads": true, "notices": true}}
 ```
 
 The page posts its actions to `POST /apps/trunk/action` with the same JSON as a poke, and the route hands them to the poke code. It takes `content-type: application/json` only, which a page on another site cannot send without a CORS preflight that eyre refuses. It answers 204 when the action went through, 400 for JSON it cannot read, 415 for anything but JSON, and 422 when trunk refused the action.
 
 Everything the page shows is one owner-only scry, `/~/scry/trunk/debug.json`, so a user can hand it to whoever helps them or to their agent. It never carries a secret, a handle, an endpoint's path or a chat's id: devices show only the host their pushes go to, and the log names the kind of chat, never which one.
 
+Talon reads each device's `sent` and `last` and the `drops` from it, so those names are part of the wire. A `last.code` of 0 means the push got no answer at all.
+
 ```jsonc
 {"wire": 12, "desk-hash": "0v...", "now": 1791335265091,
- "kinds": {...as above...},
+ "kinds": {...as above...}, "badge": 3,
  "devices": [{"id": "...", "platform": "unifiedpush", "host": "ntfy.sh",
-              "caps": ["read"], "last": {"at": 1791335355181, "code": 200}}],
+              "caps": ["read", "notice"], "registered": 1791330000000,
+              "sent": {"at": 1791335355100, "kind": "message"},
+              "last": {"at": 1791335355181, "code": 200}}],
+ "drops": [{"at": 1791335000000, "id": "...", "platform": "ios-gateway", "reason": "410"}],
  "watches": {"/v4": "live", "/v4/reads": "live"},
  "apps": {"activity": true, "settings": true},
  "log": [{"at": 1791335355181, "what": "DM: pushed to 1 device"}]}

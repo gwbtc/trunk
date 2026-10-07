@@ -40,6 +40,10 @@
       [%ring from=@p id=@t]
       [%ring-cancel id=@t reason=@t]
       [%test nonce=@t]
+      ::  an alert from another agent on our ship (wire 12)
+      [%notice tag=@t title=@t body=@t open=json]
+      ::  an iPhone's app-icon count, with nothing shown (wire 12)
+      [%badge n=@ud]
   ==
 ::  a post %activity says to notify, before Talon's own level
 +$  post
@@ -49,8 +53,28 @@
       mention=?
       content=(unit json)
   ==
-::  rings we pushed, by call id
-+$  rung  (map @t [at=@da answered=?])
+::  rings we pushed, by call id, and the devices each one went to:
+::  only those get its cancel
++$  rung  (map @t [at=@da answered=? to=(set @t)])
+::  what the debug report says about one device
++$  device-meta
+  $:  registered=@da
+      sent=(unit [at=@da kind=@tas])
+      ::  code 0: no answer at all
+      last=(unit [at=@da code=@ud])
+  ==
+::  a device the ship removed, and why
++$  drop  [at=@da id=@t platform=@tas reason=@t]
+++  drop-cap  16
+::  the app-icon count. `n` is %activity's base notify-count, ~ until
+::  the first fact after a watch starts; `sent` is the last count each
+::  device was given; `timer` is set while a badge push is waiting.
++$  badge-state  [n=(unit @ud) sent=(map @t @ud) timer=(unit @da)]
+::  how long the count may wait before it goes out on its own
+++  badge-wait  ~s30
+::  a push that may be sent again: to which device, to which target
+::  (its +sham), and how many times it was sent again already
++$  flight  [id=@t target=@ =hint tries=@ud]
 ::
 ::  +qt: a JSON string. Push.kt escaped only backslash and double
 ::  quote; control characters are escaped too, since a peer picks a
@@ -121,15 +145,40 @@
       %test
     %-  obj
     ~[['event' (qt 'push-test')] ['patp' patp] ['nonce' (qt nonce.hint)]]
+  ::
+      %notice
+    %-  obj
+    :~  ['event' (qt 'notice')]  ['patp' patp]  ['tag' (qt tag.hint)]
+        ['title' (qt title.hint)]  ['body' (qt body.hint)]
+        ['open' (en:json:html open.hint)]
+    ==
+  ::
+  ::  no UnifiedPush device takes one; +request never sends it
+      %badge
+    (obj ~[['event' (qt 'badge')] ['patp' patp] ['badge' (num n.hint)]])
   ==
 ::
-::  +urgent: a ring, its cancel and a test are worthless late, so
-::  they go out urgent and short-lived. Push.kt's RING_TTL_SECS.
+::  +num: a JSON number, in plain digits
+::
+++  num  |=(n=@ud `@t`(crip ((d-co:co 1) n)))
+::
+::  +urgent and +ttl: a ring, its cancel and a test are worthless
+::  late, so they go out urgent and short-lived (Push.kt's
+::  RING_TTL_SECS). A notice is urgent too, and worthless after an
+::  hour: a reminder to leave that arrives late helps nobody.
 ::
 ++  urgent
   |=  =hint
   ^-  ?
-  ?=(?(%ring %ring-cancel %test) -.hint)
+  ?=(?(%ring %ring-cancel %test %notice) -.hint)
+::
+++  ttl
+  |=  =hint
+  ^-  @ud
+  ?+  -.hint  86.400
+    ?(%ring %ring-cancel %test)  60
+    %notice                      3.600
+  ==
 ::
 ::  +gateway-body: what the Nisfeb APNs gateway is asked to send. It
 ::  holds the APNs tokens behind `handle`; iris speaks neither HTTP/2
@@ -137,20 +186,41 @@
 ::
 ::    alert  {"handle","secret","kind":"alert","patp","whom","postId",
 ::            "title","body"} plus "parent" on a reply, "nonce" on a
-::            test
+::            test, "event":"notice" and "open" on a notice, and
+::            "badge" for a device whose caps include it
 ::    voip   {"handle","secret","kind":"voip","payload":<+body>}
+::    clear  {"handle","secret","kind":"clear","patp","whom"}, a read,
+::            for a device whose caps include "read"
+::    badge  {"handle","secret","kind":"badge","badge":n}
 ::
-::  ~ when an iPhone takes no push for the hint: a read stays put
-::  until the app can be woken to clear it (Push.kt sendRead).
+::  ~ when this iPhone takes no push for the hint.
 ::
 ++  gateway-body
-  |=  [our=@p handle=@t secret=@t =hint]
+  |=  $:  our=@p
+          handle=@t
+          secret=@t
+          caps=(set @t)
+          badge=(unit @ud)
+          =hint
+      ==
   ^-  (unit @t)
   =/  who=(list [@t @t])
     ~[['handle' (qt handle)] ['secret' (qt secret)]]
   =/  patp  (qt (scot %p our))
+  =/  count=(list [@t @t])
+    ?.  &((~(has in caps) 'badge') ?=(^ badge))  ~
+    ~[['badge' (num u.badge)]]
   ?-    -.hint
-      %read  ~
+      %read
+    ?.  (~(has in caps) 'read')  ~
+    :-  ~
+    %-  obj
+    (weld who ~[['kind' (qt 'clear')] ['patp' patp] ['whom' (qt whom.hint)]])
+  ::
+      %badge
+    ?.  (~(has in caps) 'badge')  ~
+    `(obj (weld who ~[['kind' (qt 'badge')] ['badge' (num n.hint)]]))
+  ::
       ?(%ring %ring-cancel)
     :-  ~
     %-  obj
@@ -166,6 +236,19 @@
       ~[['title' (qt (fall author.hint (scot %p our)))]]
       ~[['body' (qt (fall preview.hint 'New message'))]]
       ?~(parent.hint ~ ~[['parent' (qt u.parent.hint)]])
+      count
+    ==
+  ::
+      %notice
+    :-  ~
+    %-  obj
+    ;:  weld
+      who
+      ~[['kind' (qt 'alert')] ['patp' patp] ['whom' (qt tag.hint)]]
+      ~[['postId' (qt '')] ['title' (qt title.hint)]]
+      ~[['body' (qt body.hint)] ['event' (qt 'notice')]]
+      ~[['open' (en:json:html open.hint)]]
+      count
     ==
   ::
       %test
@@ -181,35 +264,51 @@
   ==
 ::
 ::  +request: the HTTP request that carries `hint` to `dev`, or ~ when
-::  that device takes no push for it.
+::  that device takes no push for it. `badge` is the count an iPhone
+::  alert carries, if the ship knows it.
 ::
 ++  request
-  |=  [our=@p dev=push-device:trunk =hint]
+  |=  [our=@p dev=push-device:trunk badge=(unit @ud) =hint]
   ^-  (unit request:http)
   =/  json-type  ['content-type' 'application/json']
+  ::  an app that never said it understands a notice would show one
+  ::  as a new message
+  ?:  &(?=(%notice -.hint) !(~(has in caps.dev) 'notice'))  ~
   ?-    -.target.dev
       %unifiedpush
-    ::  only an app that said it understands a read gets one: an
-    ::  older app shows any push it does not know as a new message.
+    ?:  ?=(%badge -.hint)  ~
+    ::  likewise a read, for an app that never said it takes one
     ?:  &(?=(%read -.hint) !(~(has in caps.dev) 'read'))  ~
     =/  hot  (urgent hint)
     :-  ~
     :^  %'POST'  endpoint.target.dev
       :~  json-type
-          ['ttl' ?:(hot '60' '86400')]
+          ['ttl' (num (ttl hint))]
           ['urgency' ?:(hot 'high' 'normal')]
       ==
     `(as-octs:mimes:html (body our hint))
   ::
       %ios-gateway
     =/  out
-      (gateway-body our handle.target.dev secret.target.dev hint)
+      %:  gateway-body
+        our  handle.target.dev  secret.target.dev  caps.dev  badge  hint
+      ==
     ?~  out  ~
     :-  ~
     :^  %'POST'  (gateway-url gateway.target.dev)
       ~[json-type]
     `(as-octs:mimes:html u.out)
   ==
+::
+::  +retryable, +retry-code: with no relay left to catch a miss, a
+::  message, read, notice or badge that got a 5xx, a 429 or no answer
+::  is sent again, after +retry-after. Never a ring or its cancel,
+::  stale in seconds, and never a test, which the app is timing.
+::
+++  retryable  |=(=hint `?`?=(?(%message %read %notice %badge) -.hint))
+++  retry-code  |=(code=@ud `?`|(=(0 code) =(429 code) (gte code 500)))
+++  max-tries  2
+++  retry-after  |=(tries=@ud `@dr`?:(=(0 tries) ~s30 ~m5))
 ::
 ::  +gateway-url: the push route under a gateway's base url, whether
 ::  or not the base ends in a slash
@@ -514,12 +613,12 @@
 ::  holds the last minute's rings and the calls still up.
 ::
 ++  rang
-  |=  [r=rung id=@t now=@da]
+  |=  [r=rung id=@t now=@da to=(set @t)]
   ^-  rung
-  (~(put by (prune-rung r now)) id [now %.n])
+  (~(put by (prune-rung r now)) id [now %.n to])
 ::
 ++  live-rung
-  |=  [[at=@da answered=?] now=@da]
+  |=  [[at=@da answered=? to=(set @t)] now=@da]
   ^-  ?
   ?:  (gth at now)  %.y
   (lte (sub now at) ?:(answered answered-for ring-for))
@@ -529,27 +628,27 @@
   ^-  rung
   %-  ~(gas by *rung)
   %+  skim  ~(tap by r)
-  |=([@t r=[at=@da answered=?]] (live-rung r now))
+  |=([@t r=[at=@da answered=? to=(set @t)]] (live-rung r now))
 ::
 ::  +settle: a ring's undoing, a hangup or one of our devices taking
-::  the call. Answers whether to push a cancel: only for a ring we
-::  pushed, and only while a device could still be ringing. An answer
+::  the call. Answers the devices to push a cancel to: the ones the
+::  ring went to, and none once no device could still be ringing. An answer
 ::  keeps the entry, marked, so the call's eventual hangup still finds
 ::  it; a hangup removes it.
 ::
 ++  settle
   |=  [r=rung id=@t answered=? now=@da]
-  ^-  [? rung]
+  ^-  [(set @t) rung]
   =/  got  (~(get by r) id)
-  ?~  got  [%.n r]
-  :-  (live-rung u.got now)
-  ?:  answered  (~(put by r) id [now %.y])
+  ?~  got  [~ r]
+  :-  ?.((live-rung u.got now) ~ to.u.got)
+  ?:  answered  (~(put by r) id [now %.y to.u.got])
   (~(del by r) id)
 ::
 ::  +all-kinds: every kind of push on, the behaviour before wire 12.
 ::  The bunt of push-kinds has channel %none, so never lean on it.
 ::
-++  all-kinds  `push-kinds:trunk`[%.y %.y %all %.y %.y %.y]
+++  all-kinds  `push-kinds:trunk`[%.y %.y %all %.y %.y %.y %.y]
 ::
 ::  +chat-of: what kind of chat a post's whom names
 ::
@@ -619,9 +718,11 @@
   =/  a  (find "@" (flop h))
   (crip ?~(a h (slag (sub (lent h) u.a) h)))
 ::
-::  +debug-json: what the debug page and an agent read, at
+::  +debug-json: what the debug page, Talon and an agent read, at
 ::  /~/scry/trunk/debug.json. It holds no secret, handle, endpoint
-::  path or chat id, so a user can paste it to anyone.
+::  path or chat id, so a user can paste it to anyone. Talon reads
+::  devices' "sent" and "last" and the "drops", so those names are
+::  wire.
 ::
 ++  debug-json
   |=  $:  ver=@ud
@@ -629,7 +730,9 @@
           now=@da
           kinds=push-kinds:trunk
           push=(map @t push-device:trunk)
-          last=(map @t [at=@da code=@ud])
+          meta=(map @t device-meta)
+          drops=(list drop)
+          badge=(unit @ud)
           watches=(list [@t @t])
           apps=(list [@t ?])
           log=(list push-note:trunk)
@@ -641,6 +744,7 @@
       desk-hash+s+(scot %uv hash)
       now+(time now)
       kinds+(kinds-json kinds)
+      badge+?~(badge ~ (numb u.badge))
       :-  %devices
       :-  %a
       %+  turn  ~(tap by push)
@@ -650,13 +754,29 @@
           %unifiedpush  endpoint.target.dev
           %ios-gateway  gateway.target.dev
         ==
-      =/  l  (~(get by last) id)
+      =/  m  (~(get by meta) id)
       %-  pairs
       :~  id+s+id
           platform+s+-.target.dev
           host+s+(host-of url)
           caps+a+(turn ~(tap in caps.dev) |=(c=@t s+c))
-          last+?~(l ~ (pairs ~[at+(time at.u.l) code+(numb code.u.l)]))
+          registered+?~(m ~ (time registered.u.m))
+          :-  %sent
+          ?~  m  ~
+          ?~  sent.u.m  ~
+          (pairs ~[at+(time at.u.sent.u.m) kind+s+kind.u.sent.u.m])
+          :-  %last
+          ?~  m  ~
+          ?~  last.u.m  ~
+          (pairs ~[at+(time at.u.last.u.m) code+(numb code.u.last.u.m)])
+      ==
+      :-  %drops
+      :-  %a
+      %+  turn  drops
+      |=  d=drop
+      %-  pairs
+      :~  at+(time at.d)  id+s+id.d  platform+s+platform.d
+          reason+s+reason.d
       ==
       watches+(pairs (turn watches |=([p=@t v=@t] [p s+v])))
       apps+(pairs (turn apps |=([n=@t r=?] [n b+r])))
@@ -671,5 +791,6 @@
   %-  pairs
   :~  dm+b+dm.k  club+b+club.k  channel+s+channel.k
       replies+b+replies.k  calls+b+calls.k  reads+b+reads.k
+      notices+b+notices.k
   ==
 --
