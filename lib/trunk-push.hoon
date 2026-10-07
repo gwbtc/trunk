@@ -54,6 +54,7 @@
       parent=(unit @t)
       mention=?
       content=(unit json)
+      group=(unit @t)
   ==
 ::  rings we pushed, by call id, and the devices each one went to:
 ::  only those get its cancel
@@ -515,7 +516,10 @@
 ::
 ::    {"add":{"source":{...},"event":{"notified":true,
 ::            "post"|"reply"|"dm-post"|"dm-reply":{"key":{"id":i},
-::            "parent":{"id":p},"content":[...],"mention":false}}}}
+::            "parent":{"id":p},"content":[...],"mention":false,
+::            "group":"~host/name"}}}}
+::
+::  A DM or club post has no group.
 ::
 ++  add-post
   |=  jon=json
@@ -542,6 +546,7 @@
       (cord-at u.e ~['parent' 'id'])
       =(`[%b %.y] (at u.e ~['mention']))
       (at u.e ~['content'])
+      (cord-at u.e ~['group'])
   ==
 ::
 ::  +read-whom: the chat an %activity /v4 read says is read to the
@@ -644,6 +649,19 @@
     (de:json:html p.u.w)
   ?~  entry  ~
   (cord-at u.entry ~['level'])
+::
+::  +chat-level: Talon's level for a post's chat. The chat's own entry
+::  wins. Else a channel takes its group's, kept under "group/<flag>"
+::  (no chat is keyed so). ~ when neither is set, which +allows reads
+::  as "mentions".
+::
+++  chat-level
+  |=  [jon=json whom=@t group=(unit @t)]
+  ^-  (unit @t)
+  =/  own  (level-of jon whom)
+  ?^  own  own
+  ?~  group  ~
+  (level-of jon (cat 3 'group/' u.group))
 ::
 ::  +preview: a one-line text preview of a post's content for an iOS
 ::  alert: the words and the ship names, at most 140 characters.

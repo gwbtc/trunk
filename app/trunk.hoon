@@ -320,7 +320,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  14
+++  wire-version  15
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -2437,7 +2437,7 @@
   =?  n.badge.s  ?=(^ n.badge.s)  `+(u.n.badge.s)
   ?.  (wants:trunk-push kinds.s u.post)
     [~ s `"{word}: not pushed, switched off in trunk's settings"]
-  =/  level  (notify-level whom.u.post)
+  =/  level  (notify-level whom.u.post group.u.post)
   ?.  (allows:trunk-push whom.u.post level mention.u.post ?=(^ parent.u.post))
     =/  why  (trip (fall level 'mentions'))
     [~ s `"{word}: not pushed, Talon's level for that chat is {why}"]
@@ -2485,11 +2485,13 @@
 ::  so the whole desk is read.
 ::
 ++  notify-level
-  |=  whom=@t
+  |=  [whom=@t group=(unit @t)]
   ^-  (unit @t)
   =/  base=path  /(scot %p our.bowl)/settings/(scot %da now.bowl)
   ?.  .^(? %gu (snoc base %$))  ~
-  (level-of:trunk-push .^(json %gx (weld base /desk/talon/json)) whom)
+  %^  chat-level:trunk-push  .^(json %gx (weld base /desk/talon/json))
+    whom
+  group
 ::
 ::  +signal-cards: a peer's ring wakes our devices, and its hangup
 ::  un-rings the ones we woke.

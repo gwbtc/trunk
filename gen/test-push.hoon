@@ -276,6 +276,20 @@
           =(~ (level-of s '~nec'))
       ==
     ::
+      :-  'a channel without its own level takes its group'
+      =/  s
+        %-  j
+        %+  rap  3
+        :~  '{"desk":{"notify-prefs":{'
+            '"group/~nec/g":"{\\"level\\":\\"none\\"}",'
+            '"chat/~nec/y":"{\\"level\\":\\"all\\"}"}}}'
+        ==
+      ?&  =(`'none' (chat-level s 'chat/~nec/x' `'~nec/g'))
+          =(`'all' (chat-level s 'chat/~nec/y' `'~nec/g'))
+          =(~ (chat-level s 'chat/~nec/z' `'~nec/h'))
+          =(~ (chat-level s '~nec' ~))
+      ==
+    ::
       :-  'level from settings, as Talon stores it on a live ship'
       =/  s
         %-  j
@@ -299,6 +313,7 @@
           =(~ parent.u.p)
           !mention.u.p
           =(`'hey ~bus now' (preview (need content.u.p)))
+          =(~ group.u.p)
       ==
     ::
       :-  'a club DM is its club'
@@ -311,6 +326,7 @@
           =('~bus/170.2' id.u.p)
           mention.u.p
           =(`'[image]' (preview (need content.u.p)))
+          =(`'~nec/g' group.u.p)
       ==
     ::
       :-  'a thread reply is its channel, with its parent'
@@ -319,6 +335,7 @@
           =('chat/~nec/x' whom.u.p)
           =('~bus/170.3' id.u.p)
           =(`'~nec/170.1' parent.u.p)
+          =(`'~nec/g' group.u.p)
       ==
     ::
       :-  'a club thread reply is its club'
