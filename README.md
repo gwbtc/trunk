@@ -113,7 +113,7 @@ Any agent on our ship can send a notice, such as a calendar reminder or a time t
 {"push-notice": {"tag": "cal-e1", "title": "Leave now", "body": "Meeting at 3"}}
 ```
 
-`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. The title must not be empty, the app name may be 40 bytes, and all the fields together may be 4 KiB. Each app gets at most one push every five seconds: what comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<app>`. An app gets 30 pushes an hour unless the owner sets another limit for it, up to 720 or none at all. The owner can switch off all notices, or any one app, on the trunk page. Only the owner can: a switch poked by another agent is refused.
+`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. An empty title becomes the app's name, the app name may be 40 bytes, and all the fields together may be 4 KiB. One agent may send under 16 names, and trunk keeps 128 apps, forgetting the one idle longest that the owner never changed. Each app gets at most one push every five seconds: what comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<agent>` or `batch-<agent>/<app>`. An app gets 30 pushes an hour unless the owner sets another limit for it, up to 720 or none at all. The owner can switch off all notices, or any one app, on the trunk page. Another agent may send notices and nothing else: every other action, settings and devices included, is taken only from the owner's web session, Talon or the dojo. That stops a careless app, not a hostile one, since gall lets an agent name any origin for its poke.
 
 UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, notices with `TTL: 3600` and `Urgency: high`, and everything else with `TTL: 86400` and `Urgency: normal`.
 
@@ -124,8 +124,10 @@ UnifiedPush devices get these bodies, built in the off-ship relay's key order, a
 {"event": "ring", "patp": "~ship", "from": "~caller", "id": "<call id>"}
 {"event": "ring-cancel", "patp": "~ship", "id": "<call id>", "reason": "hangup"}
 {"event": "push-test", "patp": "~ship", "nonce": "<nonce>"}
-{"event": "notice", "patp": "~ship", "tag": "<tag>", "title": "<title>", "body": "<body>", "open": <json>, "app": "<app>"}
+{"event": "notice", "patp": "~ship", "tag": "<tag>", "title": "<title>", "body": "<body>", "open": <json>, "app": "<app>", "via": "<agent>"}
 ```
+
+A notice's `via` is the agent it came through, sent only when that is not the app's own name.
 
 `whom` is `~ship` for a DM, `0v...` for a group DM and the nest for a channel.
 
@@ -139,7 +141,7 @@ An iPhone needs APNs, which speaks only HTTP/2 with ES256 tokens. Iris has neith
 // a notice: an alert with whom = its tag
 {"handle": "<h>", "secret": "<s>", "kind": "alert", "patp": "~ship",
  "whom": "<tag>", "postId": "", "title": "<title>", "body": "<body>",
- "event": "notice", "open": <json>, "app": "<app>"}
+ "event": "notice", "open": <json>, "app": "<app>", "via": "<agent>"}
 // a ring or its cancel: payload is exactly the UnifiedPush body above
 {"handle": "<h>", "secret": "<s>", "kind": "voip", "payload": {"event": "ring", ...}}
 // a read: the app takes back that chat's notifications

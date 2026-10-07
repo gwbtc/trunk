@@ -608,7 +608,7 @@
       :-  'a notice, to the gateway'
       =/  open  (j '{"app":"calendar","event":"e1"}')
       .=  %:  gateway-body  zod  'h'  's'  (sy 'notice' ~)  `0
-            [%notice 'calendar' 'cal-e1' 'Leave now' 'Meeting at 3' open]
+            [%notice 'calendar' '' 'cal-e1' 'Leave now' 'Meeting at 3' open]
           ==
       :-  ~
       %+  rap  3
@@ -621,7 +621,7 @@
     ::
       :-  'a notice, to UnifiedPush: urgent, an hour, caps only'
       =/  dev=push-device:trunk  [[%unifiedpush 'https://n.example/u'] (sy 'notice' ~)]
-      =/  =hint  [%notice 'calendar' 'cal-e1' 'Leave now' 'Meeting at 3' ~]
+      =/  =hint  [%notice 'calendar' '' 'cal-e1' 'Leave now' 'Meeting at 3' ~]
       ?&  .=  (request zod dev ~ hint)
               :-  ~
               :^  %'POST'  'https://n.example/u'
@@ -639,6 +639,16 @@
           =(~ (request zod gw ~ hint))
       ==
     ::
+      :-  'a notice names the agent it came through, if not the app'
+      =/  via  (body zod [%notice 'calendar' 'grubbery' 'c' 't' 'b' ~])
+      =/  same  (body zod [%notice 'calendar' 'calendar' 'c' 't' 'b' ~])
+      =/  old  (body zod [%notice '' '' 'c' 't' 'b' ~])
+      ?&  ?=(^ (find "\"app\":\"calendar\",\"via\":\"grubbery\"}" (trip via)))
+          ?=(^ (find "\"app\":\"calendar\"}" (trip same)))
+          ?=(~ (find "via" (trip same)))
+          ?=(~ (find "\"app\"" (trip old)))
+      ==
+    ::
       :-  'no badge to UnifiedPush'
       =(~ (request zod up ~ [%badge 1]))
     ::
@@ -646,7 +656,7 @@
       ?&  (retryable [%message '~nec' '~nec/1' ~ ~ ~])
           (retryable [%read '~nec'])
           (retryable [%badge 1])
-          (retryable [%notice 'a' 't' 't' 'b' ~])
+          (retryable [%notice 'a' 'a' 't' 't' 'b' ~])
           !(retryable [%ring ~nec 'c'])
           !(retryable [%ring-cancel 'c' 'hangup'])
           !(retryable [%test 'n'])
@@ -723,16 +733,17 @@
     ::
       :-  'one notice that waited goes as itself'
       =/  one  ['cal-1' 'Leave now' 'Meeting at 3' ~]
-      =(one (batch 'calendar' 1 ~[one]))
+      =(one (batch 'calendar' 'calendar' 1 ~[one]))
     ::
       :-  'several that waited go as one summary'
       =/  b
-        %^  batch  'calendar'  3
-        :~  ['cal-3' 'Third' 'c' ~]
-            ['cal-2' 'Second' 'b' ~]
-            ['cal-1' 'First' 'a' ~]
+        %:  batch  'grubbery/calendar'  'calendar'  3
+          :~  ['cal-1' 'First' 'a' ~]
+              ['cal-2' 'Second' 'b' ~]
+              ['cal-3' 'Third' 'c' ~]
+          ==
         ==
-      ?&  =('batch-calendar' tag.b)
+      ?&  =('batch-grubbery/calendar' tag.b)
           =('3 alerts from calendar' title.b)
           =('First\0aSecond\0aThird' body.b)
           =(~ open.b)
@@ -741,9 +752,45 @@
       :-  'a long burst shows five titles and counts the rest'
       =/  items=(list [tag=@t title=@t body=@t open=json])
         (turn (gulf 1 8) |=(n=@ud [(scot %ud n) (scot %ud n) '' ~]))
-      =/  b  (batch 'orrery' 12 items)
+      =/  b  (batch 'orrery' 'orrery' 12 items)
       ?&  =('12 alerts from orrery' title.b)
-          =('8\0a7\0a6\0a5\0a4\0aand 7 more' body.b)
+          =('1\0a2\0a3\0a4\0a5\0aand 7 more' body.b)
+      ==
+    ::
+      :-  'a summary cuts long titles and leaves out ones not UTF-8'
+      =/  long  (crip (reap 200 'a'))
+      =/  b
+        %:  batch  'x'  'x'  3
+          :~  ['1' long '' ~]
+              ['2' `@t`0xff '' ~]
+              ['3' 'short\0a  line' '' ~]
+          ==
+        ==
+      =/  first  (crip (scag 79 (trip long)))
+      =(body.b (rap 3 ~[first '…' '\0ashort line\0aand 1 more']))
+    ::
+      :-  'a new sender fits, up to its names and the list'
+      =/  x=sender  ['n' %grubbery %.y t0 ~ [t0 0] 0 0 ~ 0 ~ default-cap]
+      =/  some=(map @t sender)
+        (malt (turn (gulf 1 names-cap) |=(n=@ud [(scot %ud n) x])))
+      =/  full=(map @t sender)
+        %-  malt
+        %+  turn  (gulf 1 senders-cap)
+        |=  n=@ud
+        :-  (scot %ud n)
+        x(agent `@tas`(cat 3 'a' (scot %ud n)), first (add t0 (mul n ~s1)), allowed !=(n 1))
+      ?&  ?=(^ (admit ~ 'calendar' %calendar))
+          ?=(^ (admit some '1' %grubbery))
+          ?=(~ (admit some 'grubbery/new' %grubbery))
+          ?=(^ (admit some 'other' %other))
+          =/  got  (admit full 'new' %new)
+          ?&  ?=(^ got)
+              (~(has by u.got) '1')
+              !(~(has by u.got) '2')
+              (~(has by u.got) '3')
+          ==
+          =/  busy  (~(run by full) |=(y=sender y(cap 5)))
+          ?=(~ (admit busy 'new' %new))
       ==
   ==
 =/  bad  (murn cases |=([n=@t o=?] ?:(o ~ `n)))

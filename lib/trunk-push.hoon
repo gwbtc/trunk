@@ -40,9 +40,10 @@
       [%ring from=@p id=@t]
       [%ring-cancel id=@t reason=@t]
       [%test nonce=@t]
-      ::  an alert from another agent on our ship (wire 12), and the
-      ::  name of the app it came from (wire 14)
-      [%notice from=@t tag=@t title=@t body=@t open=json]
+      ::  an alert from another agent on our ship (wire 12), the name
+      ::  of the app it came from and the agent it came through (wire
+      ::  14). Both are '' for one queued before wire 14.
+      [%notice from=@t via=@t tag=@t title=@t body=@t open=json]
       ::  an iPhone's app-icon count, with nothing shown (wire 12)
       [%badge n=@ud]
   ==
@@ -82,9 +83,9 @@
 ::    sent     notices delivered, ever; held: notices stopped, ever
 ::    cap      the most pushes it may have in an hour, 0 for no limit;
 ::             a new app starts at +default-cap
-::    waiting  notices that came within +notice-gap of the last push,
-::             newest first, at most +wait-cap of them; `waited` counts
-::             them all, and `timer` is when the wait ends
+::    waiting  the first +wait-cap notices that came within +notice-gap
+::             of the last push, oldest first; `waited` counts them
+::             all, and `timer` is when the wait ends
 +$  sender
   $:  name=@t
       agent=@tas
@@ -108,19 +109,57 @@
 ++  notice-gap  ~s5
 ++  default-cap  30
 ++  max-cap  720
-++  wait-cap  20
+::  a summary names five notices, so no more than that wait in full
+++  wait-cap  5
+::  how long a title is in a summary, so five of them stay well under
+::  the 4 KiB a push service takes
+++  title-max  80
+::  an agent may send under this many names (+sender-of), and trunk
+::  keeps this many senders, so renaming escapes no limit for long and
+::  the list stays small. Neither holds against an agent that forges
+::  its origin: gall lets an agent name any origin for its poke.
+++  names-cap  16
+++  senders-cap  128
+::
+::  +admit: `senders`, with room made for `id` from `agent` if it is
+::  new, or ~ if there is none. An agent past +names-cap gets none.
+::  When the list is full, the sender idle longest that the owner never
+::  changed and that has nothing waiting is forgotten.
+::
+++  admit
+  |=  [senders=(map @t sender) id=@t agent=@tas]
+  ^-  (unit (map @t sender))
+  ?:  (~(has by senders) id)  `senders
+  =/  all=(list [id=@t x=sender])  ~(tap by senders)
+  =/  mine  (skim all |=([@t x=sender] =(agent agent.x)))
+  ?.  (lth (lent mine) names-cap)  ~
+  ?:  (lth (lent all) senders-cap)  `senders
+  =/  idle=(list [id=@t x=sender])
+    %+  sort
+      %+  skim  all
+      |=  [@t x=sender]
+      &(allowed.x =(default-cap cap.x) ?=(~ waiting.x) ?=(~ timer.x))
+    |=  [a=[@t x=sender] b=[@t x=sender]]
+    (lth (fall last.x.a first.x.a) (fall last.x.b first.x.b))
+  ?~  idle  ~
+  `(~(del by senders) id.i.idle)
 ::
 ::  +batch: what one push says for the notices that waited: the notice
-::  itself, or "3 alerts from calendar" over their titles, oldest first
+::  itself, or "3 alerts from calendar" over their titles, oldest first.
+::  Its tag is the sender's id, so two senders with one name never
+::  replace each other's summary on the phone.
 ::
 ++  batch
-  |=  [name=@t waited=@ud waiting=(list [tag=@t title=@t body=@t open=json])]
+  |=  [id=@t name=@t waited=@ud waiting=(list [tag=@t title=@t body=@t open=json])]
   ^-  [tag=@t title=@t body=@t open=json]
   ?:  &(=(1 waited) ?=([* ~] waiting))  i.waiting
-  =/  titles=(list @t)  (flop (turn waiting |=([@t t=@t @t json] t)))
-  =/  shown  (scag 5 titles)
+  ::  a title that is not UTF-8 is left out rather than lose the push
+  =/  shown=(list @t)
+    %+  murn  (scag 5 waiting)
+    |=  [@t t=@t @t json]
+    (mole |.((clip (squeeze (trip t)) title-max)))
   =/  more  (sub waited (min waited (lent shown)))
-  :^    (rap 3 ~['batch-' name])
+  :^    (rap 3 ~['batch-' id])
       (crip "{<waited>} alerts from {(trip name)}")
     %-  crip
     %+  weld
@@ -203,10 +242,13 @@
   ::
       %notice
     %-  obj
-    :~  ['event' (qt 'notice')]  ['patp' patp]  ['tag' (qt tag.hint)]
-        ['title' (qt title.hint)]  ['body' (qt body.hint)]
-        ['open' (en:json:html open.hint)]  ['app' (qt from.hint)]
-    ==
+    %+  weld
+      ^-  (list [k=@t v=@t])
+      :~  ['event' (qt 'notice')]  ['patp' patp]  ['tag' (qt tag.hint)]
+          ['title' (qt title.hint)]  ['body' (qt body.hint)]
+          ['open' (en:json:html open.hint)]
+      ==
+    (sent-by from.hint via.hint)
   ::
   ::  no UnifiedPush device takes one; +request never sends it
       %badge
@@ -234,6 +276,18 @@
     ?(%ring %ring-cancel %test)  60
     %notice                      3.600
   ==
+::
+::  +sent-by: a notice's app, and the agent it came through when that
+::  is not the app itself, which a phone can show beside it. A notice
+::  queued before wire 14 names neither.
+::
+++  sent-by
+  |=  [from=@t via=@t]
+  ^-  (list [k=@t v=@t])
+  ?:  =('' from)  ~
+  :-  ['app' (qt from)]
+  ?:  |(=('' via) =(via from))  ~
+  ~[['via' (qt via)]]
 ::
 ::  +gateway-body: what the Nisfeb APNs gateway is asked to send. It
 ::  holds the APNs tokens behind `handle`; iris speaks neither HTTP/2
@@ -302,7 +356,8 @@
       ~[['kind' (qt 'alert')] ['patp' patp] ['whom' (qt tag.hint)]]
       ~[['postId' (qt '')] ['title' (qt title.hint)]]
       ~[['body' (qt body.hint)] ['event' (qt 'notice')]]
-      ~[['open' (en:json:html open.hint)] ['app' (qt from.hint)]]
+      ~[['open' (en:json:html open.hint)]]
+      (sent-by from.hint via.hint)
       count
     ==
   ::
@@ -607,10 +662,18 @@
   =/  raw=tape  (walk content ~)
   =/  words=tape  (squeeze raw)
   ?~  words  ~
+  `(clip words preview-max)
+::
+::  +clip: `words` cut to `max` characters, the last an ellipsis.
+::  +tuba crashes on bytes that are not UTF-8.
+::
+++  clip
+  |=  [words=tape max=@ud]
+  ^-  @t
   =/  cs  (tuba words)
-  ?:  (lte (lent cs) preview-max)  `(crip words)
-  =/  cut  (flop (tuba (squeeze (tufa (scag (dec preview-max) cs)))))
-  `(crip (tufa (flop [`@c`0x2026 cut])))
+  ?:  (lte (lent cs) max)  (crip words)
+  =/  cut  (flop (tuba (squeeze (tufa (scag (dec max) cs)))))
+  (crip (tufa (flop [`@c`0x2026 cut])))
 ::
 ::  +walk: the text in a story, appended to `out`. Stops once there is
 ::  more than twice the preview's worth, as ActivityPreview does.
@@ -879,9 +942,7 @@
       :~  id+s+id  name+s+name.x  agent+s+agent.x  allowed+b+allowed.x
           first+(time first.x)
           last+?~(last.x ~ (time u.last.x))
-          :-  %hour
-          ?:  (gte (sub now (min now start.hour.x)) ~h1)  (numb 0)
-          (numb n.hour.x)
+          hour+(numb n.hour:(roll-hour x now))
           sent+(numb sent.x)  held+(numb held.x)  waiting+(numb waited.x)
           cap+(numb cap.x)
       ==

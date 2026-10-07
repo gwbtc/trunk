@@ -32,12 +32,12 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 - **`~(gut by m) [default]` loses the value's faces** when the default is a bare tuple. Annotate the result.
 - **An apostrophe ends a cord.** Test names like `'the device's id'` are a syntax error.
 - **Eyre gives a signed-out HTTP request a guest identity,** so `+on-watch` must accept `/http-response/@` before any `src.bowl == our.bowl` check.
-- **`sap.bowl` says where a poke came from:** `/gall/<agent>` for another agent, `/eyre` for the owner's web session and Talon, `/gall/dojo` for the dojo. `+by-owner` uses it to keep settings out of other agents' hands.
+- **`sap.bowl` says where a poke came from:** `/gall/<agent>` for another agent, `/eyre` for the owner's web session and Talon, `/gall/dojo` for the dojo. `+by-owner` uses it to keep settings out of other agents' hands. It is not proof: gall lets an agent name any origin for a poke it sends, so it guards against careless apps only.
 - **`+tuba` crashes on control bytes and bad UTF-8.** Text from a chat reaches it in `+preview`, which drops control bytes and runs under `mole`.
 
 ## Security invariants
 
-- `%trunk-action` is accepted only from our own ship. Settings (the push switches and each app's switch) are accepted only from the owner, by `+by-owner`, never from another agent.
+- `%trunk-action` is accepted only from our own ship. Another agent may send `push-notice` and `push-notice-as` and nothing else. Every other action, settings and the device registry included, needs `+by-owner`. Keep that allowlist at the top of the `%trunk-action` arm, which the page's action route goes through too.
 - A signal's sender is the ames `src`, never anything in the payload.
 - A Galène token's `sub` is the asking ship's `@p`, for every ship. Galène refuses any later message whose username differs, so a readable name travels in Galène's per-user data instead.
 - The debug report (`/x/debug`) never carries a push secret, a gateway handle, an endpoint's path or a chat's id. `gen/test-push.hoon` checks this, so extend that test when you add a field.

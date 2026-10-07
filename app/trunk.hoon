@@ -261,9 +261,25 @@
       meta=(map @t device-meta:trunk-push)
       drops=(list drop:trunk-push)
       badge=badge-state:trunk-push
-      ::  pinned loosely: +hint:trunk-push's %notice gained its sender
-      ::  in wire 14, and %16 drops this queue anyway
-      flight=*
+      ::  pinned: +hint:trunk-push's %notice gained its sender in wire 14
+      flight=(map @uv flight-15)
+  ==
+::  a push that may be sent again, as wire 12 and 13 saved it
++$  flight-15  [id=@t target=@ hint=hint-15 tries=@ud]
++$  hint-15
+  $%  $:  %message
+          whom=@t
+          id=@t
+          parent=(unit @t)
+          author=(unit @t)
+          preview=(unit @t)
+      ==
+      [%read whom=@t]
+      [%ring from=@p id=@t]
+      [%ring-cancel id=@t reason=@t]
+      [%test nonce=@t]
+      [%notice tag=@t title=@t body=@t open=json]
+      [%badge n=@ud]
   ==
 ::  %16 knows which apps send notices (wire 14): each one's switch,
 ::  its count this hour against its own hourly cap, and its
@@ -313,6 +329,19 @@
 ::  the longest a listen link may live. Galène's tokens are stateless,
 ::  so nothing can revoke one early — a short cap is the only brake.
 ++  listen-ttl-cap  ^~((div ~h1 ~s1))
+::  +upgrade-flight: a retry from before wire 14. A notice in it names
+::  no app, and goes without one.
+++  upgrade-flight
+  |=  old=(map @uv flight-15)
+  ^-  (map @uv flight:trunk-push)
+  %-  ~(run by old)
+  |=  f=flight-15
+  ^-  flight:trunk-push
+  :^  id.f  target.f
+    ?.  ?=(%notice -.hint.f)  hint.f
+    [%notice '' '' +.hint.f]
+  tries.f
+::
 ::  +upgrade-rooms: rooms before state-6 had only [title members].
 ::  Pure, so it lives out here rather than in the agent core — that
 ::  core admits exactly its ten arms.
@@ -540,9 +569,7 @@
       (~(run by push.old) |=(* `device-meta:trunk-push`[now.bowl ~ ~]))
       ~  [~ ~ ~]  ~  ~
   ==  ==
-  ::  %15 gains the app senders, none yet. Its retry queue is dropped:
-  ::  the notice hint gained its sender, and a retry is minutes old at
-  ::  most.
+  ::  %15 gains the app senders, none yet, and keeps its retries
     %15
   :-  (activity-cards:hc push.old)
   %=  this
@@ -551,7 +578,7 @@
       known.old  asked.old  pol.old
       present.old  recording.old  beat.old
       push.old  seen.old  rung.old  kinds.old  log.old
-      meta.old  drops.old  badge.old  ~  ~
+      meta.old  drops.old  badge.old  (upgrade-flight flight.old)  ~
   ==  ==
   ::  a reload: re-arm the activity watch if it went missing.
     %16  [(activity-cards:hc push.old) this(state old)]
@@ -567,13 +594,15 @@
       %trunk-action
     ?>  =(src.bowl our.bowl)
     =/  act  !<(action:trunk vase)
+    ::  another agent on our ship may send a notice and nothing else
+    ?>  |(?=(?(%push-notice %push-notice-as) -.act) by-owner:hc)
     ?-    -.act
         %set-ice  `this(ice.state servers.act)
         %set-sfu  `this(sfu.state sfu-config.act)
     ::
     ::  push hints (wire 11). The registry is the owner's alone, by the
-    ::  src check above. A device that iris could never reach is
-    ::  refused here rather than failing on every push.
+    ::  checks above. A device that iris could never reach is refused
+    ::  here rather than failing on every push.
         %push-register
       ?>  (valid-device:trunk-push push-device.act)
       ?>  ?|  (~(has by push.state) id.act)
@@ -605,15 +634,14 @@
       [cards this]
     ::
         %push-kinds
-      ?>  by-owner:hc
       =.  log.state
         (note:trunk-push log.state now.bowl "push settings changed")
       `this(kinds.state push-kinds.act)
     ::
-    ::  any agent on our ship may send one, by the src check above. It
-    ::  is theirs to decide what is worth it: Talon's levels do not
-    ::  apply, only the notices switch, the app's own switch and cap,
-    ::  and each device's caps. A bad one crashes: a nack.
+    ::  any agent on our ship may send one. It is theirs to decide what
+    ::  is worth it: Talon's levels do not apply, only the notices
+    ::  switch, the app's own switch and cap, and each device's caps. A
+    ::  bad one crashes: a nack.
         %push-notice
       =^  cards  state
         (notice:hc state ~ tag.act title.act body.act open.act)
@@ -626,7 +654,6 @@
     ::
     ::  an app's switch and hourly cap, which no app may set for itself
         %push-app
-      ?>  by-owner:hc
       ?>  (lte cap.act max-cap:trunk-push)
       =/  x  (~(got by senders.state) id.act)
       =/  limit  ?:(=(0 cap.act) "no hourly limit" "at most {<cap.act>} an hour")
@@ -1690,9 +1717,10 @@
     =/  got  (~(get by senders.state) id)
     ?~  got  `this
     =/  x=sender:trunk-push  u.got(timer ~)
-    ?:  |(!notices.kinds.state !allowed.x)
-      =/  y  x(held (add held.x waited.x), waiting ~, waited 0)
-      `this(senders.state (~(put by senders.state) id y))
+    ?.  notices.kinds.state
+      `this(state (hold:hc state id x "notices are switched off"))
+    ?.  allowed.x
+      `this(state (hold:hc state id x "this app is switched off"))
     =^  cards  state  (deliver:hc state id x)
     [cards this]
   ?:  ?=([%eyre %connect ~] wire)
@@ -2564,6 +2592,11 @@
 ::  page or Talon (eyre) or the dojo, rather than from another agent on
 ::  the ship? Gall names a poke's origin in sap.bowl.
 ::
+::  This stops an app that pokes by mistake, not a hostile one. Gall
+::  lets an agent name any origin for a poke it sends, and any web page
+::  the ship serves posts with the owner's cookie. A hostile agent can
+::  do far worse as the ship anyway.
+::
 ++  by-owner
   ^-  ?
   ?|  ?=([%eyre *] sap.bowl)
@@ -2573,10 +2606,11 @@
 ::
 ::  +notice: an alert from an app on our ship, through the global
 ::  switch and the app's own. `declared` is the name it gave, if any.
-::  A notice with no title, an unshowable name or more than 4 KiB in
-::  all crashes, which nacks the poke. One that comes within
-::  +notice-gap of the app's last push waits for the gap to end, and
-::  all that waited go as one push.
+::  A notice with an unshowable name or more than 4 KiB in all crashes,
+::  which nacks the poke, and so does one from a new sender that does
+::  not fit (+admit:trunk-push). One that comes within +notice-gap of
+::  the app's last push waits for the gap to end, and all that waited
+::  go as one push.
 ::
 ++  notice
   |=  $:  s=state-16
@@ -2587,7 +2621,6 @@
           open=json
       ==
   ^-  [(list card) state-16]
-  ?>  !=('' title)
   ?>  ?|(?=(~ declared) (valid-app:trunk-push u.declared))
   =/  size
     ;:  add  (met 3 tag)  (met 3 title)  (met 3 body)
@@ -2595,6 +2628,9 @@
     ==
   ?>  (lte size 4.096)
   =/  [id=@t name=@t agent=@tas]  (sender-of:trunk-push sap.bowl declared)
+  ::  a phone drops a notice with no title, so it takes the app's name
+  =?  title  =('' title)  name
+  =.  senders.s  (need (admit:trunk-push senders.s id agent))
   =/  x=sender:trunk-push
     %+  ~(gut by senders.s)  id
     [name agent %.y now.bowl ~ [now.bowl 0] 0 0 ~ 0 ~ default-cap:trunk-push]
@@ -2607,23 +2643,37 @@
     :-  ~
     s(log (note:trunk-push log.s now.bowl "notice from {(trip name)}: not pushed, {u.off}"))
   =/  item  [tag title body open]
+  ::  a timer whose time has passed was lost, say to a crash as it
+  ::  fired, and must not hold the app's notices for good
+  =/  armed=?  ?~(timer.x %.n (gth u.timer.x now.bowl))
   =/  soon=?
-    ?|  ?=(^ timer.x)
+    ?|  armed
+        ?=(^ waiting.x)
         ?&  ?=(^ last.x)
             (lth (sub now.bowl (min now.bowl u.last.x)) notice-gap:trunk-push)
     ==  ==
   ?.  soon  (deliver s id x(waiting ~[item], waited 1))
   =/  at=@da
-    ?^  timer.x  u.timer.x
-    (add (fall last.x now.bowl) notice-gap:trunk-push)
+    ?:  armed  (need timer.x)
+    (max now.bowl (add (fall last.x now.bowl) notice-gap:trunk-push))
   =/  waiting
-    %+  scag  wait-cap:trunk-push
-    `(list [tag=@t title=@t body=@t open=json])`[item waiting.x]
+    ?.  (lth (lent waiting.x) wait-cap:trunk-push)  waiting.x
+    (snoc waiting.x item)
   =.  senders.s
     (~(put by senders.s) id x(waiting waiting, waited +(waited.x), timer `at))
   :_  s
-  ?^  timer.x  ~
+  ?:  armed  ~
   ~[[%pass /push/notice/(scot %t id) %arvo %b %wait at]]
+::
+::  +hold: what `x` has waiting is not pushed, and the log says why
+::
+++  hold
+  |=  [s=state-16 id=@t x=sender:trunk-push why=tape]
+  ^-  state-16
+  =.  senders.s
+    %+  ~(put by senders.s)  id
+    x(held (add held.x waited.x), waiting ~, waited 0, timer ~)
+  s(log (note:trunk-push log.s now.bowl "notice from {(trip name.x)}: not pushed, {why}"))
 ::
 ::  +deliver: one push for what `x` has waiting, the notice itself or
 ::  a summary of them all, unless the app is over its hourly cap
@@ -2635,17 +2685,10 @@
   =/  who  "notice from {(trip name.x)}"
   ?~  waiting.x  [~ s(senders (~(put by senders.s) id x(timer ~)))]
   ?:  &(!=(0 cap.x) (gte n.hour.x cap.x))
-    =.  senders.s
-      %+  ~(put by senders.s)  id
-      x(held (add held.x waited.x), waiting ~, waited 0, timer ~)
-    :-  ~
-    %=  s
-      log
-    (note:trunk-push log.s now.bowl "{who}: not pushed, over its {<cap.x>} this hour")
-    ==
-  =/  one  (batch:trunk-push name.x waited.x waiting.x)
+    [~ (hold s id x "over its {<cap.x>} this hour")]
+  =/  one  (batch:trunk-push id name.x waited.x waiting.x)
   =^  cards  s
-    (send s push.s [%notice name.x tag.one title.one body.one open.one])
+    (send s push.s [%notice name.x agent.x tag.one title.one body.one open.one])
   =/  how  ?:((gth waited.x 1) "{<waited.x>} at once, sent as one, " "")
   =.  senders.s
     %+  ~(put by senders.s)  id

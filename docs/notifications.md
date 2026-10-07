@@ -47,9 +47,9 @@ Poke `%trunk` on your own ship, mark `%trunk-action`. From another ship it is re
 :trunk &trunk-action [%push-notice-as 'calendar' 'cal-e1-0' 'Leave now' 'Meeting at 3 in room 2' ~]
 ```
 
-- **app**: your app's name as the owner should see it, at most 40 bytes and no control characters. Trunk also knows which agent sent the poke. A grubbery app, whose pokes all come from `%grubbery`, must name itself here, or the owner sees "grubbery".
+- **app**: your app's name as the owner should see it, at most 40 bytes and no control characters. Trunk also knows which agent sent the poke. A grubbery app, whose pokes all come from `%grubbery`, must name itself here, or the owner sees "grubbery". One agent may use up to 16 names. A notice under a 17th is refused.
 - **tag**: groups and replaces notifications on the phone. A new notice with the same tag replaces the old one. Start your tags with something your app owns, such as `cal-`, so they don't collide with another app's.
-- **title**: required. A notice with an empty title is refused.
+- **title**: the notice's heading. If it is empty, trunk uses your app's name, since a phone drops a notice with no title.
 - **body**: the text under the title. It may be empty.
 - **open**: any JSON your app wants back when the notice is tapped. Talon does not act on it yet: today a tap opens a calendar notice's event, found by its tag, and simply opens the app for any other.
 
@@ -59,19 +59,23 @@ The four text fields and `open` together may be at most 4 KiB.
 
 ## What happens next
 
-The poke's ack says trunk took the notice, not that a phone showed it. A nack means it was malformed: no title, an unshowable app name, or over 4 KiB.
+The poke's ack says trunk took the notice, not that a phone showed it. A nack means it was malformed (an unshowable app name, or over 4 KiB), or that your agent has used up its 16 names. It can also mean trunk's list of 128 apps is full of apps the owner has set up, with none idle to forget.
 
 A notice that was taken can still be held back, without a nack:
 
 - **The owner's switches.** The trunk page (`/apps/trunk`) has a switch for alerts from all apps, and one for each app that has sent any. A new app starts allowed.
-- **One every five seconds.** Each app gets at most one push every five seconds. What comes sooner waits, and when the five seconds are up the app gets one push: the notice itself if only one waited, or a summary titled "3 alerts from calendar" that lists their titles, with the tag `batch-<app>`. So send each reminder once, as it falls due, rather than in a burst.
+- **One every five seconds.** Each app gets at most one push every five seconds. What comes sooner waits, and when the five seconds are up the app gets one push: the notice itself if only one waited, or a summary titled "3 alerts from calendar". The summary lists the first five titles, each cut to 80 characters, and counts the rest. Its tag is `batch-` and the sender's id: `batch-<agent>`, or `batch-<agent>/<app>` for a named app, such as `batch-grubbery/calendar`. So send each reminder once, as it falls due, rather than in a burst.
 - **An hourly limit.** An app gets 30 pushes an hour unless the owner sets another limit for it on the trunk page, from a few up to 720, or none. Past it, the app's notices are dropped until the hour is up. A chat app the owner trusts can be given more; your app cannot raise its own.
 - **Devices.** Only devices whose app said it understands notices get one. An older app would show it as a chat message.
 
 Each of these leaves a line in trunk's log on the page, such as "notice from calendar: not pushed, this app is switched off". An agent can read the same log, and each app's counts, from the owner-only scry `/~/scry/trunk/debug.json`, under `log` and `senders`.
 
+## What these limits are not
+
+They keep a careless or buggy app from flooding the owner's phone. They are not a wall against a hostile one. Gall lets an agent name any origin for a poke it sends, so an agent can pose as another app or as the owner, and any web page the ship serves can post as the owner. An app the owner doesn't trust should not be installed: on Urbit it can already do anything as the ship.
+
 ## What the owner sees
 
-On Android, Talon shows the title and body as a notification on its channel for reminders from the ship. On an iPhone it is a standard alert from Talon. Trunk sends your app's name with every notice (`"app"` in the push), so the app on the phone can say where it came from. Notices with the same tag replace each other on both.
+On Android, Talon shows the title and body as a notification on its channel for reminders from the ship. On an iPhone it is a standard alert from Talon. Trunk sends your app's name with every notice (`"app"` in the push), and the agent it came through when that is a different name (`"via"`), so the app on the phone can say where it came from. Notices with the same tag replace each other on both.
 
 Notices are for things the owner would want to know with the phone in their pocket: a reminder, a time to leave, a mail from someone who matters. They are not for activity feeds or progress. The owner can switch your app off with one tap, so earn the place.

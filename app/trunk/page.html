@@ -187,12 +187,18 @@ async function load() {
 }
 
 async function act(body) {
-  const r = await fetch('/apps/trunk/action', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let r;
+  try {
+    r = await fetch('/apps/trunk/action', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    banner('That did not work: your ship did not answer.');
+    return false;
+  }
   if (r.status !== 204) banner('That did not work: your ship answered ' + r.status + '.');
   return r.status === 204;
 }
