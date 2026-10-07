@@ -40,8 +40,9 @@
       [%ring from=@p id=@t]
       [%ring-cancel id=@t reason=@t]
       [%test nonce=@t]
-      ::  an alert from another agent on our ship (wire 12)
-      [%notice tag=@t title=@t body=@t open=json]
+      ::  an alert from another agent on our ship (wire 12), and the
+      ::  name of the app it came from (wire 14)
+      [%notice from=@t tag=@t title=@t body=@t open=json]
       ::  an iPhone's app-icon count, with nothing shown (wire 12)
       [%badge n=@ud]
   ==
@@ -72,6 +73,54 @@
 +$  badge-state  [n=(unit @ud) sent=(map @t @ud) timer=(unit @da)]
 ::  how long the count may wait before it goes out on its own
 ++  badge-wait  ~s30
+::  an app that sends notices, as the trunk page shows it
+::    name     the name it declared, else the agent it came through
+::    agent    that agent (or %eyre, for the owner's web session)
+::    allowed  the owner's switch for it; a new app starts allowed
+::    last     when it last got a push out
+::    hour     pushes in the hour that began at `start`
+::    sent     notices delivered, ever; held: notices stopped, ever
+::    waiting  notices that came within +notice-gap of the last push,
+::             newest first, at most +wait-cap of them; `waited` counts
+::             them all, and `timer` is when the wait ends
++$  sender
+  $:  name=@t
+      agent=@tas
+      allowed=?
+      first=@da
+      last=(unit @da)
+      hour=[start=@da n=@ud]
+      sent=@ud
+      held=@ud
+      waiting=(list [tag=@t title=@t body=@t open=json])
+      waited=@ud
+      timer=(unit @da)
+  ==
+::  rate limits, per app. No more than one push every +notice-gap:
+::  what comes sooner waits, and goes as one push when the gap is up.
+::  And no more than +hourly-cap pushes an hour, so a buggy or hostile
+::  app on the ship cannot buzz the owner's phones all day.
+++  notice-gap  ~s5
+++  hourly-cap  30
+++  wait-cap  20
+::
+::  +batch: what one push says for the notices that waited: the notice
+::  itself, or "3 alerts from calendar" over their titles, oldest first
+::
+++  batch
+  |=  [name=@t waited=@ud waiting=(list [tag=@t title=@t body=@t open=json])]
+  ^-  [tag=@t title=@t body=@t open=json]
+  ?:  &(=(1 waited) ?=([* ~] waiting))  i.waiting
+  =/  titles=(list @t)  (flop (turn waiting |=([@t t=@t @t json] t)))
+  =/  shown  (scag 5 titles)
+  =/  more  (sub waited (min waited (lent shown)))
+  :^    (rap 3 ~['batch-' name])
+      (crip "{<waited>} alerts from {(trip name)}")
+    %-  crip
+    %+  weld
+      `tape`(zing (join "\0a" (turn shown trip)))
+    ?:(=(0 more) "" "\0aand {<more>} more")
+  ~
 ::  a push that may be sent again: to which device, to which target
 ::  (its +sham), and how many times it was sent again already
 +$  flight  [id=@t target=@ =hint tries=@ud]
@@ -150,7 +199,7 @@
     %-  obj
     :~  ['event' (qt 'notice')]  ['patp' patp]  ['tag' (qt tag.hint)]
         ['title' (qt title.hint)]  ['body' (qt body.hint)]
-        ['open' (en:json:html open.hint)]
+        ['open' (en:json:html open.hint)]  ['app' (qt from.hint)]
     ==
   ::
   ::  no UnifiedPush device takes one; +request never sends it
@@ -247,7 +296,7 @@
       ~[['kind' (qt 'alert')] ['patp' patp] ['whom' (qt tag.hint)]]
       ~[['postId' (qt '')] ['title' (qt title.hint)]]
       ~[['body' (qt body.hint)] ['event' (qt 'notice')]]
-      ~[['open' (en:json:html open.hint)]]
+      ~[['open' (en:json:html open.hint)] ['app' (qt from.hint)]]
       count
     ==
   ::
@@ -722,6 +771,39 @@
   =/  a  (find "@" (flop h))
   (crip ?~(a h (slag (sub (lent h) u.a) h)))
 ::
+::  +sender-of: who sent a notice, from the poke's provenance and the
+::  name it declared. Gall gives /gall/<agent> for another agent and
+::  /eyre for the owner's web session or Talon. The id is the agent,
+::  or "<agent>/<name>" for a name the agent did not have.
+::
+++  sender-of
+  |=  [sap=path declared=(unit @t)]
+  ^-  [id=@t name=@t agent=@tas]
+  =/  agent=@tas
+    ?:  ?=([%gall @ *] sap)  i.t.sap
+    ?~(sap %unknown i.sap)
+  ?~  declared  [agent agent agent]
+  ?:  =(u.declared agent)  [agent agent agent]
+  [(rap 3 ~[agent '/' u.declared]) u.declared agent]
+::
+::  +valid-app: a declared app name a page and a phone can show
+::
+++  valid-app
+  |=  name=@t
+  ^-  ?
+  ?&  !=('' name)
+      (lte (met 3 name) 40)
+      (levy (trip name) |=(c=@tD (gte c 32)))
+  ==
+::
+::  +roll-hour: start a new hour for `s` once its current one is over
+::
+++  roll-hour
+  |=  [s=sender now=@da]
+  ^-  sender
+  ?:  (lth (sub now (min now start.hour.s)) ~h1)  s
+  s(hour [now 0])
+::
 ::  +debug-json: what the debug page, Talon and an agent read, at
 ::  /~/scry/trunk/debug.json. It holds no secret, handle, endpoint
 ::  path or chat id, so a user can paste it to anyone. Talon reads
@@ -737,6 +819,7 @@
           meta=(map @t device-meta)
           drops=(list drop)
           badge=(unit @ud)
+          senders=(map @t sender)
           watches=(list [@t @t])
           apps=(list [@t ?])
           log=(list push-note:trunk)
@@ -781,6 +864,19 @@
       %-  pairs
       :~  at+(time at.d)  id+s+id.d  platform+s+platform.d
           reason+s+reason.d
+      ==
+      :-  %senders
+      :-  %a
+      %+  turn  ~(tap by senders)
+      |=  [id=@t x=sender]
+      %-  pairs
+      :~  id+s+id  name+s+name.x  agent+s+agent.x  allowed+b+allowed.x
+          first+(time first.x)
+          last+?~(last.x ~ (time u.last.x))
+          :-  %hour
+          ?:  (gte (sub now (min now start.hour.x)) ~h1)  (numb 0)
+          (numb n.hour.x)
+          sent+(numb sent.x)  held+(numb held.x)  waiting+(numb waited.x)
       ==
       watches+(pairs (turn watches |=([p=@t v=@t] [p s+v])))
       apps+(pairs (turn apps |=([n=@t r=?] [n b+r])))

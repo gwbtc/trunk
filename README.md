@@ -19,7 +19,7 @@ never touches audio.
 **1. Check the wire before anything else.**
 
 ```
-GET /~/scry/trunk/version.json   ->  {"wire":13}
+GET /~/scry/trunk/version.json   ->  {"wire":14}
 ```
 
 A missing scry means no desk, or one too old to say. A number lower
@@ -103,12 +103,17 @@ What gets pushed:
 - **badge**, an iPhone's app-icon count (wire 12), to iPhones whose `caps` include `badge`. Android has none.
 - **push-test** on request.
 
-Any agent on our ship can send a notice, such as a calendar reminder or a time to leave. Another ship cannot. `tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. All four fields together may be 4 KiB at most.
+Any agent on our ship can send a notice, such as a calendar reminder or a time to leave. Another ship cannot. [`docs/notifications.md`](docs/notifications.md) is the guide for app developers; in short:
 
 ```jsonc
-{"push-notice": {"tag": "cal-e1", "title": "Leave now", "body": "Meeting at 3",
-                 "open": {"app": "calendar", "event": "e1"}}}   // open may be null or left out
+// wire 14: name the app, as a grubbery app must, since its pokes all come from %grubbery
+{"push-notice-as": {"app": "calendar", "tag": "cal-e1", "title": "Leave now",
+                    "body": "Meeting at 3", "open": {"event": "e1"}}}   // open may be null or left out
+// wire 12: the same with no app, named after the agent that sent it
+{"push-notice": {"tag": "cal-e1", "title": "Leave now", "body": "Meeting at 3"}}
 ```
+
+`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. The title must not be empty, the app name may be 40 bytes, and all the fields together may be 4 KiB. Each app gets at most one push every five seconds: what comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<app>`. No app gets more than 30 pushes an hour. The owner can switch off all notices, or any one app, on the trunk page. Only the owner can: a switch poked by another agent is refused.
 
 UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, notices with `TTL: 3600` and `Urgency: high`, and everything else with `TTL: 86400` and `Urgency: normal`.
 
@@ -119,7 +124,7 @@ UnifiedPush devices get these bodies, built in the off-ship relay's key order, a
 {"event": "ring", "patp": "~ship", "from": "~caller", "id": "<call id>"}
 {"event": "ring-cancel", "patp": "~ship", "id": "<call id>", "reason": "hangup"}
 {"event": "push-test", "patp": "~ship", "nonce": "<nonce>"}
-{"event": "notice", "patp": "~ship", "tag": "<tag>", "title": "<title>", "body": "<body>", "open": <json>}
+{"event": "notice", "patp": "~ship", "tag": "<tag>", "title": "<title>", "body": "<body>", "open": <json>, "app": "<app>"}
 ```
 
 `whom` is `~ship` for a DM, `0v...` for a group DM and the nest for a channel.
@@ -134,7 +139,7 @@ An iPhone needs APNs, which speaks only HTTP/2 with ES256 tokens. Iris has neith
 // a notice: an alert with whom = its tag
 {"handle": "<h>", "secret": "<s>", "kind": "alert", "patp": "~ship",
  "whom": "<tag>", "postId": "", "title": "<title>", "body": "<body>",
- "event": "notice", "open": <json>}
+ "event": "notice", "open": <json>, "app": "<app>"}
 // a ring or its cancel: payload is exactly the UnifiedPush body above
 {"handle": "<h>", "secret": "<s>", "kind": "voip", "payload": {"event": "ring", ...}}
 // a read: the app takes back that chat's notifications
@@ -149,7 +154,7 @@ The ship sends a message, read, notice or badge again when the answer is a 5xx, 
 
 ### The trunk page (wire 12)
 
-Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page, and only the tile's icon at `/apps/trunk/icon.svg` is public.
+Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, a switch for each app that has sent a notice (wire 14), the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page, and only the tile's icon at `/apps/trunk/icon.svg` is public.
 
 The switches are one more `trunk-action`. Channel posts are `all` (every one `%activity` marks notified), `mentions` or `none`. A thread reply needs its chat's switch and `replies` both. `notices` covers alerts from other agents. An upgrade starts with everything on, which is how wire 11 behaved.
 
@@ -172,6 +177,9 @@ Talon reads each device's `sent` and `last` and the `drops` from it, so those na
               "sent": {"at": 1791335355100, "kind": "message"},
               "last": {"at": 1791335355181, "code": 200}}],
  "drops": [{"at": 1791335000000, "id": "...", "platform": "ios-gateway", "reason": "410"}],
+ "senders": [{"id": "grubbery/calendar", "name": "calendar", "agent": "grubbery",
+              "allowed": true, "first": 1791330000000, "last": 1791335000000,
+              "hour": 4, "sent": 12, "held": 0, "waiting": 0}],
  "watches": {"/v4": "live", "/v4/reads": "live"},
  "apps": {"activity": true, "settings": true},
  "log": [{"at": 1791335355181, "what": "DM: pushed to 1 device"}]}
@@ -278,6 +286,8 @@ lib/trunk-push.hoon        what wakes a phone, and the bytes that do it
 gen/test-*.hoon            checks to run on a ship, each answering %ok
 sidecar/                   coturn + Galène, and the listen page
 docs/design.md             how it works and why
+docs/notifications.md      how other apps send notifications through trunk
+AGENTS.md                  notes for coding agents working on trunk
 ```
 
 ## The desk
@@ -426,14 +436,16 @@ them on the ship they act for.
 ::  point the ship at its SFU (base url, Galène group, signing key)
 :trunk &trunk-action [%set-sfu 'https://sfu.example' 'talon' '<key>']
 
-::  push by hand (wire 11 and 12): register a device, send it a test,
+::  push by hand (wire 11 to 14): register a device, send it a test,
 ::  switch alerts from other apps off, send an alert as an app would,
-::  and remove the device. Talon does the first and last for you.
+::  switch one app off, and remove the device. Talon does the first
+::  and last for you.
 :trunk &trunk-action [%push-register 'my-phone' [[%unifiedpush 'https://ntfy.sh/up123'] (silt ~['read' 'notice'])]]
 :trunk &trunk-action [%push-test 'my-phone' 'hello']
 :trunk &trunk-action [%push-kinds [%.y %.y %all %.y %.y %.y %.n]]
 ::                                dm  club channel replies calls reads notices
-:trunk &trunk-action [%push-notice 'cal-1' 'Leave now' 'Meeting at 3' ~]
+:trunk &trunk-action [%push-notice-as 'calendar' 'cal-1' 'Leave now' 'Meeting at 3' ~]
+:trunk &trunk-action [%push-app 'dojo/calendar' %.n]
 :trunk &trunk-action [%push-unregister 'my-phone']
 ```
 

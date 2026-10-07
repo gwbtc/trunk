@@ -63,6 +63,7 @@
       state-13
       state-14
       state-15
+      state-16
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -260,7 +261,34 @@
       meta=(map @t device-meta:trunk-push)
       drops=(list drop:trunk-push)
       badge=badge-state:trunk-push
+      ::  pinned loosely: +hint:trunk-push's %notice gained its sender
+      ::  in wire 14, and %16 drops this queue anyway
+      flight=*
+  ==
+::  %16 knows which apps send notices (wire 14): each one's switch,
+::  its count this hour against +hourly-cap:trunk-push, and its
+::  history, for the trunk page.
++$  state-16
+  $:  %16
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
+      hosted=(map @t room:trunk)
+      known=lines:trunk
+      asked=(map [=ship name=@t] @da)
+      pol=policy:trunk
+      present=(map @t (map ship @da))
+      recording=(map @t (map ship @da))
+      beat=(unit @da)
+      push=(map @t push-device:trunk)
+      seen=(map @t @da)
+      rung=rung:trunk-push
+      kinds=push-kinds:trunk
+      log=(list push-note:trunk)
+      meta=(map @t device-meta:trunk-push)
+      drops=(list drop:trunk-push)
+      badge=badge-state:trunk-push
       flight=(map @uv flight:trunk-push)
+      senders=(map @t sender:trunk-push)
   ==
 +$  card  card:agent:gall
 ::  how long a minted ticket stays valid. Long enough for a call that
@@ -276,7 +304,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  13
+++  wire-version  14
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  how many lines one ship will host. A remote admin can open one, so
@@ -369,7 +397,7 @@
 ::  +$ policy, which forks to %allow and locks the ship down.
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
-=|  state-15
+=|  state-16
 =*  state  -
 ^-  agent:gall
 =<
@@ -397,15 +425,15 @@
   ::  every load binds /apps/trunk again; eyre keeps it ours
   =-  [[bind-card:hc -<] ->]
   ?-  -.old
-    %0  `this(state [%15 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~])
-    %1  `this(state [%15 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~])
-    %2  `this(state [%15 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~])
+    %0  `this(state [%16 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~])
+    %1  `this(state [%16 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~])
+    %2  `this(state [%16 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~])
     %3
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  ~  open-policy  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+  :*  %16  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  ~  open-policy  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
   ::  ship keeps ringing for anyone until its owner says otherwise.
@@ -413,8 +441,8 @@
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+  :*  %16  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
   ::  are things you opt into, never things an upgrade turns on.
@@ -422,8 +450,8 @@
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  (upgrade-rooms hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+  :*  %16  ice.old  sfu.old  (upgrade-rooms hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
   ::  per-room SFU, unset.
@@ -431,16 +459,16 @@
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
-      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+  :*  %16  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+      (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
     %7
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+  :*  %16  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
   ::  seat-roles. Sweep the group mirror now if its watch is live:
@@ -449,8 +477,8 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %15  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
-        known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+    :*  %16  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+        known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
   ?.  ?~(w %.n acked.u.w)  `this
@@ -461,42 +489,42 @@
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  hosted.old
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+  :*  %16  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  %10 gains the recording set, unset.
     %10
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  hosted.old
-      known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+  :*  %16  ice.old  sfu.old  hosted.old
+      known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  %11 gains dated asks so they can be pruned.
     %11
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  hosted.old
+  :*  %16  ice.old  sfu.old  hosted.old
       known.old  (stamp-asked asked.old now.bowl)  pol.old
-      present.old  recording.old  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+      present.old  recording.old  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
     %12
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  hosted.old
+  :*  %16  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
-      present.old  recording.old  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+      present.old  recording.old  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  %13 gains the push registry, empty.
     %13
   :-  ~
   %=  this
     state
-  :*  %15  ice.old  sfu.old  hosted.old
+  :*  %16  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
-      present.old  recording.old  beat.old  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~
+      present.old  recording.old  beat.old  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~
   ==  ==
   ::  %14 gains the push switches, all on, and an empty log. Its rung
   ::  calls are dropped: they did not keep which devices rang, and they
@@ -505,15 +533,28 @@
   :-  (activity-cards:hc push.old)
   %=  this
     state
-  :*  %15  ice.old  sfu.old  hosted.old
+  :*  %16  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
       present.old  recording.old  beat.old
       push.old  seen.old  ~  all-kinds:trunk-push  ~
       (~(run by push.old) |=(* `device-meta:trunk-push`[now.bowl ~ ~]))
-      ~  [~ ~ ~]  ~
+      ~  [~ ~ ~]  ~  ~
+  ==  ==
+  ::  %15 gains the app senders, none yet. Its retry queue is dropped:
+  ::  the notice hint gained its sender, and a retry is minutes old at
+  ::  most.
+    %15
+  :-  (activity-cards:hc push.old)
+  %=  this
+    state
+  :*  %16  ice.old  sfu.old  hosted.old
+      known.old  asked.old  pol.old
+      present.old  recording.old  beat.old
+      push.old  seen.old  rung.old  kinds.old  log.old
+      meta.old  drops.old  badge.old  ~  ~
   ==  ==
   ::  a reload: re-arm the activity watch if it went missing.
-    %15  [(activity-cards:hc push.old) this(state old)]
+    %16  [(activity-cards:hc push.old) this(state old)]
   ==
 
 ::
@@ -564,32 +605,33 @@
       [cards this]
     ::
         %push-kinds
+      ?>  by-owner:hc
       =.  log.state
         (note:trunk-push log.state now.bowl "push settings changed")
       `this(kinds.state push-kinds.act)
     ::
     ::  any agent on our ship may send one, by the src check above. It
     ::  is theirs to decide what is worth it: Talon's levels do not
-    ::  apply, only the notices switch and each device's caps.
+    ::  apply, only the notices switch, the app's own switch and cap,
+    ::  and each device's caps. A bad one crashes: a nack.
         %push-notice
-      =/  size
-        ;:  add  (met 3 tag.act)  (met 3 title.act)  (met 3 body.act)
-          (met 3 (en:json:html open.act))
-        ==
-      ?>  (lte size 4.096)
-      ?.  notices.kinds.state
-        :-  ~
-        %=  this
-          log.state
-        (note:trunk-push log.state now.bowl "notice: not pushed, notices are switched off")
-        ==
-      =/  hint=hint:trunk-push
-        [%notice tag.act title.act body.act open.act]
-      =^  cards  state  (send:hc state push.state hint)
+      =^  cards  state
+        (notice:hc state ~ tag.act title.act body.act open.act)
+      [cards this]
+    ::
+        %push-notice-as
+      =^  cards  state
+        (notice:hc state `app.act tag.act title.act body.act open.act)
+      [cards this]
+    ::
+    ::  an app's switch, which no app may flip for itself
+        %push-app
+      ?>  by-owner:hc
+      =/  x  (~(got by senders.state) id.act)
       =.  log.state
         %^  note:trunk-push  log.state  now.bowl
-        "notice: pushed to {(devices:hc (lent cards))}"
-      [cards this]
+        "{(trip name.x)}: notices {?:(allow.act "allowed" "switched off")}"
+      `this(senders.state (~(put by senders.state) id.act x(allowed allow.act)))
     ::
     ::  policy edits. Each echoes the whole policy back on /calls so a
     ::  ship's other devices converge without re-scrying.
@@ -1440,7 +1482,7 @@
         =.  log.state
           (note:trunk-push log.state now.bowl "could not read an activity fact")
         `this
-      =/  [cards=(list card) new=state-15 what=(unit tape)]  p.res
+      =/  [cards=(list card) new=state-16 what=(unit tape)]  p.res
       =.  state  new
       =?  log.state  ?=(^ what)  (note:trunk-push log.state now.bowl u.what)
       [cards this]
@@ -1636,6 +1678,18 @@
           !=(n (~(get by sent.badge.state) id))
       ==
     =^  cards  state  (send:hc state stale [%badge u.n])
+    [cards this]
+  ::  an app's notices that waited out +notice-gap:trunk-push go now,
+  ::  unless it was switched off while they waited
+  ?:  ?=([%push %notice @ ~] wire)
+    =/  id  (slav %t i.t.t.wire)
+    =/  got  (~(get by senders.state) id)
+    ?~  got  `this
+    =/  x=sender:trunk-push  u.got(timer ~)
+    ?:  |(!notices.kinds.state !allowed.x)
+      =/  y  x(held (add held.x waited.x), waiting ~, waited 0)
+      `this(senders.state (~(put by senders.state) id y))
+    =^  cards  state  (deliver:hc state id x)
     [cards this]
   ?:  ?=([%eyre %connect ~] wire)
     ?.  ?=([%eyre %bound *] sign-arvo)  `this
@@ -2249,11 +2303,11 @@
 ::  answer, after a wait.
 ::
 ++  send
-  |=  [s=state-15 to=(map @t push-device:trunk) =hint:trunk-push]
-  ^-  [(list card) state-15]
+  |=  [s=state-16 to=(map @t push-device:trunk) =hint:trunk-push]
+  ^-  [(list card) state-16]
   =/  todo  ~(tap by to)
   =|  cards=(list card)
-  |-  ^-  [(list card) state-15]
+  |-  ^-  [(list card) state-16]
   ?~  todo  [(flop cards) s]
   =/  nonce=@uv  (sham eny.bowl p.i.todo hint)
   =^  card  s  (one s p.i.todo q.i.todo nonce hint)
@@ -2264,8 +2318,8 @@
 ::  again, and the count an iPhone was given
 ::
 ++  one
-  |=  [s=state-15 id=@t dev=push-device:trunk nonce=@uv =hint:trunk-push]
-  ^-  [(unit card) state-15]
+  |=  [s=state-16 id=@t dev=push-device:trunk nonce=@uv =hint:trunk-push]
+  ^-  [(unit card) state-16]
   =/  count=(unit @ud)
     ?:  ?=(%badge -.hint)  `n.hint
     ?.  ?=(?(%message %notice) -.hint)  ~
@@ -2295,8 +2349,8 @@
 ::  out as it is now, not as it was.
 ::
 ++  resend
-  |=  [s=state-15 nonce=@uv fly=flight:trunk-push dev=push-device:trunk]
-  ^-  [(list card) state-15]
+  |=  [s=state-16 nonce=@uv fly=flight:trunk-push dev=push-device:trunk]
+  ^-  [(list card) state-16]
   =/  =hint:trunk-push
     ?.  &(?=(%badge -.hint.fly) ?=(^ n.badge.s))  hint.fly
     [%badge (need n.badge.s)]
@@ -2314,8 +2368,8 @@
 ::  their mark bumps. Runs under mule in +on-agent.
 ::
 ++  activity-hints
-  |=  [s=state-15 reads=? =cage]
-  ^-  [(list card) state-15 (unit tape)]
+  |=  [s=state-16 reads=? =cage]
+  ^-  [(list card) state-16 (unit tape)]
   ?.  ?:  reads  ?=([%read *] q.q.cage)
       ?=([?(%add %activity) *] q.q.cage)
     [~ s ~]
@@ -2375,8 +2429,8 @@
 ::  count and was told another number gets the new one.
 ::
 ++  count-changed
-  |=  [s=state-15 jon=json]
-  ^-  [(list card) state-15]
+  |=  [s=state-16 jon=json]
+  ^-  [(list card) state-16]
   =/  got  (at:trunk-push jon ~['activity' 'base' 'notify-count'])
   ?.  ?=([~ %n *] got)  [~ s]
   =/  n  (rush p.u.got dem)
@@ -2409,8 +2463,8 @@
 ::  un-rings the ones we woke.
 ::
 ++  signal-cards
-  |=  [s=state-15 from=ship =sig:trunk]
-  ^-  [(list card) state-15]
+  |=  [s=state-16 from=ship =sig:trunk]
+  ^-  [(list card) state-16]
   ?+  -.sig  [~ s]
       %ring
     ::  calls switched off, nothing to wake, an id too long to be a
@@ -2438,8 +2492,8 @@
 ::  devices took the call.
 ::
 ++  settle-cards
-  |=  [s=state-15 id=@t answered=?]
-  ^-  [(list card) state-15]
+  |=  [s=state-16 id=@t answered=?]
+  ^-  [(list card) state-16]
   =/  [to=(set @t) new=rung:trunk-push]
     (settle:trunk-push rung.s id answered now.bowl)
   =.  rung.s  new
@@ -2476,7 +2530,7 @@
 ::  +debug: the debug report, with what only the bowl can tell
 ::
 ++  debug
-  |=  s=state-15
+  |=  s=state-16
   ^-  json
   =/  watch
     |=  w=wire
@@ -2496,8 +2550,108 @@
     meta.s
     drops.s
     n.badge.s
+    senders.s
     ~[['/v4' (watch /push/activity)] ['/v4/reads' (watch /push/reads)]]
     ~[['activity' (running %activity)] ['settings' (running %settings)]]
     log.s
   ==
+::
+::  +by-owner: did this poke come from the owner, through the trunk
+::  page or Talon (eyre) or the dojo, rather than from another agent on
+::  the ship? Gall names a poke's origin in sap.bowl.
+::
+++  by-owner
+  ^-  ?
+  ?|  ?=([%eyre *] sap.bowl)
+      ?=([%gall %dojo *] sap.bowl)
+      ?=([%gall %hood *] sap.bowl)
+  ==
+::
+::  +notice: an alert from an app on our ship, through the global
+::  switch and the app's own. `declared` is the name it gave, if any.
+::  A notice with no title, an unshowable name or more than 4 KiB in
+::  all crashes, which nacks the poke. One that comes within
+::  +notice-gap of the app's last push waits for the gap to end, and
+::  all that waited go as one push.
+::
+++  notice
+  |=  $:  s=state-16
+          declared=(unit @t)
+          tag=@t
+          title=@t
+          body=@t
+          open=json
+      ==
+  ^-  [(list card) state-16]
+  ?>  !=('' title)
+  ?>  ?|(?=(~ declared) (valid-app:trunk-push u.declared))
+  =/  size
+    ;:  add  (met 3 tag)  (met 3 title)  (met 3 body)
+      (met 3 (en:json:html open))  (met 3 (fall declared ''))
+    ==
+  ?>  (lte size 4.096)
+  =/  [id=@t name=@t agent=@tas]  (sender-of:trunk-push sap.bowl declared)
+  =/  x=sender:trunk-push
+    (~(gut by senders.s) id [name agent %.y now.bowl ~ [now.bowl 0] 0 0 ~ 0 ~])
+  =/  off=(unit tape)
+    ?.  notices.kinds.s  `"notices are switched off"
+    ?.  allowed.x  `"this app is switched off"
+    ~
+  ?^  off
+    =.  senders.s  (~(put by senders.s) id x(held +(held.x)))
+    :-  ~
+    s(log (note:trunk-push log.s now.bowl "notice from {(trip name)}: not pushed, {u.off}"))
+  =/  item  [tag title body open]
+  =/  soon=?
+    ?|  ?=(^ timer.x)
+        ?&  ?=(^ last.x)
+            (lth (sub now.bowl (min now.bowl u.last.x)) notice-gap:trunk-push)
+    ==  ==
+  ?.  soon  (deliver s id x(waiting ~[item], waited 1))
+  =/  at=@da
+    ?^  timer.x  u.timer.x
+    (add (fall last.x now.bowl) notice-gap:trunk-push)
+  =/  waiting
+    %+  scag  wait-cap:trunk-push
+    `(list [tag=@t title=@t body=@t open=json])`[item waiting.x]
+  =.  senders.s
+    (~(put by senders.s) id x(waiting waiting, waited +(waited.x), timer `at))
+  :_  s
+  ?^  timer.x  ~
+  ~[[%pass /push/notice/(scot %t id) %arvo %b %wait at]]
+::
+::  +deliver: one push for what `x` has waiting, the notice itself or
+::  a summary of them all, unless the app is over its hourly cap
+::
+++  deliver
+  |=  [s=state-16 id=@t x=sender:trunk-push]
+  ^-  [(list card) state-16]
+  =.  x  (roll-hour:trunk-push x now.bowl)
+  =/  who  "notice from {(trip name.x)}"
+  ?~  waiting.x  [~ s(senders (~(put by senders.s) id x(timer ~)))]
+  ?:  (gte n.hour.x hourly-cap:trunk-push)
+    =.  senders.s
+      %+  ~(put by senders.s)  id
+      x(held (add held.x waited.x), waiting ~, waited 0, timer ~)
+    :-  ~
+    %=  s
+      log
+    (note:trunk-push log.s now.bowl "{who}: not pushed, over {<hourly-cap:trunk-push>} this hour")
+    ==
+  =/  one  (batch:trunk-push name.x waited.x waiting.x)
+  =^  cards  s
+    (send s push.s [%notice name.x tag.one title.one body.one open.one])
+  =/  how  ?:((gth waited.x 1) "{<waited.x>} at once, sent as one, " "")
+  =.  senders.s
+    %+  ~(put by senders.s)  id
+    %=  x
+      last     `now.bowl
+      n.hour   +(n.hour.x)
+      sent     (add sent.x waited.x)
+      waiting  ~
+      waited   0
+      timer    ~
+    ==
+  :-  cards
+  s(log (note:trunk-push log.s now.bowl "{who}: {how}pushed to {(devices (lent cards))}"))
 --

@@ -105,6 +105,12 @@
   </section>
 
   <section>
+    <h2>Apps that send alerts</h2>
+    <p>Each app on this ship that has sent an alert, with its own switch. A new app is let through until you switch it off. Each app gets at most one alert every 5 seconds, and alerts that come faster are combined into one. None may send more than 30 in an hour. Trunk tells your phone which app each alert came from.</p>
+    <div id="senders"></div>
+  </section>
+
+  <section>
     <h2>Devices</h2>
     <div id="devices"></div>
   </section>
@@ -240,6 +246,35 @@ function render() {
       const kind = x.platform === 'ios-gateway' ? 'iPhone' : 'Android';
       dev.append(el('div', 'dropped', x.id + ' (' + kind + '), answered ' + x.reason + ', ' + ago(x.at)));
     }
+  }
+
+  const sd = $('senders');
+  sd.replaceChildren();
+  const senders = data.senders || [];
+  if (!senders.length) sd.append(el('div', 'empty', 'No app has sent an alert yet.'));
+  for (const x of senders.slice().sort((a, b) => (b.last || 0) - (a.last || 0))) {
+    const row = el('div', 'row');
+    const lab = el('label');
+    lab.htmlFor = 'app-' + x.id;
+    lab.append(x.name);
+    const bits = [];
+    if (x.agent !== x.name) bits.push('through ' + x.agent);
+    bits.push(x.last ? 'last alert ' + ago(x.last) : 'none sent yet');
+    bits.push(x.hour + ' of 30 this hour');
+    if (x.waiting) bits.push(x.waiting + ' waiting');
+    if (x.held) bits.push(x.held + ' stopped');
+    lab.append(el('span', 'hint', bits.join(' · ')));
+    const box = el('input');
+    box.type = 'checkbox';
+    box.id = 'app-' + x.id;
+    box.checked = !!x.allowed;
+    box.onchange = async () => {
+      box.disabled = true;
+      await act({ 'push-app': { id: x.id, allow: box.checked } });
+      load();
+    };
+    row.append(lab, box);
+    sd.append(row);
   }
 
   const st = $('status');

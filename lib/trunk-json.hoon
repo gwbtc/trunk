@@ -33,6 +33,9 @@
 ::                           "notices":true}}
 ::                           (channel: "all" | "mentions" | "none")
 ::            {"push-notice":{"tag":t,"title":t,"body":b,"open":j|null}}
+::            {"push-notice-as":{"app":a,"tag":t,"title":t,"body":b,
+::                               "open":j|null}}
+::            {"push-app":{"id":i,"allow":true}}
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
 ::            {"hangup":{"id":i}}
@@ -134,6 +137,12 @@
       ::  open may be left out, which is null
       :-  %push-notice
       (ou ~[tag+(un so) title+(un so) body+(un so) open+(uf ~ same)])
+      :-  %push-notice-as
+      %-  ou
+      :~  app+(un so)  tag+(un so)  title+(un so)  body+(un so)
+          open+(uf ~ same)
+      ==
+      [%push-app (ot ~[id+so allow+bo])]
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]

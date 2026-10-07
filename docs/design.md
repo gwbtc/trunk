@@ -253,7 +253,7 @@ The notification is cancelled as soon as the controller leaves
 
 On iOS a ring arrives as a PushKit VoIP push, which Talon reports to CallKit at once, as Apple requires.
 
-## Push from the ship (wire 11 to 12)
+## Push from the ship (wire 11 to 14)
 
 Until wire 11 a suspended phone heard its ship only through Talon's off-ship relay, which logged in with the user's `+code`, kept a session cookie, and decided on its own what was worth a notification. Now `%trunk` does all of that on the ship, and the only thing left off it is the one thing a ship cannot do: sign an iPhone's push with Apple's key. Iris speaks neither HTTP/2 nor ES256, and the key cannot be handed to a ship, since whoever holds it can push to any Talon iPhone. So a small Nisfeb gateway maps a device's handle to its APNs tokens and signs, and nothing more.
 
@@ -261,7 +261,8 @@ Until wire 11 a suspended phone heard its ship only through Talon's off-ship rel
 - **What notifies.** A post or reply `%activity` marks notified, then the owner's switches on the trunk page, then Talon's per-chat level from `%settings`. A chat with no level is at "mentions", which is Talon's default, so a channel post with no mention stays quiet unless the user sets that channel to "All messages". Posts over five minutes old never notify, and none twice.
 - **Who gets what.** Each device declares what it understands in `caps` ("read", "notice", "badge"). An app that never said it understands a kind never gets it, because an older app shows any push it does not know as a new message.
 - **Delivery.** One iris request per device. A dead endpoint (404, 410, or 401 from the gateway) drops the device, unless it registered again since the push left. Messages, reads, notices and badges get two more tries on a 5xx, a 429 or no answer. Rings never do, since they are stale in seconds.
-- **The page.** The owner sees the switches, the devices, the `%activity` watches and a log of decisions at `/apps/trunk`, and the same data is one owner-only scry for Talon and for a user's agent. It never holds a secret, an endpoint's path or which chat a message was in.
+- **Other apps.** Any agent on the ship can send a notice (wire 12). Trunk knows the sending agent from gall's `sap.bowl`, and an app behind a shared agent, as every grubbery app is, names itself (wire 14). Each app gets its own switch, one push every five seconds with the rest batched into one, and 30 pushes an hour, so no app on the ship can flood the owner's phones. Only the owner can flip a switch: `+by-owner` refuses one poked by another agent. See `docs/notifications.md`.
+- **The page.** The owner sees the switches, the apps, the devices, the `%activity` watches and a log of decisions at `/apps/trunk`, and the same data is one owner-only scry for Talon and for a user's agent. It never holds a secret, an endpoint's path or which chat a message was in.
 
 The README has the wire: the pokes, every body a device or the gateway receives, and the debug report.
 

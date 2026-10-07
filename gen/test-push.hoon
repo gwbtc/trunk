@@ -547,6 +547,7 @@
           (my ['phone' [t0 `[t0 %message] `[t0 200]]] ~)
           ~[[t0 'gone' %ios-gateway '410']]
           `3
+          ~
           ~[['/v4' 'live']]
           ~[['activity' %.y]]
           (note ~ t0 "DM: pushed to 2 devices")
@@ -569,6 +570,7 @@
           (my ['phone' [t0 `[t0 %message] `[t0 200]]] ~)
           ~[[t0 'gone' %ios-gateway '410']]
           `3
+          ~
           ~
           ~
           ~
@@ -606,7 +608,7 @@
       :-  'a notice, to the gateway'
       =/  open  (j '{"app":"calendar","event":"e1"}')
       .=  %:  gateway-body  zod  'h'  's'  (sy 'notice' ~)  `0
-            [%notice 'cal-e1' 'Leave now' 'Meeting at 3' open]
+            [%notice 'calendar' 'cal-e1' 'Leave now' 'Meeting at 3' open]
           ==
       :-  ~
       %+  rap  3
@@ -614,12 +616,12 @@
           '"whom":"cal-e1","postId":"","title":"Leave now",'
           '"body":"Meeting at 3","event":"notice",'
           (cat 3 '"open":' (en:json:html open))
-          '}'
+          ',"app":"calendar"}'
       ==
     ::
       :-  'a notice, to UnifiedPush: urgent, an hour, caps only'
       =/  dev=push-device:trunk  [[%unifiedpush 'https://n.example/u'] (sy 'notice' ~)]
-      =/  =hint  [%notice 'cal-e1' 'Leave now' 'Meeting at 3' ~]
+      =/  =hint  [%notice 'calendar' 'cal-e1' 'Leave now' 'Meeting at 3' ~]
       ?&  .=  (request zod dev ~ hint)
               :-  ~
               :^  %'POST'  'https://n.example/u'
@@ -630,7 +632,8 @@
               %-  oc
               %+  rap  3
               :~  '{"event":"notice","patp":"~zod","tag":"cal-e1",'
-                  '"title":"Leave now","body":"Meeting at 3","open":null}'
+                  '"title":"Leave now","body":"Meeting at 3","open":null,'
+                  '"app":"calendar"}'
               ==
           =(~ (request zod up ~ hint))
           =(~ (request zod gw ~ hint))
@@ -643,7 +646,7 @@
       ?&  (retryable [%message '~nec' '~nec/1' ~ ~ ~])
           (retryable [%read '~nec'])
           (retryable [%badge 1])
-          (retryable [%notice 't' 't' 'b' ~])
+          (retryable [%notice 'a' 't' 't' 'b' ~])
           !(retryable [%ring ~nec 'c'])
           !(retryable [%ring-cancel 'c' 'hangup'])
           !(retryable [%test 'n'])
@@ -666,6 +669,80 @@
           .=  `action:trunk`[%push-notice 't' 'ti' 'b' ~]
               %-  action-from-json:trunk-json
               (j '{"push-notice":{"tag":"t","title":"ti","body":"b"}}')
+      ==
+    ::
+      :-  'who sent a notice'
+      ?&  =(['calendar' 'calendar' %calendar] (sender-of /gall/calendar ~))
+          =(['calendar' 'calendar' %calendar] (sender-of /gall/calendar `'calendar'))
+          =(['grubbery/calendar' 'calendar' %grubbery] (sender-of /gall/grubbery `'calendar'))
+          =(['grubbery' 'grubbery' %grubbery] (sender-of /gall/grubbery ~))
+          =(['eyre' 'eyre' %eyre] (sender-of /eyre ~))
+          =(['unknown' 'unknown' %unknown] (sender-of / ~))
+      ==
+    ::
+      :-  'an app name a phone can show'
+      ?&  (valid-app 'calendar')
+          (valid-app 'Orrery 2')
+          !(valid-app '')
+          !(valid-app 'bad\0aname')
+          !(valid-app (crip (reap 41 'a')))
+      ==
+    ::
+      :-  'an app gets a fresh hour once the last one is over'
+      =/  x=sender  ['cal' %calendar %.y t0 ~ [t0 30] 30 0 ~ 0 ~]
+      ?&  =(30 n.hour:(roll-hour x (add t0 ~m59)))
+          =(0 n.hour:(roll-hour x (add t0 ~h1)))
+          =((add t0 ~h1) start.hour:(roll-hour x (add t0 ~h1)))
+      ==
+    ::
+      :-  'the report lists the apps that sent alerts'
+      =/  out=tape
+        %-  trip
+        %-  en:json:html
+        %:  debug-json  12  0v1  t0  all-kinds  ~  ~  ~  ~
+          (my ['grubbery/calendar' ['calendar' %grubbery %.n t0 `t0 [t0 4] 9 2 ~ 0 ~]] ~)
+          ~  ~  ~
+        ==
+      ?&  ?=(^ (find "\"senders\"" out))
+          ?=(^ (find "\"id\":\"grubbery/calendar\"" out))
+          ?=(^ (find "\"agent\":\"grubbery\"" out))
+          ?=(^ (find "\"allowed\":false" out))
+          ?=(^ (find "\"hour\":4" out))
+          ?=(^ (find "\"held\":2" out))
+      ==
+    ::
+      :-  'json: push-notice-as and push-app'
+      ?&  .=  `action:trunk`[%push-notice-as 'calendar' 't' 'ti' 'b' ~]
+              %-  action-from-json:trunk-json
+              (j '{"push-notice-as":{"app":"calendar","tag":"t","title":"ti","body":"b"}}')
+          .=  `action:trunk`[%push-app 'grubbery/calendar' %.n]
+              %-  action-from-json:trunk-json
+              (j '{"push-app":{"id":"grubbery/calendar","allow":false}}')
+      ==
+    ::
+      :-  'one notice that waited goes as itself'
+      =/  one  ['cal-1' 'Leave now' 'Meeting at 3' ~]
+      =(one (batch 'calendar' 1 ~[one]))
+    ::
+      :-  'several that waited go as one summary'
+      =/  b
+        %^  batch  'calendar'  3
+        :~  ['cal-3' 'Third' 'c' ~]
+            ['cal-2' 'Second' 'b' ~]
+            ['cal-1' 'First' 'a' ~]
+        ==
+      ?&  =('batch-calendar' tag.b)
+          =('3 alerts from calendar' title.b)
+          =('First\0aSecond\0aThird' body.b)
+          =(~ open.b)
+      ==
+    ::
+      :-  'a long burst shows five titles and counts the rest'
+      =/  items=(list [tag=@t title=@t body=@t open=json])
+        (turn (gulf 1 8) |=(n=@ud [(scot %ud n) (scot %ud n) '' ~]))
+      =/  b  (batch 'orrery' 12 items)
+      ?&  =('12 alerts from orrery' title.b)
+          =('8\0a7\0a6\0a5\0a4\0aand 7 more' body.b)
       ==
   ==
 =/  bad  (murn cases |=([n=@t o=?] ?:(o ~ `n)))

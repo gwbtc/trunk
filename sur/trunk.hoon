@@ -197,6 +197,14 @@
       ::  phone; `open` is for the app to act on when it is tapped.
       ::  Only devices whose caps include "notice" get one.
       [%push-notice tag=@t title=@t body=@t open=json]
+      ::  the same, naming the app it is for (wire 14). Trunk knows the
+      ::  agent a poke came from, but every grubbery app comes from
+      ::  %grubbery, so such an app names itself, e.g. 'calendar'. The
+      ::  phone shows the name, and the trunk page has a switch for it.
+      [%push-notice-as app=@t tag=@t title=@t body=@t open=json]
+      ::  let an app's notices through, or not (wire 14). Only the owner,
+      ::  from the trunk page, Talon or the dojo, never another agent.
+      [%push-app id=@t allow=?]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]
