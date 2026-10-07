@@ -68,14 +68,8 @@ Clients scry `/x/ice` at startup and hand the result to the call
 engine — nothing to configure app-side. Party-line tickets are minted
 on demand by whichever ship hosts the room.
 
-## 4. Serve the listen page
+## 4. The listen page
 
-`%trunk` mints listen links to `<sfu base>/listen/`, and Galène serves nothing there by itself. Copy `listen/index.html` next to the compose file and mount it read-only into Galène's static directory, in the galene service's `volumes`:
-
-```yaml
-      - ./listen:/static/listen:ro
-```
-
-then `docker compose up -d`. To change the page later without recreating the container, and so without dropping anyone on a line, replace the file and also `docker cp listen/index.html <galene container>:/static/listen/index.html`.
+`%trunk` mints listen links to `<sfu base>/listen/`. The compose file mounts `listen/` read-only at Galène's `/static/listen`, so the page is there once Galène is up. To change it later without recreating the container, and so without dropping anyone on a line, edit the file and also `docker cp listen/index.html <galene container>:/static/listen/index.html`.
 
 The page shows each person by the name their client put in Galène's per-user data (`{"name": ...}`), and otherwise by the username the host signed into their ticket, which is their `@p`.
