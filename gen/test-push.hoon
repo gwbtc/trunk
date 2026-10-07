@@ -284,8 +284,8 @@
             '"group/~nec/g":"{\\"level\\":\\"none\\"}",'
             '"chat/~nec/y":"{\\"level\\":\\"all\\"}"}}}'
         ==
-      ?&  =(`'none' (chat-level s 'chat/~nec/x' `'~nec/g'))
-          =(`'all' (chat-level s 'chat/~nec/y' `'~nec/g'))
+      ?&  =(`['none' %.y] (chat-level s 'chat/~nec/x' `'~nec/g'))
+          =(`['all' %.n] (chat-level s 'chat/~nec/y' `'~nec/g'))
           =(~ (chat-level s 'chat/~nec/z' `'~nec/h'))
           =(~ (chat-level s '~nec' ~))
       ==

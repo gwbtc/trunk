@@ -2437,10 +2437,14 @@
   =?  n.badge.s  ?=(^ n.badge.s)  `+(u.n.badge.s)
   ?.  (wants:trunk-push kinds.s u.post)
     [~ s `"{word}: not pushed, switched off in trunk's settings"]
-  =/  level  (notify-level whom.u.post group.u.post)
+  =/  got  (notify-level whom.u.post group.u.post)
+  =/  level  (bind got head)
   ?.  (allows:trunk-push whom.u.post level mention.u.post ?=(^ parent.u.post))
-    =/  why  (trip (fall level 'mentions'))
-    [~ s `"{word}: not pushed, Talon's level for that chat is {why}"]
+    =/  why=tape
+      ?~  got  "Talon has no level for that chat or its group, so only mentions"
+      ?:  from-group.u.got  "Talon's level for that chat's group is {(trip lev.u.got)}"
+      "Talon's level for that chat is {(trip lev.u.got)}"
+    [~ s `"{word}: not pushed, {why}"]
   ::  only an iPhone's alert shows the text, so only then is it read
   =/  ios=?
     (lien ~(val by push.s) |=(d=push-device:trunk ?=(%ios-gateway -.target.d)))
@@ -2486,7 +2490,7 @@
 ::
 ++  notify-level
   |=  [whom=@t group=(unit @t)]
-  ^-  (unit @t)
+  ^-  (unit [lev=@t from-group=?])
   =/  base=path  /(scot %p our.bowl)/settings/(scot %da now.bowl)
   ?.  .^(? %gu (snoc base %$))  ~
   %^  chat-level:trunk-push  .^(json %gx (weld base /desk/talon/json))

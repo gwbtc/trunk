@@ -650,18 +650,18 @@
   ?~  entry  ~
   (cord-at u.entry ~['level'])
 ::
-::  +chat-level: Talon's level for a post's chat. The chat's own entry
-::  wins. Else a channel takes its group's, kept under "group/<flag>"
-::  (no chat is keyed so). ~ when neither is set, which +allows reads
-::  as "mentions".
+::  +chat-level: Talon's level for a post's chat, and whether it is
+::  the group's. The chat's own entry wins. Else a channel takes its
+::  group's, kept under "group/<flag>" (no chat is keyed so). ~ when
+::  neither is set, which +allows reads as "mentions".
 ::
 ++  chat-level
   |=  [jon=json whom=@t group=(unit @t)]
-  ^-  (unit @t)
+  ^-  (unit [lev=@t from-group=?])
   =/  own  (level-of jon whom)
-  ?^  own  own
+  ?^  own  `[u.own %.n]
   ?~  group  ~
-  (level-of jon (cat 3 'group/' u.group))
+  (bind (level-of jon (cat 3 'group/' u.group)) |=(l=@t [l %.y]))
 ::
 ::  +preview: a one-line text preview of a post's content for an iOS
 ::  alert: the words and the ship names, at most 140 characters.
