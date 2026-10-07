@@ -244,20 +244,30 @@
       ==
     ::
       :-  'policy: none silences everything'
-      ?&  !(allows '~zod' `'none' %.y)
-          !(allows 'chat/~zod/x' `'none' %.y)
+      ?&  !(allows '~zod' `'none' %.y %.n)
+          !(allows 'chat/~zod/x' `'none' %.y %.n)
+          !(allows 'chat/~zod/x' `'none' %.y %.y)
       ==
     ::
       :-  'policy: mentions only for channels, DMs always'
-      ?&  !(allows 'chat/~zod/x' `'mentions' %.n)
-          (allows 'chat/~zod/x' `'mentions' %.y)
-          (allows '~zod' `'mentions' %.n)
-          (allows '0v1.abc' `'mentions' %.n)
+      ?&  !(allows 'chat/~zod/x' `'mentions' %.n %.n)
+          (allows 'chat/~zod/x' `'mentions' %.y %.n)
+          (allows '~zod' `'mentions' %.n %.n)
+          (allows '0v1.abc' `'mentions' %.n %.n)
       ==
     ::
-      :-  'policy: unset and all defer to the ship'
-      ?&  (allows 'chat/~zod/x' ~ %.n)
-          (allows 'chat/~zod/x' `'all' %.n)
+      :-  'policy: a notified reply passes mentions'
+      ?&  (allows 'chat/~zod/x' `'mentions' %.n %.y)
+          (allows 'chat/~zod/x' ~ %.n %.y)
+      ==
+    ::
+      :-  'policy: unset is mentions, as Talon shows it'
+      ?&  !(allows 'chat/~zod/x' ~ %.n %.n)
+          !(allows 'heap/~zod/x' ~ %.n %.n)
+          (allows 'chat/~zod/x' ~ %.y %.n)
+          (allows '~zod' ~ %.n %.n)
+          (allows '0v1.abc' ~ %.n %.n)
+          (allows 'chat/~zod/x' `'all' %.n %.n)
       ==
     ::
       :-  'level from settings'

@@ -2352,8 +2352,8 @@
   ?.  (wants:trunk-push kinds.s u.post)
     [~ s `"{word}: not pushed, switched off in trunk's settings"]
   =/  level  (notify-level whom.u.post)
-  ?.  (allows:trunk-push whom.u.post level mention.u.post)
-    =/  why  (trip (fall level ''))
+  ?.  (allows:trunk-push whom.u.post level mention.u.post ?=(^ parent.u.post))
+    =/  why  (trip (fall level 'mentions'))
     [~ s `"{word}: not pushed, Talon's level for that chat is {why}"]
   ::  only an iPhone's alert shows the text, so only then is it read
   =/  ios=?

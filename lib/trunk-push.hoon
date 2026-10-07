@@ -496,18 +496,22 @@
   %+  skim  ~(tap by seen)
   |=([@t t=@da] |((gth t now) (lte (sub now t) fresh-for)))
 ::
-::  +allows: Talon's per-chat level on top of %activity's own flag.
-::  `level` is ~ when the user never set one, and then the ship
-::  alone decides. A DM or club is addressed to you, so "mentions"
-::  there means "not every group post", not silence.
+::  +allows: Talon's per-chat level on top of %activity's own flag,
+::  as Talon applies it on the desktop and on Android. `level` is ~
+::  when the user never set one, and Talon shows and treats that as
+::  "mentions". A DM or club is addressed to you, so "mentions" there
+::  means "not every group post", not silence. And %activity notifies
+::  a reply only in a thread we wrote, replied in or were mentioned
+::  in, so a notified reply passes "mentions" too.
 ::
 ++  allows
-  |=  [whom=@t level=(unit @t) mention=?]
+  |=  [whom=@t level=(unit @t) mention=? reply=?]
   ^-  ?
-  ?~  level  %.y
-  ?:  =('none' u.level)  %.n
-  ?.  =('mentions' u.level)  %.y
+  =/  lev=@t  (fall level 'mentions')
+  ?:  =('none' lev)  %.n
+  ?.  =('mentions' lev)  %.y
   ?|  mention
+      reply
       ?&  !=("chat/" (scag 5 (trip whom)))
           ?=(~ (find "/" (trip whom)))
       ==
