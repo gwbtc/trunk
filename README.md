@@ -1,13 +1,10 @@
 # Trunk
 
-Voice calls and party lines over Urbit.
+Voice calls, party lines and push notifications over Urbit.
 
-`%trunk` is a Gall agent that does signalling and nothing else. It
-routes opaque SDP between ships for 1:1 calls, and for party lines it
-mints short-lived, room-scoped tokens for an SFU. It never sees media
-and never parses SDP. Its whole job is the trust boundary: local-only
-actions, and a signal's sender is the cryptographic ames source, never
-a claim in the payload.
+`%trunk` is a Gall agent. It routes opaque SDP between ships for 1:1 calls, and for party lines it mints short-lived, room-scoped tokens for an SFU. It never sees media and never parses SDP. Its job there is the trust boundary: local-only actions, and a signal's sender is the cryptographic ames source, never a claim in the payload.
+
+Since wire 11 it also wakes its owner's phones itself, with push notifications for calls, messages and alerts from other apps on the ship. Since wire 12 it serves its owner a page for those notifications and for debugging them. The one piece left off the ship is signing an iPhone's push with Apple's key, which a small gateway does.
 
 The client is separate. [Talon](https://github.com/nisfeb/talon) is one;
 the agent knows nothing about it, or about Tlon groups, or about
@@ -22,7 +19,7 @@ never touches audio.
 **1. Check the wire before anything else.**
 
 ```
-GET /~/scry/trunk/version.json   ->  {"wire":1}
+GET /~/scry/trunk/version.json   ->  {"wire":13}
 ```
 
 A missing scry means no desk, or one too old to say. A number lower
@@ -275,6 +272,10 @@ sequenceDiagram
 
 ```
 app/ lib/ mar/ sur/ gen/   the %trunk desk, laid out for a clay mount
+app/trunk/                 the owner's page and the tile's icon, built into the agent
+desk.docket-0              the Landscape tile
+lib/trunk-push.hoon        what wakes a phone, and the bytes that do it
+gen/test-*.hoon            checks to run on a ship, each answering %ok
 sidecar/                   coturn + Galène, and the listen page
 docs/design.md             how it works and why
 ```
@@ -312,9 +313,11 @@ cp "$PIER/base/sys.kelvin" "$PIER/trunk/sys.kelvin"
 ```dojo
 |commit %trunk
 |install our %trunk
++trunk!test-push
++trunk!test-mnemonym
 ```
 
-Both ends of a call need the desk. Read the current settings with
+Each check answers `%ok`, or names the cases that came out wrong. Both ends of a call need the desk. Read the current settings with
 `=dir /=trunk=` then `+trunk/policy`, or over HTTP at
 `/~/scry/trunk/policy.json` (eyre supplies the `%x` care itself — do
 not put it in the path).
@@ -422,6 +425,16 @@ them on the ship they act for.
 
 ::  point the ship at its SFU (base url, Galène group, signing key)
 :trunk &trunk-action [%set-sfu 'https://sfu.example' 'talon' '<key>']
+
+::  push by hand (wire 11 and 12): register a device, send it a test,
+::  switch alerts from other apps off, send an alert as an app would,
+::  and remove the device. Talon does the first and last for you.
+:trunk &trunk-action [%push-register 'my-phone' [[%unifiedpush 'https://ntfy.sh/up123'] (silt ~['read' 'notice'])]]
+:trunk &trunk-action [%push-test 'my-phone' 'hello']
+:trunk &trunk-action [%push-kinds [%.y %.y %all %.y %.y %.y %.n]]
+::                                dm  club channel replies calls reads notices
+:trunk &trunk-action [%push-notice 'cal-1' 'Leave now' 'Meeting at 3' ~]
+:trunk &trunk-action [%push-unregister 'my-phone']
 ```
 
 Read state over HTTP (eyre supplies the `%x` care — don't put it in
@@ -433,6 +446,8 @@ the path):
 /~/scry/trunk/lines.json      the lines this ship holds invitations to
 /~/scry/trunk/policy.json     who may ring
 /~/scry/trunk/ice.json        the ICE servers this ship advertises
+/~/scry/trunk/sfu.json        the SFU's base url and group, never its key
+/~/scry/trunk/debug.json      push devices, switches, watches and log
 ```
 
 The dojo form of the same reads is `.^(json %gx /=trunk=/lines/json)`.

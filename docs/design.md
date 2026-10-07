@@ -134,12 +134,13 @@ one upgrades every call made *to* you.
 
 ## Pieces
 
-- `urbit/trunk/` — the `%trunk` desk. `app/trunk.hoon` routes signals
-  and mints room tickets; `lib/trunk-jwt.hoon` signs the Galène JWTs;
-  `lib/trunk-json.hoon` is the wire's source of truth; `mar/trunk/*`
-  are the eyre-facing and ship-to-ship marks. Not self-contained yet:
-  installing it needs `default-agent`, `skeleton` and the
-  `bill`/`mime`/`json` marks copied from `%base`.
+- The `%trunk` desk, at this repo's root. `app/trunk.hoon` routes signals, mints room tickets, sends push hints and serves the owner's page (`app/trunk/page.html`, with the tile's `icon.svg`). `lib/trunk-jwt.hoon` signs the Galène JWTs. `lib/trunk-push.hoon` decides what wakes a phone and builds the bytes that do it. `lib/trunk-json.hoon` is the wire's source of truth. `mar/trunk/*` are the eyre-facing and ship-to-ship marks. The desk is not self-contained: the README's "The desk" lists what to copy from `%base` and `%landscape`.
+- `sidecar/`: compose file and setup for coturn + Galène, and the listen page.
+- `gen/trunk/policy.hoon`: a dojo read-out of the call policy, which
+  the trunk page does not show.
+
+Talon's side, in nisfeb/talon:
+
 - `call/TrunkWire.kt` — JSON wire, mirrors `lib/trunk-json.hoon`.
 - `call/CallController.kt` — 1:1 signaling state machine + metrics.
 - `call/CallEngine.kt` + platform engines — the 1:1 media half
@@ -150,9 +151,6 @@ one upgrades every call made *to* you.
   member derives the same line with no shared state.
 - UI: call button and `/call` in a DM, party-line button in a group
   channel, `CallOverlay` (ring / in-call banner) and `PartyLineBar`.
-- `sidecar/` — compose file and setup for coturn + Galène.
-- `gen/trunk/policy.hoon` — dojo read-out of the call policy, since
-  `%trunk` has no UI of its own.
 
 ## Who may ring you
 
@@ -203,9 +201,7 @@ behaviour keeps the allow set in sync itself.
 
 ### Reading and editing it
 
-The policy has no UI in `%trunk` — the desk stays headless so it can be
-shared. Talon renders it under Settings → "Who can call you". Outside
-Talon:
+The call policy has no UI in `%trunk`. The trunk page (wire 12) covers push notifications and their debugging, not who may ring. Talon renders the policy under Settings, "Who can call you". Outside Talon:
 
 ```dojo
 ::  read
@@ -232,12 +228,8 @@ A ring only reaches a sleeping device if three things line up.
 1. **`%trunk` emits it.** A `%recv` fact with a `%ring` sig on `/calls`.
    Policy is enforced before this point, so a blocked or unlisted
    caller never produces a fact and never wakes anyone.
-2. **The relay pushes a hint.** It subscribes to `%trunk /calls`
-   alongside `%activity /v4` on one channel, and POSTs
-   `{"event":"ring","patp","from","id"}` to the device's UnifiedPush
-   endpoint. Hint-only, like messages: no SDP or fingerprint leaves
-   the ship. Measured 64–136ms from ring to push against live ships.
-3. **Android rings.** `TalonMessagingReceiver` routes `event == "ring"`
+2. **`%trunk` pushes a hint.** Since wire 11 the ship does it itself: on the ring it POSTs `{"event":"ring","patp","from","id"}` to each registered UnifiedPush endpoint, and asks the APNs gateway for a VoIP push to each iPhone. Hint-only, like messages: no SDP or fingerprint leaves the ship. Before wire 11 Talon's off-ship relay did this, subscribed to `/calls` with the user's session, and measured 64 to 136 ms from ring to push against live ships. See "Push from the ship" below.
+3. **The phone rings.** On Android, `TalonMessagingReceiver` routes `event == "ring"`
    to a `CATEGORY_CALL` notification on its own channel — the system
    ringtone stream, not the notification blip — with a full-screen
    intent so it takes over a locked screen, and `CallStyle` on API 31+.
@@ -257,12 +249,21 @@ The notification is cancelled as soon as the controller leaves
   app has no signaling channel until the user opens it. Answering
   therefore costs a launch. Moving the controller into
   `TalonSyncService` is the fix.
-- **iOS.** `isCallsSupported` is false there; real ringing needs
-  CallKit plus PushKit, where Apple requires the app to report the
-  call to CallKit immediately on receiving the push.
-- **The distributor leg.** ship→relay is measured; relay→distributor→
-  device depends on which UnifiedPush distributor the user runs and
-  can only be measured on a real handset.
+- **The distributor leg.** ship to distributor to device depends on which UnifiedPush distributor the user runs, and can only be measured on a real handset.
+
+On iOS a ring arrives as a PushKit VoIP push, which Talon reports to CallKit at once, as Apple requires.
+
+## Push from the ship (wire 11 to 12)
+
+Until wire 11 a suspended phone heard its ship only through Talon's off-ship relay, which logged in with the user's `+code`, kept a session cookie, and decided on its own what was worth a notification. Now `%trunk` does all of that on the ship, and the only thing left off it is the one thing a ship cannot do: sign an iPhone's push with Apple's key. Iris speaks neither HTTP/2 nor ES256, and the key cannot be handed to a ship, since whoever holds it can push to any Talon iPhone. So a small Nisfeb gateway maps a device's handle to its APNs tokens and signs, and nothing more.
+
+- **Where events come from.** The agent watches its own `%activity`, at `/v4` for new posts and the badge count, and at `/v4/reads` for reads, which `%activity` gives only there. Each fact is turned into JSON through `%activity`'s own desk, the conversion eyre ran for the relay, so trunk never casts Tlon's types and rides out their mark bumps. Rings come from trunk itself.
+- **What notifies.** A post or reply `%activity` marks notified, then the owner's switches on the trunk page, then Talon's per-chat level from `%settings`. Posts over five minutes old never notify, and none twice.
+- **Who gets what.** Each device declares what it understands in `caps` ("read", "notice", "badge"). An app that never said it understands a kind never gets it, because an older app shows any push it does not know as a new message.
+- **Delivery.** One iris request per device. A dead endpoint (404, 410, or 401 from the gateway) drops the device, unless it registered again since the push left. Messages, reads, notices and badges get two more tries on a 5xx, a 429 or no answer. Rings never do, since they are stale in seconds.
+- **The page.** The owner sees the switches, the devices, the `%activity` watches and a log of decisions at `/apps/trunk`, and the same data is one owner-only scry for Talon and for a user's agent. It never holds a secret, an endpoint's path or which chat a message was in.
+
+The README has the wire: the pokes, every body a device or the gateway receives, and the debug report.
 
 ## One line per group, and the group's admins own it
 
@@ -465,47 +466,22 @@ on top of `TRUNK_E2E=1`.
 
 ## Installing the desk
 
-Validated on two fake ships. `|rein` alone is not enough — gall reports
-"not running %trunk yet" until the desk has been installed once.
+The README's "The desk" has the steps and the list of files to copy from `%base` and `%landscape`. Check that `sys.kelvin` matches the ship's zuse, since a mismatch fails the commit with no useful message. `|rein` alone is not enough: gall reports "not running %trunk yet" until the desk has been installed once.
 
-```dojo
-|new-desk %trunk
-|mount %trunk
-|mount %base          :: to borrow the shared libs below
-```
-
-Copy `urbit/trunk/{app,sur,lib,mar,desk.bill,sys.kelvin}` into the
-mounted desk, then copy from `%base` (the desk is not self-contained):
-
-```
-lib/default-agent.hoon  lib/skeleton.hoon
-mar/bill.hoon  mar/mime.hoon  mar/json.hoon
-```
-
-Check `sys.kelvin` matches the ship's zuse — a fake booted from a
-recent pill wants `[%zuse 408]`, and a mismatch fails the commit with
-no useful message. Then:
-
-```dojo
-|commit %trunk
-|install our %trunk
-```
-
-Point the ship at its sidecar once (see `sidecar/README.md` for the
-key):
+Then point the ship at its sidecar once (see `sidecar/README.md` for the key):
 
 ```dojo
 :trunk &trunk-action [%set-ice ~[['stun:host:3478' '' ''] ['turn:host:3478' 'talon' 'PASS']]]
 :trunk &trunk-action [%set-sfu ['http://host:8444' 'talon' 'KEY']]
 ```
 
-Use an address the *other devices* can reach. `localhost` works from a
-desktop on the same box and fails from a phone — that mistake costs a
-testing session.
+Use an address the *other devices* can reach. `localhost` works from a desktop on the same box and fails from a phone, and that mistake costs a testing session.
 
 ## Automated checks
 
-Faster than driving the UI, and they run against real ships:
+On a ship, the desk's own generators each answer `%ok` or name the cases that failed: `+trunk!test-push` (push bodies pinned to the old relay's bytes, the policy and switches, the preview, the `%activity` event shapes, ring bookkeeping, the debug report's redaction) and `+trunk!test-mnemonym`.
+
+Talon's end-to-end tests are faster than driving the UI, and they run against real ships:
 
 ```
 TRUNK_E2E=1 TRUNK_SFU_KEY=<key> TRUNK_SFU=http://<lan-ip>:8444 \
@@ -631,8 +607,9 @@ fixed in the same pass:
   hostile ship could push a grant naming its own SFU and the victim
   would publish its microphone there. The agent now records outstanding
   `%ask`s and accepts a `%grant`/`%deny` only as the answer to one.
-  Verified: after a completed join `+dbug %state` shows `asked={}`,
-  so any later grant fails the check.
+  Verified then: after a completed join `+dbug %state` showed
+  `asked={}`, so any later grant fails the check. (Wire 12 removed
+  dbug, which served the whole state to any agent on the ship.)
 - **Invitation list is remote-controlled**, so `%announce` is capped
   (`invite-cap`) rather than growing without bound.
 - Membership is checked host-side at mint time, and `sub` always names the *asking* ship by its `@p`. A member cannot mint a ticket for anyone else.
@@ -652,9 +629,6 @@ fixed in the same pass:
   teardown, which used to leave Galène with an abrupt EOF), but the
   reaping delay is the server's. `PartyLineE2ETest` sidesteps it by
   using a fresh room name per run.
-- No party-line UI on iOS (`isCallsSupported` is false there), which
-  also means no call-policy editor there — an iOS-only user has to set
-  it from another device or the dojo.
 - The SFU sees plaintext audio, exactly as the host's ship already
   sees the group's messages. Host-blind party lines would need
   insertable-streams E2EE — a v3+ concern with real key-rotation
@@ -692,6 +666,4 @@ way.
 
 ## Next
 
-Split desk + sidecar into the `trunkline` repo. WAN metrics against
-real ships. Then v3 telephony polish: CallKit / ConnectionService,
-APNs VoIP via user relays, ICE restart on network change.
+Done since this list was first written: the desk and sidecar live in their own repo (gwbtc/trunk), iOS rings through CallKit and PushKit, and the ship sends its own pushes, with the APNs gateway as the only piece off the ship. Still ahead: WAN metrics against real ships, ConnectionService on Android, ICE restart on network change, and TLS in front of Galène.
