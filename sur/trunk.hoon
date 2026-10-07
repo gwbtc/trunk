@@ -98,6 +98,22 @@
       [%ios-gateway gateway=@t handle=@t secret=@t]
   ==
 +$  push-device  [target=push-target caps=(set @t)]
+::  which kinds of push hint the ship sends at all (wire 12). One set
+::  for the whole ship; Talon's per-chat levels still apply on top.
+::    channel  %all: every channel post %activity marks notified;
+::             %mentions: only those that mention us; %none: none
+::  A reply needs its chat's switch and `replies` both on. The bunt
+::  of `channel` is %none, so always start from +all-kinds:trunk-push.
++$  push-kinds
+  $:  dm=?
+      club=?
+      channel=?(%all %mentions %none)
+      replies=?
+      calls=?
+      reads=?
+  ==
+::  one line of the push log, for the debug page
++$  push-note  [at=@da what=@t]
 ::  local client -> own agent
 +$  action
   $%  [%send =ship =sig]
@@ -173,6 +189,7 @@
       [%push-register id=@t =push-device]
       [%push-unregister id=@t]
       [%push-test id=@t nonce=@t]
+      [%push-kinds =push-kinds]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]

@@ -132,6 +132,31 @@ An iPhone gets no read push. Its alert stays until the app can clear it.
 
 The ship never retries a push. A late ring is worse than none, and messages sync when the app opens. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept. Any other answer is only logged.
 
+### The trunk page (wire 12)
+
+Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page, and only the tile's icon at `/apps/trunk/icon.svg` is public.
+
+The switches are one more `trunk-action`. Channel posts are `all` (every one `%activity` marks notified), `mentions` or `none`. A thread reply needs its chat's switch and `replies` both. An upgrade starts with everything on, which is how wire 11 behaved.
+
+```jsonc
+{"push-kinds": {"dm": true, "club": true, "channel": "all",
+                "replies": true, "calls": true, "reads": true}}
+```
+
+The page posts its actions to `POST /apps/trunk/action` with the same JSON as a poke, and the route hands them to the poke code. It takes `content-type: application/json` only, which a page on another site cannot send without a CORS preflight that eyre refuses. It answers 204 when the action went through, 400 for JSON it cannot read, 415 for anything but JSON, and 422 when trunk refused the action.
+
+Everything the page shows is one owner-only scry, `/~/scry/trunk/debug.json`, so a user can hand it to whoever helps them or to their agent. It never carries a secret, a handle, an endpoint's path or a chat's id: devices show only the host their pushes go to, and the log names the kind of chat, never which one.
+
+```jsonc
+{"wire": 12, "desk-hash": "0v...", "now": 1791335265091,
+ "kinds": {...as above...},
+ "devices": [{"id": "...", "platform": "unifiedpush", "host": "ntfy.sh",
+              "caps": ["read"], "last": {"at": 1791335355181, "code": 200}}],
+ "watches": {"/v4": "live", "/v4/reads": "live"},
+ "apps": {"activity": true, "settings": true},
+ "log": [{"at": 1791335355181, "what": "DM: pushed to 1 device"}]}
+```
+
 ### Three things that will bite you
 
 - **A ticket is a fact every device of the ship sees.** Only the device
@@ -234,22 +259,28 @@ docs/design.md             how it works and why
 ## The desk
 
 **It is not self-contained.** Installing needs `default-agent` and
-`skeleton` from `%base`, plus the `bill`, `hoon`, `kelvin`, `mime`,
-`noun` and `txt` marks. That list is from a working install, not from
-memory; a missing mark fails the commit with a mark error rather than
-anything helpful.
+`skeleton` from `%base`, plus the `bill`, `hoon`, `html`, `kelvin`,
+`mime`, `noun`, `svg` and `txt` marks. Since wire 12 the Landscape tile
+also needs the `docket-0` mark, `lib/docket` and `sur/docket` from
+`%landscape`. That list is from a working install, not from memory; a
+missing mark fails the commit with a mark error rather than anything
+helpful.
 
 ```dojo
 |mount %base
+|mount %landscape
 |new-desk %trunk
 |mount %trunk
 ```
 
 ```bash
 PIER=/path/to/your/pier
-cp -r app lib mar sur gen desk.bill "$PIER/trunk/"
+cp -r app lib mar sur gen desk.bill desk.docket-0 "$PIER/trunk/"
 cp "$PIER"/base/lib/{default-agent,skeleton}.hoon           "$PIER/trunk/lib/"
-cp "$PIER"/base/mar/{bill,hoon,kelvin,mime,noun,txt}.hoon   "$PIER/trunk/mar/"
+cp "$PIER"/base/mar/{bill,hoon,html,kelvin,mime,noun,svg,txt}.hoon "$PIER/trunk/mar/"
+cp "$PIER"/landscape/mar/docket-0.hoon "$PIER/trunk/mar/"
+cp "$PIER"/landscape/lib/docket.hoon   "$PIER/trunk/lib/"
+cp "$PIER"/landscape/sur/docket.hoon   "$PIER/trunk/sur/"
 # Take the kelvin from YOUR ship. The checked-in one matches whatever
 # it was last developed against; a ship on a different one refuses.
 cp "$PIER/base/sys.kelvin" "$PIER/trunk/sys.kelvin"

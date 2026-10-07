@@ -545,4 +545,131 @@
   :-  (live-rung u.got now)
   ?:  answered  (~(put by r) id [now %.y])
   (~(del by r) id)
+::
+::  +all-kinds: every kind of push on, the behaviour before wire 12.
+::  The bunt of push-kinds has channel %none, so never lean on it.
+::
+++  all-kinds  `push-kinds:trunk`[%.y %.y %all %.y %.y %.y]
+::
+::  +chat-of: what kind of chat a post's whom names
+::
+++  chat-of
+  |=  whom=@t
+  ^-  ?(%dm %club %channel)
+  =/  t  (trip whom)
+  ?:  =("~" (scag 1 t))  %dm
+  ?:  =("0v" (scag 2 t))  %club
+  %channel
+::
+::  +wants: do the owner's switches let this post through? A reply
+::  needs its chat's switch and `replies` both.
+::
+++  wants
+  |=  [k=push-kinds:trunk p=post]
+  ^-  ?
+  ?.  |(?=(~ parent.p) replies.k)  %.n
+  ?-    (chat-of whom.p)
+      %dm    dm.k
+      %club  club.k
+  ::
+      %channel
+    ?-  channel.k
+      %all       %.y
+      %mentions  mention.p
+      %none      %.n
+    ==
+  ==
+::
+::  +chat-word: how the log names a post without naming its chat
+::
+++  chat-word
+  |=  p=post
+  ^-  tape
+  %+  weld
+    ?-  (chat-of whom.p)
+      %dm       "DM"
+      %club     "group DM"
+      %channel  ?~(parent.p "channel post" "channel")
+    ==
+  ?~(parent.p "" " reply")
+::
+::  +note: one more line in the log, newest first, keeping the last
+::  +log-cap of them
+::
+++  log-cap  50
+++  note
+  |=  [log=(list push-note:trunk) at=@da what=tape]
+  ^-  (list push-note:trunk)
+  (scag log-cap `(list push-note:trunk)`[[at (crip what)] log])
+::
+::  +host-of: the host of a url and nothing else. The debug report
+::  shows where a device's pushes go, never the path, query or user
+::  that would let someone else push to it.
+::
+++  host-of
+  |=  url=@t
+  ^-  @t
+  =/  t=tape  (trip url)
+  =/  s  (find "://" t)
+  =?  t  ?=(^ s)  (slag (add u.s 3) t)
+  =/  e  (find "/" t)
+  =/  h=tape  ?~(e t (scag u.e t))
+  =/  q  (find "?" h)
+  =?  h  ?=(^ q)  (scag u.q h)
+  =/  a  (find "@" (flop h))
+  (crip ?~(a h (slag (sub (lent h) u.a) h)))
+::
+::  +debug-json: what the debug page and an agent read, at
+::  /~/scry/trunk/debug.json. It holds no secret, handle, endpoint
+::  path or chat id, so a user can paste it to anyone.
+::
+++  debug-json
+  |=  $:  ver=@ud
+          hash=@uv
+          now=@da
+          kinds=push-kinds:trunk
+          push=(map @t push-device:trunk)
+          last=(map @t [at=@da code=@ud])
+          watches=(list [@t @t])
+          apps=(list [@t ?])
+          log=(list push-note:trunk)
+      ==
+  ^-  json
+  =,  enjs:format
+  %-  pairs
+  :~  wire+(numb ver)
+      desk-hash+s+(scot %uv hash)
+      now+(time now)
+      kinds+(kinds-json kinds)
+      :-  %devices
+      :-  %a
+      %+  turn  ~(tap by push)
+      |=  [id=@t dev=push-device:trunk]
+      =/  url=@t
+        ?-  -.target.dev
+          %unifiedpush  endpoint.target.dev
+          %ios-gateway  gateway.target.dev
+        ==
+      =/  l  (~(get by last) id)
+      %-  pairs
+      :~  id+s+id
+          platform+s+-.target.dev
+          host+s+(host-of url)
+          caps+a+(turn ~(tap in caps.dev) |=(c=@t s+c))
+          last+?~(l ~ (pairs ~[at+(time at.u.l) code+(numb code.u.l)]))
+      ==
+      watches+(pairs (turn watches |=([p=@t v=@t] [p s+v])))
+      apps+(pairs (turn apps |=([n=@t r=?] [n b+r])))
+      :-  %log
+      a+(turn log |=(n=push-note:trunk (pairs ~[at+(time at.n) what+s+what.n])))
+  ==
+::
+++  kinds-json
+  |=  k=push-kinds:trunk
+  ^-  json
+  =,  enjs:format
+  %-  pairs
+  :~  dm+b+dm.k  club+b+club.k  channel+s+channel.k
+      replies+b+replies.k  calls+b+calls.k  reads+b+reads.k
+  ==
 --

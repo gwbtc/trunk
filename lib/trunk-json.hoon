@@ -28,6 +28,9 @@
 ::                              "gateway":u,"handle":h,"secret":s,
 ::                              "caps":[]}}
 ::            {"push-unregister":d} | {"push-test":{"id":d,"nonce":n}}
+::            {"push-kinds":{"dm":true,"club":true,"channel":"all",
+::                           "replies":true,"calls":true,"reads":true}}
+::                           (channel: "all" | "mentions" | "none")
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
 ::            {"hangup":{"id":i}}
@@ -121,6 +124,11 @@
       [%push-register push-register-from-json]
       [%push-unregister so]
       [%push-test (ot ~[id+so nonce+so])]
+      :-  %push-kinds
+      %-  ot
+      :~  dm+bo  club+bo  channel+(su (perk %all %mentions %none ~))
+          replies+bo  calls+bo  reads+bo
+      ==
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]

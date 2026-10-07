@@ -1,0 +1,33 @@
+<!-- the trunk logo: a trunk line, the one line that carries many calls.
+     Three callers, as lattice's dots, come down into one line that ends
+     at your ship, the big dot. In the shared palette of sneagan's apps
+     (lattice, talon, auspex, calendar, orrery): amber (#f9a804) on deep
+     navy (#101541, vignetting to #080b25), with lattice's stroke weight
+     and round caps so the icons sit together on a home screen. Square
+     and full-bleed: the tile that shows it does its own rounding. The
+     agent serves this file at /apps/trunk/icon.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="72%">
+      <stop offset="0" stop-color="#171c52"/>
+      <stop offset="0.6" stop-color="#101541"/>
+      <stop offset="1" stop-color="#080b25"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g fill="none" stroke="#f9a804" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <!-- three lines in, merging where the trunk begins -->
+    <path d="M150 142 C 236 142 222 256 300 256"/>
+    <line x1="132" y1="256" x2="300" y2="256"/>
+    <path d="M150 370 C 236 370 222 256 300 256"/>
+    <!-- the trunk -->
+    <line x1="300" y1="256" x2="364" y2="256"/>
+  </g>
+  <!-- the callers, and the ship they all reach -->
+  <g fill="#f9a804">
+    <circle cx="128" cy="142" r="22"/>
+    <circle cx="110" cy="256" r="22"/>
+    <circle cx="128" cy="370" r="22"/>
+    <circle cx="398" cy="256" r="34"/>
+  </g>
+</svg>

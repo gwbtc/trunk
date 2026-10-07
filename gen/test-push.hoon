@@ -456,6 +456,96 @@
         '{"push-register":{"id":"d1","platform":"fcm","caps":[]}}'
       =/  r  (mule |.((action-from-json:trunk-json (j bad))))
       ?=(%| -.r)
+    ::
+      :-  'json: push-kinds'
+      .=  `action:trunk`[%push-kinds [%.n %.y %mentions %.y %.n %.y]]
+      %-  action-from-json:trunk-json
+      %-  j
+      %+  rap  3
+      :~  '{"push-kinds":{"dm":false,"club":true,"channel":"mentions",'
+          '"replies":true,"calls":false,"reads":true}}'
+      ==
+    ::
+      :-  'switches: all on lets every kind through'
+      ?&  (wants all-kinds (need (add-post dm-post)))
+          (wants all-kinds (need (add-post club-post)))
+          (wants all-kinds (need (add-post chan-post)))
+          (wants all-kinds (need (add-post chan-reply)))
+          (wants all-kinds (need (add-post club-reply)))
+      ==
+    ::
+      :-  'switches: each one stops its own kind'
+      =/  k  all-kinds
+      =/  dm  (need (add-post dm-post))
+      =/  club  (need (add-post club-post))
+      =/  reply  (need (add-post chan-reply))
+      ?&  !(wants k(dm %.n) dm)
+          (wants k(dm %.n) club)
+          !(wants k(club %.n) club)
+          !(wants k(replies %.n) reply)
+          (wants k(replies %.n) dm)
+          !(wants k(channel %none) reply)
+      ==
+    ::
+      :-  'switches: channel posts by mention'
+      =/  k  all-kinds
+      =/  quiet=post  ['chat/~nec/x' '~bus/1' ~ %.n ~]
+      =/  loud=post  ['chat/~nec/x' '~bus/1' ~ %.y ~]
+      ?&  (wants k(channel %mentions) loud)
+          !(wants k(channel %mentions) quiet)
+          (wants k quiet)
+          !(wants k(channel %none) loud)
+      ==
+    ::
+      :-  'the log names the kind of chat, never the chat'
+      ?&  =("DM" (chat-word (need (add-post dm-post))))
+          =("group DM reply" (chat-word (need (add-post club-reply))))
+          =("channel reply" (chat-word (need (add-post chan-reply))))
+          =("channel post" (chat-word (need (add-post chan-post))))
+      ==
+    ::
+      :-  'the log keeps the newest 50'
+      =/  l
+        =|  l=(list push-note:trunk)
+        =/  i=@ud  0
+        |-  ^-  (list push-note:trunk)
+        ?:  =(60 i)  l
+        $(i +(i), l (note l (add t0 i) "line"))
+      ?&  =(50 (lent l))
+          =((add t0 59) at:(snag 0 l))
+      ==
+    ::
+      :-  'a host, never its path, query or user'
+      ?&  =('ntfy.example' (host-of 'https://ntfy.example/upSECRET?x=1'))
+          =('h.example:8443' (host-of 'https://u:p@h.example:8443/p'))
+          =('127.0.0.1:8193' (host-of 'http://127.0.0.1:8193/up/x'))
+          =('relay.nisfeb.com' (host-of 'https://relay.nisfeb.com'))
+      ==
+    ::
+      :-  'the debug report carries no secret'
+      =/  devs=(map @t push-device:trunk)
+        %-  my
+        :~  :-  'phone'
+            [[%unifiedpush 'https://ntfy.example/upPATHXYZ?t=QUERYXYZ'] (sy 'read' ~)]
+            ['ipad' [[%ios-gateway 'https://relay.example/' 'HANDLEXYZ' 'SECRETXYZ'] ~]]
+        ==
+      =/  out=tape
+        %-  trip
+        %-  en:json:html
+        %:  debug-json  12  0v1  t0  all-kinds  devs
+          (my ['phone' [t0 200]] ~)
+          ~[['/v4' 'live']]
+          ~[['activity' %.y]]
+          (note ~ t0 "DM: pushed to 2 devices")
+        ==
+      ?&  =(~ (find "PATHXYZ" out))
+          =(~ (find "QUERYXYZ" out))
+          =(~ (find "HANDLEXYZ" out))
+          =(~ (find "SECRETXYZ" out))
+          ?=(^ (find "ntfy.example" out))
+          ?=(^ (find "relay.example" out))
+          ?=(^ (find "pushed to 2 devices" out))
+      ==
   ==
 =/  bad  (murn cases |=([n=@t o=?] ?:(o ~ `n)))
 ?~(bad %ok bad)
