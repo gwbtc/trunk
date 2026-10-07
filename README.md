@@ -106,7 +106,8 @@ What gets pushed:
 Any agent on our ship can send a notice, such as a calendar reminder or a time to leave. Another ship cannot. [`docs/notifications.md`](docs/notifications.md) is the guide for app developers; in short:
 
 ```jsonc
-// wire 14: name the app, as a grubbery app must, since its pokes all come from %grubbery
+// wire 14: name the app. A grubbery app must, since its pokes all come from %grubbery
+// (see "Grubbery apps" in docs/notifications.md)
 {"push-notice-as": {"app": "calendar", "tag": "cal-e1", "title": "Leave now",
                     "body": "Meeting at 3", "open": {"event": "e1"}}}   // open may be null or left out
 // wire 12: the same with no app, named after the agent that sent it

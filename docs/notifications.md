@@ -57,6 +57,18 @@ The four text fields and `open` together may be at most 4 KiB.
 
 `push-notice` is the same without `app`, for wire 12 and 13. Trunk then names the notice after the agent that sent it.
 
+## Grubbery apps
+
+Every grubbery app's poke reaches trunk from the `%grubbery` agent, so trunk cannot tell grubbery apps apart by who sent the poke. With plain `push-notice`, they all count as one app, "grubbery". They share one switch on the trunk page, one five-second gap and one hourly limit. Two apps' notices that arrive within five seconds are merged into one summary, which loses each notice's own tag.
+
+So a grubbery app that sends notices must:
+
+- Send `push-notice-as` with its own name in `app` when trunk answers wire 14 or later.
+- Fall back to plain `push-notice` when `push-notice-as` nacks. Grubbery's kernel checks every poke to trunk against its own copy of trunk's notice actions, the marc at `/code/mar/clay/trunk/trunk-action.hoon`. A kernel whose marc predates wire 14 refuses `push-notice-as`, and the plain poke still gets through.
+- Send only `push-notice` to a trunk on wire 12 or 13.
+
+The calendar does all three from its version 30.
+
 ## What happens next
 
 The poke's ack says trunk took the notice, not that a phone showed it. A nack means it was malformed (an unshowable app name, or over 4 KiB), or that your agent has used up its 16 names. It can also mean trunk's list of 128 apps is full of apps the owner has set up, with none idle to forget.
