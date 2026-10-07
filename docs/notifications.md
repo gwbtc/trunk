@@ -65,7 +65,7 @@ A notice that was taken can still be held back, without a nack:
 
 - **The owner's switches.** The trunk page (`/apps/trunk`) has a switch for alerts from all apps, and one for each app that has sent any. A new app starts allowed.
 - **One every five seconds.** Each app gets at most one push every five seconds. What comes sooner waits, and when the five seconds are up the app gets one push: the notice itself if only one waited, or a summary titled "3 alerts from calendar" that lists their titles, with the tag `batch-<app>`. So send each reminder once, as it falls due, rather than in a burst.
-- **Thirty an hour.** No app gets more than 30 pushes an hour. Past that, its notices are dropped until the hour is up.
+- **An hourly limit.** An app gets 30 pushes an hour unless the owner sets another limit for it on the trunk page, from a few up to 720, or none. Past it, the app's notices are dropped until the hour is up. A chat app the owner trusts can be given more; your app cannot raise its own.
 - **Devices.** Only devices whose app said it understands notices get one. An older app would show it as a chat message.
 
 Each of these leaves a line in trunk's log on the page, such as "notice from calendar: not pushed, this app is switched off". An agent can read the same log, and each app's counts, from the owner-only scry `/~/scry/trunk/debug.json`, under `log` and `senders`.

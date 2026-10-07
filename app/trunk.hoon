@@ -266,7 +266,7 @@
       flight=*
   ==
 ::  %16 knows which apps send notices (wire 14): each one's switch,
-::  its count this hour against +hourly-cap:trunk-push, and its
+::  its count this hour against its own hourly cap, and its
 ::  history, for the trunk page.
 +$  state-16
   $:  %16
@@ -624,14 +624,18 @@
         (notice:hc state `app.act tag.act title.act body.act open.act)
       [cards this]
     ::
-    ::  an app's switch, which no app may flip for itself
+    ::  an app's switch and hourly cap, which no app may set for itself
         %push-app
       ?>  by-owner:hc
+      ?>  (lte cap.act max-cap:trunk-push)
       =/  x  (~(got by senders.state) id.act)
+      =/  limit  ?:(=(0 cap.act) "no hourly limit" "at most {<cap.act>} an hour")
       =.  log.state
         %^  note:trunk-push  log.state  now.bowl
-        "{(trip name.x)}: notices {?:(allow.act "allowed" "switched off")}"
-      `this(senders.state (~(put by senders.state) id.act x(allowed allow.act)))
+        "{(trip name.x)}: notices {?:(allow.act "allowed" "switched off")}, {limit}"
+      =.  senders.state
+        (~(put by senders.state) id.act x(allowed allow.act, cap cap.act))
+      `this
     ::
     ::  policy edits. Each echoes the whole policy back on /calls so a
     ::  ship's other devices converge without re-scrying.
@@ -2592,7 +2596,8 @@
   ?>  (lte size 4.096)
   =/  [id=@t name=@t agent=@tas]  (sender-of:trunk-push sap.bowl declared)
   =/  x=sender:trunk-push
-    (~(gut by senders.s) id [name agent %.y now.bowl ~ [now.bowl 0] 0 0 ~ 0 ~])
+    %+  ~(gut by senders.s)  id
+    [name agent %.y now.bowl ~ [now.bowl 0] 0 0 ~ 0 ~ default-cap:trunk-push]
   =/  off=(unit tape)
     ?.  notices.kinds.s  `"notices are switched off"
     ?.  allowed.x  `"this app is switched off"
@@ -2629,14 +2634,14 @@
   =.  x  (roll-hour:trunk-push x now.bowl)
   =/  who  "notice from {(trip name.x)}"
   ?~  waiting.x  [~ s(senders (~(put by senders.s) id x(timer ~)))]
-  ?:  (gte n.hour.x hourly-cap:trunk-push)
+  ?:  &(!=(0 cap.x) (gte n.hour.x cap.x))
     =.  senders.s
       %+  ~(put by senders.s)  id
       x(held (add held.x waited.x), waiting ~, waited 0, timer ~)
     :-  ~
     %=  s
       log
-    (note:trunk-push log.s now.bowl "{who}: not pushed, over {<hourly-cap:trunk-push>} this hour")
+    (note:trunk-push log.s now.bowl "{who}: not pushed, over its {<cap.x>} this hour")
     ==
   =/  one  (batch:trunk-push name.x waited.x waiting.x)
   =^  cards  s

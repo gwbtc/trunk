@@ -106,7 +106,7 @@
 
   <section>
     <h2>Apps that send alerts</h2>
-    <p>Each app on this ship that has sent an alert, with its own switch. A new app is let through until you switch it off. Each app gets at most one alert every 5 seconds, and alerts that come faster are combined into one. None may send more than 30 in an hour. Trunk tells your phone which app each alert came from.</p>
+    <p>Each app on this ship that has sent an alert, with its own switch. A new app is let through until you switch it off. Each app gets at most one alert every 5 seconds, and alerts that come faster are combined into one. An app may have 30 in an hour unless you change its limit here. Trunk tells your phone which app each alert came from.</p>
     <div id="senders"></div>
   </section>
 
@@ -260,7 +260,7 @@ function render() {
     const bits = [];
     if (x.agent !== x.name) bits.push('through ' + x.agent);
     bits.push(x.last ? 'last alert ' + ago(x.last) : 'none sent yet');
-    bits.push(x.hour + ' of 30 this hour');
+    bits.push(x.cap ? x.hour + ' of ' + x.cap + ' this hour' : x.hour + ' this hour');
     if (x.waiting) bits.push(x.waiting + ' waiting');
     if (x.held) bits.push(x.held + ' stopped');
     lab.append(el('span', 'hint', bits.join(' · ')));
@@ -268,12 +268,30 @@ function render() {
     box.type = 'checkbox';
     box.id = 'app-' + x.id;
     box.checked = !!x.allowed;
-    box.onchange = async () => {
+    const cap = el('select');
+    cap.title = 'Most alerts an hour';
+    const caps = [10, 30, 60, 120, 300, 0];
+    if (!caps.includes(x.cap)) caps.push(x.cap);
+    for (const n of caps) {
+      const o = el('option', null, n ? n + ' an hour' : 'No hourly limit');
+      o.value = String(n);
+      cap.append(o);
+    }
+    cap.value = String(x.cap);
+    const save = async () => {
       box.disabled = true;
-      await act({ 'push-app': { id: x.id, allow: box.checked } });
+      cap.disabled = true;
+      await act({ 'push-app': { id: x.id, allow: box.checked, cap: Number(cap.value) } });
       load();
     };
-    row.append(lab, box);
+    box.onchange = save;
+    cap.onchange = save;
+    const ctl = el('div');
+    ctl.style.display = 'flex';
+    ctl.style.gap = '10px';
+    ctl.style.alignItems = 'center';
+    ctl.append(cap, box);
+    row.append(lab, ctl);
     sd.append(row);
   }
 

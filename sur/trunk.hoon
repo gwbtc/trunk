@@ -202,9 +202,11 @@
       ::  %grubbery, so such an app names itself, e.g. 'calendar'. The
       ::  phone shows the name, and the trunk page has a switch for it.
       [%push-notice-as app=@t tag=@t title=@t body=@t open=json]
-      ::  let an app's notices through, or not (wire 14). Only the owner,
-      ::  from the trunk page, Talon or the dojo, never another agent.
-      [%push-app id=@t allow=?]
+      ::  an app's settings (wire 14): let its notices through or not,
+      ::  and the most pushes it may have in an hour, 0 for no hourly
+      ::  limit (its pushes still come at most one per 5 s). Only the
+      ::  owner, from the trunk page, Talon or the dojo, never an agent.
+      [%push-app id=@t allow=? cap=@ud]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]

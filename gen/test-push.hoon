@@ -689,7 +689,7 @@
       ==
     ::
       :-  'an app gets a fresh hour once the last one is over'
-      =/  x=sender  ['cal' %calendar %.y t0 ~ [t0 30] 30 0 ~ 0 ~]
+      =/  x=sender  ['cal' %calendar %.y t0 ~ [t0 30] 30 0 ~ 0 ~ 30]
       ?&  =(30 n.hour:(roll-hour x (add t0 ~m59)))
           =(0 n.hour:(roll-hour x (add t0 ~h1)))
           =((add t0 ~h1) start.hour:(roll-hour x (add t0 ~h1)))
@@ -700,7 +700,7 @@
         %-  trip
         %-  en:json:html
         %:  debug-json  12  0v1  t0  all-kinds  ~  ~  ~  ~
-          (my ['grubbery/calendar' ['calendar' %grubbery %.n t0 `t0 [t0 4] 9 2 ~ 0 ~]] ~)
+          (my ['grubbery/calendar' ['calendar' %grubbery %.n t0 `t0 [t0 4] 9 2 ~ 0 ~ 120]] ~)
           ~  ~  ~
         ==
       ?&  ?=(^ (find "\"senders\"" out))
@@ -709,15 +709,16 @@
           ?=(^ (find "\"allowed\":false" out))
           ?=(^ (find "\"hour\":4" out))
           ?=(^ (find "\"held\":2" out))
+          ?=(^ (find "\"cap\":120" out))
       ==
     ::
       :-  'json: push-notice-as and push-app'
       ?&  .=  `action:trunk`[%push-notice-as 'calendar' 't' 'ti' 'b' ~]
               %-  action-from-json:trunk-json
               (j '{"push-notice-as":{"app":"calendar","tag":"t","title":"ti","body":"b"}}')
-          .=  `action:trunk`[%push-app 'grubbery/calendar' %.n]
+          .=  `action:trunk`[%push-app 'grubbery/calendar' %.n 0]
               %-  action-from-json:trunk-json
-              (j '{"push-app":{"id":"grubbery/calendar","allow":false}}')
+              (j '{"push-app":{"id":"grubbery/calendar","allow":false,"cap":0}}')
       ==
     ::
       :-  'one notice that waited goes as itself'

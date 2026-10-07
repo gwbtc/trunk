@@ -80,6 +80,8 @@
 ::    last     when it last got a push out
 ::    hour     pushes in the hour that began at `start`
 ::    sent     notices delivered, ever; held: notices stopped, ever
+::    cap      the most pushes it may have in an hour, 0 for no limit;
+::             a new app starts at +default-cap
 ::    waiting  notices that came within +notice-gap of the last push,
 ::             newest first, at most +wait-cap of them; `waited` counts
 ::             them all, and `timer` is when the wait ends
@@ -95,13 +97,17 @@
       waiting=(list [tag=@t title=@t body=@t open=json])
       waited=@ud
       timer=(unit @da)
+      cap=@ud
   ==
 ::  rate limits, per app. No more than one push every +notice-gap:
 ::  what comes sooner waits, and goes as one push when the gap is up.
-::  And no more than +hourly-cap pushes an hour, so a buggy or hostile
-::  app on the ship cannot buzz the owner's phones all day.
+::  And no more pushes an hour than the app's cap, so a buggy or
+::  hostile app on the ship cannot buzz the owner's phones all day. A
+::  new app starts at +default-cap; the owner can raise it, lower it,
+::  or lift it (0), per app. +max-cap is what the gap allows anyway.
 ++  notice-gap  ~s5
-++  hourly-cap  30
+++  default-cap  30
+++  max-cap  720
 ++  wait-cap  20
 ::
 ::  +batch: what one push says for the notices that waited: the notice
@@ -877,6 +883,7 @@
           ?:  (gte (sub now (min now start.hour.x)) ~h1)  (numb 0)
           (numb n.hour.x)
           sent+(numb sent.x)  held+(numb held.x)  waiting+(numb waited.x)
+          cap+(numb cap.x)
       ==
       watches+(pairs (turn watches |=([p=@t v=@t] [p s+v])))
       apps+(pairs (turn apps |=([n=@t r=?] [n b+r])))

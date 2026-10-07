@@ -113,7 +113,7 @@ Any agent on our ship can send a notice, such as a calendar reminder or a time t
 {"push-notice": {"tag": "cal-e1", "title": "Leave now", "body": "Meeting at 3"}}
 ```
 
-`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. The title must not be empty, the app name may be 40 bytes, and all the fields together may be 4 KiB. Each app gets at most one push every five seconds: what comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<app>`. No app gets more than 30 pushes an hour. The owner can switch off all notices, or any one app, on the trunk page. Only the owner can: a switch poked by another agent is refused.
+`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. The title must not be empty, the app name may be 40 bytes, and all the fields together may be 4 KiB. Each app gets at most one push every five seconds: what comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<app>`. An app gets 30 pushes an hour unless the owner sets another limit for it, up to 720 or none at all. The owner can switch off all notices, or any one app, on the trunk page. Only the owner can: a switch poked by another agent is refused.
 
 UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, notices with `TTL: 3600` and `Urgency: high`, and everything else with `TTL: 86400` and `Urgency: normal`.
 
@@ -179,7 +179,7 @@ Talon reads each device's `sent` and `last` and the `drops` from it, so those na
  "drops": [{"at": 1791335000000, "id": "...", "platform": "ios-gateway", "reason": "410"}],
  "senders": [{"id": "grubbery/calendar", "name": "calendar", "agent": "grubbery",
               "allowed": true, "first": 1791330000000, "last": 1791335000000,
-              "hour": 4, "sent": 12, "held": 0, "waiting": 0}],
+              "hour": 4, "sent": 12, "held": 0, "waiting": 0, "cap": 30}],
  "watches": {"/v4": "live", "/v4/reads": "live"},
  "apps": {"activity": true, "settings": true},
  "log": [{"at": 1791335355181, "what": "DM: pushed to 1 device"}]}
@@ -438,14 +438,15 @@ them on the ship they act for.
 
 ::  push by hand (wire 11 to 14): register a device, send it a test,
 ::  switch alerts from other apps off, send an alert as an app would,
-::  switch one app off, and remove the device. Talon does the first
+::  switch one app off (keeping its hourly limit), and remove the device. Talon does the first
 ::  and last for you.
 :trunk &trunk-action [%push-register 'my-phone' [[%unifiedpush 'https://ntfy.sh/up123'] (silt ~['read' 'notice'])]]
 :trunk &trunk-action [%push-test 'my-phone' 'hello']
 :trunk &trunk-action [%push-kinds [%.y %.y %all %.y %.y %.y %.n]]
 ::                                dm  club channel replies calls reads notices
 :trunk &trunk-action [%push-notice-as 'calendar' 'cal-1' 'Leave now' 'Meeting at 3' ~]
-:trunk &trunk-action [%push-app 'dojo/calendar' %.n]
+:trunk &trunk-action [%push-app 'dojo/calendar' %.n 30]
+::                                id              allow  pushes an hour (0: no limit)
 :trunk &trunk-action [%push-unregister 'my-phone']
 ```
 
