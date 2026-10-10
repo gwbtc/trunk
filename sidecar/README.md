@@ -72,4 +72,14 @@ on demand by whichever ship hosts the room.
 
 `%trunk` mints listen links to `<sfu base>/listen/`. The compose file mounts `listen/` read-only at Galène's `/static/listen`, so the page is there once Galène is up. To change it later without recreating the container, and so without dropping anyone on a line, edit the file and also `docker cp listen/index.html <galene container>:/static/listen/index.html`.
 
-The page shows each person by the name their client put in Galène's per-user data (`{"name": ...}`), and otherwise by the username the host signed into their ticket, which is their `@p`.
+The page shows each person by the name their client put in Galène's per-user data (`{"name": ...}`), and otherwise by the username the host signed into their ticket, which is their `@p`. A guest (wire 16), whose username is `guest-` and hex, is always marked as one.
+
+## 5. Guests (wire 16)
+
+People with no ship join through a page the ship serves, and an app on the ship may serve its own. Galène refuses a websocket from another origin, so list the ship's origin in `galene/data/config.json`:
+
+```json
+{"allowOrigin": ["https://your.ship.example"]}
+```
+
+If the ship's pages are https, Galène must be too: a browser will not let an https page load `protocol.js` from, or open a websocket to, plain http. Put a TLS front (an nginx vhost with a certificate) before :8444, and point `%set-sfu` at its https base.

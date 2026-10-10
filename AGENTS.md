@@ -7,6 +7,8 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 - `app/trunk.hoon`: the agent. One door of ten arms, and a helper core (`hc`) below it with everything else. State versions, their migrations and the wire version are at the top.
 - `app/trunk/page.html` and `app/trunk/icon.svg`: the owner's page and the tile's icon, built into the agent with `/*`.
 - `lib/trunk-push.hoon`: pure push logic, with no scries and no cards: what notifies, every push body, retries, ring bookkeeping, sender records and the debug report. Keep it pure so `gen/test-push.hoon` can cover it.
+- `lib/trunk-guest.hoon`: pure guest-seat logic (wire 16): guest ids, invite codes, who an invite seats, app-room seats and SFU locations. `gen/test-guest.hoon` covers it.
+- `app/trunk/guest.html`: the public page a guest opens from an invite link.
 - `lib/trunk-json.hoon`: the wire's JSON. Talon mirrors it by hand.
 - `lib/trunk-jwt.hoon`: Galène's HS256 tokens. `lib/mnemonym.hoon`: comet names.
 - `sur/trunk.hoon`: the types, including every action.
@@ -38,7 +40,10 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 
 ## Security invariants
 
-- `%trunk-action` is accepted only from our own ship. Another agent may send `push-notice` and `push-notice-as` and nothing else. Every other action, settings and the device registry included, needs `+by-owner`. Keep that allowlist at the top of the `%trunk-action` arm, which the page's action route goes through too.
+- `%trunk-action` is accepted only from our own ship. Another agent may send `push-notice`, `push-notice-as` and the four `app-*` room actions, and nothing else. Every other action, settings, invites and the device registry included, needs `+by-owner`. Keep that allowlist at the top of the `%trunk-action` arm, which the page's action route goes through too.
+- An app reaches only its own rooms: app rooms are keyed by the agent gall names in `sap.bowl`, and `/app/<agent>` admits only that agent.
+- A guest's Galène `sub` is a guest id, `guest-` and 12 hex digits. It never starts with `~`, and trunk makes it: neither the guest nor an app names it.
+- The guest routes under `/apps/trunk/guest/` are public. They take nothing but an invite's code and a guest id that code seated, and show nothing of the host but its name and the room's title. Invite codes are bearer secrets, so they are never in `/x/debug`.
 - A signal's sender is the ames `src`, never anything in the payload.
 - A Galène token's `sub` is the asking ship's `@p`, for every ship. Galène refuses any later message whose username differs, so a readable name travels in Galène's per-user data instead.
 - The debug report (`/x/debug`) never carries a push secret, a gateway handle, an endpoint's path or a chat's id. `gen/test-push.hoon` checks this, so extend that test when you add a field.
@@ -48,7 +53,7 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 
 Boot fresh fake galaxies from the v4.6 pill: it ships Tlon's `%groups`, so `%activity` and `%settings` are real. Never reuse a fake ship's name after rebuilding its pier, since peers keep ames state for the old one and pokes vanish without an error.
 
-Install the desk as the README's "The desk" says, then run `+trunk!test-push` and `+trunk!test-mnemonym`. For push work, register a device whose endpoint is a local HTTP listener, then drive real events: DMs and channel posts between two fake ships, reads through `%activity`'s `read` action, and rings with `%send`.
+Install the desk as the README's "The desk" says, then run `+trunk!test-push`, `+trunk!test-guest` and `+trunk!test-mnemonym`. For push work, register a device whose endpoint is a local HTTP listener, then drive real events: DMs and channel posts between two fake ships, reads through `%activity`'s `read` action, and rings with `%send`.
 
 `|commit` adds and changes files in a desk but does not delete them. Remove a file from a mounted desk with `|rm`.
 
