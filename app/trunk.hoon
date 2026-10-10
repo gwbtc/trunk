@@ -416,38 +416,9 @@
   |=  r=old-room
   ^-  room:trunk
   [title.r members.r ~ %.n ~ ~ ~ ~ ~ ~]
-::
-::  +upgrade-rooms-6: %6 rooms gain the per-room SFU, unset — every
-::  existing room keeps running on its host ship's own sidecar.
-++  upgrade-rooms-6
-  |=  old=(map @t old-room-6)
-  ^-  (map @t room:trunk)
-  %-  ~(run by old)
-  |=  r=old-room-6
-  ^-  room:trunk
-  [title.r members.r admins.r listen.r ~ ~ ~ ~ ~ ~]
-::
-::  +upgrade-rooms-7: %7 rooms gain the group binding, unset — an
-::  existing roster stays manual until someone binds it on purpose.
-++  upgrade-rooms-7
-  |=  old=(map @t old-room-7)
-  ^-  (map @t room:trunk)
-  %-  ~(run by old)
-  |=  r=old-room-7
-  ^-  room:trunk
-  [title.r members.r admins.r listen.r sfu.r ~ ~ ~ ~ ~]
-::
-::  +upgrade-rooms-8: %8 rooms gain the role gates and mute set, all
-::  unset — an existing line keeps admitting and voicing its whole
-::  roster, because gating is something an admin turns on, never
-::  something an upgrade turns on.
-++  upgrade-rooms-8
-  |=  old=(map @t old-room-8)
-  ^-  (map @t room:trunk)
-  %-  ~(run by old)
-  |=  r=old-room-8
-  ^-  room:trunk
-  [title.r members.r admins.r listen.r sfu.r group.r ~ ~ ~ ~]
+
+
+
 ::
 ::  +upgrade-lines: a remembered invitation used to be just a title.
 ::  Nothing is known about its settings until the host announces
@@ -564,7 +535,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  (upgrade-rooms-6 hosted.old)
+  :*  %18  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-6 `room:trunk`[title.r members.r admins.r listen.r ~ ~ ~ ~ ~ ~]))
       (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
@@ -572,7 +543,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  (upgrade-rooms-7 hosted.old)
+  :*  %18  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-7 `room:trunk`[title.r members.r admins.r listen.r sfu.r ~ ~ ~ ~ ~]))
       known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
@@ -582,7 +553,7 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %18  ice.old  sfu.old  (upgrade-rooms-8 hosted.old)
+    :*  %18  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-8 `room:trunk`[title.r members.r admins.r listen.r sfu.r group.r ~ ~ ~ ~]))
         known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
@@ -891,11 +862,7 @@
       ::  else's group clicked the button and nothing happened at all.
       ?.  =(host.act our.bowl)
         :_  this
-        :~  :*  %pass  (room-wire:hc host.act)
-                %agent  [host.act %trunk]
-                %poke  %trunk-room
-                !>(`room-sig:trunk`[%share name.act ttl.act])
-        ==  ==
+        ~[(to-host:hc host.act [%share name.act ttl.act])]
       =/  got  (~(get by hosted.state) name.act)
       ?~  got  `this
       ?.  listen.u.got  `this
@@ -905,12 +872,13 @@
       =/  exp  (add now-secs ttl)
       =/  loc=@t  (room-location:hc name.act)
       =/  tok=@t
-        %:  mint-listen:trunk-jwt
+        %:  mint:trunk-jwt
           key:(room-sfu:hc name.act)
           'listener'
           loc
           now-secs
           exp
+          listener:trunk-jwt
         ==
       :_  this
       ~[(fact:hc [%listen-link [name.act (listen-url:hc name.act tok) exp]])]
@@ -1007,14 +975,11 @@
         =^  bcards  hosted.state  (auto-bind:hc name.act hosted.state)
         [(weld cards bcards) this]
       :_  this
-      :~  :*  %pass  (room-wire:hc host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room
-              !>  ^-  room-sig:trunk
-              :*  %configure  name.act  open.act  listen.act  sfu.act
-                  keep-sfu.act  title.act  members.act  admins.act
-              ==
-      ==  ==
+      :_  ~
+      %+  to-host:hc  host.act
+      :*  %configure  name.act  open.act  listen.act  sfu.act
+          keep-sfu.act  title.act  members.act  admins.act
+      ==
     ::
         %peek-room
       ::  hosting it ourselves? we already know, answer locally.
@@ -1025,10 +990,7 @@
       ::  not in asked. Without this entry the host's answer was
       ::  silently eaten and the client re-poked a host that had
       ::  already said no.
-      :-  :~  :*  %pass  (room-wire:hc host.act)
-                  %agent  [host.act %trunk]
-                  %poke  %trunk-room  !>(`room-sig:trunk`[%peek name.act])
-          ==  ==
+      :-  ~[(to-host:hc host.act [%peek name.act])]
       this(asked.state (~(put by (prune-asked asked.state now.bowl)) [host.act name.act] now.bowl))
     ::
     ::  live presence relays. enter/leave tell the host (or update our
@@ -1046,10 +1008,7 @@
         =^  bcards  beat.state  (arm-beat:hc beat.state present.state)
         [(weld cards bcards) this]
       :_  this
-      :~  :*  %pass  /beat/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%entered name.act])
-      ==  ==
+      ~[(beat-host:hc host.act [%entered name.act])]
     ::
         %leave-room
       ?:  =(host.act our.bowl)
@@ -1061,20 +1020,14 @@
         =^  bcards  beat.state  (arm-beat:hc beat.state present.state)
         [(weld cards bcards) this]
       :_  this
-      :~  :*  %pass  /beat/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%left name.act])
-      ==  ==
+      ~[(beat-host:hc host.act [%left name.act])]
     ::
         %occupancy-of
       ?:  =(host.act our.bowl)
         =^  n  present.state  (occupancy-of:hc name.act present.state)
         :_(this ~[(fact:hc [%present our.bowl name.act n])])
       :_  this
-      :~  :*  %pass  /beat/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%occupancy name.act])
-      ==  ==
+      ~[(beat-host:hc host.act [%occupancy name.act])]
     ::
     ::  who is on a line (wire 8): the ships behind %occupancy-of. Same
     ::  short-circuit when we host; the host answers %on-line.
@@ -1084,10 +1037,7 @@
         =/  who  ~(key by (~(gut by present.state) name.act *(map ship @da)))
         :_(this ~[(fact:hc [%on-line our.bowl name.act who])])
       :_  this
-      :~  :*  %pass  /beat/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%who name.act])
-      ==  ==
+      ~[(beat-host:hc host.act [%who name.act])]
     ::
     ::  call recording relays (wire 7). start/stop tell the host (or
     ::  update our own state when we host); recorders-of asks and the
@@ -1100,30 +1050,21 @@
         =/  rc  (~(gut by recording.state) name.act *(map ship @da))
         `this(recording.state (~(put by recording.state) name.act (~(put by rc) our.bowl now.bowl)))
       :_  this
-      :~  :*  %pass  /beat/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%recording-on name.act])
-      ==  ==
+      ~[(beat-host:hc host.act [%recording-on name.act])]
     ::
         %stop-recording
       ?:  =(host.act our.bowl)
         =/  rc  (~(gut by recording.state) name.act *(map ship @da))
         `this(recording.state (~(put by recording.state) name.act (~(del by rc) our.bowl)))
       :_  this
-      :~  :*  %pass  /beat/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%recording-off name.act])
-      ==  ==
+      ~[(beat-host:hc host.act [%recording-off name.act])]
     ::
         %recorders-of
       ?:  =(host.act our.bowl)
         =^  who  recording.state  (recorders-of:hc name.act recording.state)
         :_(this ~[(fact:hc [%recorders our.bowl name.act who])])
       :_  this
-      :~  :*  %pass  /beat/(scot %p host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room  !>(`room-sig:trunk`[%recorders name.act])
-      ==  ==
+      ~[(beat-host:hc host.act [%recorders name.act])]
     ::
         %bind-room
       ::  bind (or unbind) a hosted room's roster to a group. The
@@ -1141,10 +1082,7 @@
       ::  hosting it ourselves? mint straight away, no round trip.
       ?:  =(host.act our.bowl)
         :_  this  (grant-cards:hc our.bowl name.act)
-      :-  :~  :*  %pass  (room-wire:hc host.act)
-                  %agent  [host.act %trunk]
-                  %poke  %trunk-room  !>(`room-sig:trunk`[%ask name.act])
-          ==  ==
+      :-  ~[(to-host:hc host.act [%ask name.act])]
       this(asked.state (~(put by (prune-asked asked.state now.bowl)) [host.act name.act] now.bowl))
     ::
     ::  Role gates for a line. Local-only action, so it is already our
@@ -1162,11 +1100,7 @@
         %+  reply:hc  our.bowl
         [%access-state name.act join-roles.new speak-roles.new muted.new]
       :_  this
-      :~  :*  %pass  (room-wire:hc host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room
-              !>(`room-sig:trunk`[%access name.act join.act speak.act])
-      ==  ==
+      ~[(to-host:hc host.act [%access name.act join.act speak.act])]
     ::
     ::  Muting one member for everyone. Same local/relay split; the
     ::  mute lands in the room's muted set and takes effect on the
@@ -1184,11 +1118,7 @@
         %+  reply:hc  our.bowl
         [%access-state name.act join-roles.new speak-roles.new muted.new]
       :_  this
-      :~  :*  %pass  (room-wire:hc host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room
-              !>(`room-sig:trunk`[%moderate name.act who.act mute.act])
-      ==  ==
+      ~[(to-host:hc host.act [%moderate name.act who.act mute.act])]
     ::
     ::  Reading the gates back. Hosting it ourselves we answer from
     ::  state; otherwise the host answers with %access-state, and a
@@ -1202,11 +1132,7 @@
         %+  reply:hc  our.bowl
         [%access-state name.act join-roles.u.got speak-roles.u.got muted.u.got]
       :_  this
-      :~  :*  %pass  (room-wire:hc host.act)
-              %agent  [host.act %trunk]
-              %poke  %trunk-room
-              !>(`room-sig:trunk`[%get-access name.act])
-      ==  ==
+      ~[(to-host:hc host.act [%get-access name.act])]
     ==
   ::
   ::  the owner's page, its icon and its one API route. The route
@@ -1306,11 +1232,7 @@
     ::  or role-less member is refused a ticket and so can never be on
     ::  the line, and must not be able to heartbeat itself into it.
         %entered
-      ?:  (~(has in block.pol.state) src.bowl)  `this
-      =/  got  (~(get by hosted.state) name.msg)
-      ?~  got  `this
-      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
-      ?.  (may-join:hc u.got src.bowl)  `this
+      ?.  (allowed-on:hc name.msg src.bowl)  `this
       =/  was  present.state
       =/  room-present  (~(gut by present.state) name.msg *(map ship @da))
       =.  room-present  (~(put by room-present) src.bowl now.bowl)
@@ -1338,22 +1260,14 @@
     ::  while +grant-cards refuses those same ships a ticket. Dropped
     ::  silently, not %deny, so this stays a non-oracle.
         %occupancy
-      ?:  (~(has in block.pol.state) src.bowl)  `this
-      =/  got  (~(get by hosted.state) name.msg)
-      ?~  got  `this
-      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
-      ?.  (may-join:hc u.got src.bowl)  `this
+      ?.  (allowed-on:hc name.msg src.bowl)  `this
       =^  n  present.state  (occupancy-of:hc name.msg present.state)
       :_(this (reply:hc src.bowl [%present name.msg n]))
     ::
     ::  Gated exactly like %occupancy: the @p set behind the count is
     ::  strictly more than the count, so the same non-oracle rules.
         %who
-      ?:  (~(has in block.pol.state) src.bowl)  `this
-      =/  got  (~(get by hosted.state) name.msg)
-      ?~  got  `this
-      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
-      ?.  (may-join:hc u.got src.bowl)  `this
+      ?.  (allowed-on:hc name.msg src.bowl)  `this
       =^  n  present.state  (occupancy-of:hc name.msg present.state)
       =/  who  ~(key by (~(gut by present.state) name.msg *(map ship @da)))
       :_(this (reply:hc src.bowl [%on-line name.msg who]))
@@ -1366,11 +1280,7 @@
     ::  host blocked would otherwise show to everyone as 'Recording'
     ::  on a line it can never join.
         %recording-on
-      ?:  (~(has in block.pol.state) src.bowl)  `this
-      =/  got  (~(get by hosted.state) name.msg)
-      ?~  got  `this
-      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
-      ?.  (may-join:hc u.got src.bowl)  `this
+      ?.  (allowed-on:hc name.msg src.bowl)  `this
       =/  rc  (~(gut by recording.state) name.msg *(map ship @da))
       =.  rc  (~(put by rc) src.bowl now.bowl)
       `this(recording.state (~(put by recording.state) name.msg rc))
@@ -1387,11 +1297,7 @@
     ::  everyone recording a private line, which a stranger has no
     ::  business learning.
         %recorders
-      ?:  (~(has in block.pol.state) src.bowl)  `this
-      =/  got  (~(get by hosted.state) name.msg)
-      ?~  got  `this
-      ?.  |(=(src.bowl our.bowl) (~(has in members.u.got) src.bowl))  `this
-      ?.  (may-join:hc u.got src.bowl)  `this
+      ?.  (allowed-on:hc name.msg src.bowl)  `this
       =^  who  recording.state  (recorders-of:hc name.msg recording.state)
       :_(this (reply:hc src.bowl [%recorders-are name.msg who]))
     ::
@@ -1424,7 +1330,7 @@
       =/  exp  (add now-secs ttl)
       =/  loc=@t  (room-location:hc name.msg)
       =/  tok=@t
-        (mint-listen:trunk-jwt key:(room-sfu:hc name.msg) 'listener' loc now-secs exp)
+        (mint:trunk-jwt key:(room-sfu:hc name.msg) 'listener' loc now-secs exp listener:trunk-jwt)
       :_  this
       (reply:hc src.bowl [%link [name.msg (listen-url:hc name.msg tok) exp]])
     ::
@@ -1930,6 +1836,20 @@
   ^-  wire
   /room/(scot %p who)/(scot %da now.bowl)
 ::
+::  +to-host: a room-sig to `host`'s %trunk on its own flow, for what a
+::  user waits on. +beat-host: one on /beat, for what an old host may nack
+::  with nobody waiting (see the /room arm of +on-agent).
+::
+++  to-host
+  |=  [host=ship msg=room-sig:trunk]
+  ^-  card
+  [%pass (room-wire host) %agent [host %trunk] %poke %trunk-room !>(msg)]
+::
+++  beat-host
+  |=  [host=ship msg=room-sig:trunk]
+  ^-  card
+  [%pass /beat/(scot %p host) %agent [host %trunk] %poke %trunk-room !>(msg)]
+::
 ::  +may-ring: may `who` ring us 1:1? Our own ship always may — that
 ::  is our other devices, not a stranger.
 ::
@@ -1952,6 +1872,22 @@
   |=  [=room:trunk who=ship]
   ^-  (set @t)
   (fall (~(get by seat-roles.room) who) ~)
+::
+::  +allowed-on: may `who` be on the line `name` we host, so count
+::  toward its presence and learn who is on it? +grant-cards' rule: not
+::  blocked, and on the roster, and past +may-join. A blocked or
+::  role-less member is refused a ticket, so must not heartbeat itself
+::  onto the line either.
+::
+++  allowed-on
+  |=  [name=@t who=ship]
+  ^-  ?
+  ?:  (~(has in block.pol.state) who)  %.n
+  =/  got  (~(get by hosted.state) name)
+  ?~  got  %.n
+  ?&  |(=(who our.bowl) (~(has in members.u.got) who))
+      (may-join u.got who)
+  ==
 ::
 ::  +may-join: may `who` enter this room at all? The rule: the host
 ::  and its admins always may; an unset join-roles admits the whole
@@ -2027,7 +1963,7 @@
     ::  Wire 10 to 12 put a comet's mnemonym here, so a comet's offers
     ::  were refused and it could not speak. A readable name travels in
     ::  Galene's per-user data instead, which the client sends.
-    %:  mint-with:trunk-jwt
+    %:  mint:trunk-jwt
       key:(room-sfu name)
       (scot %p who)
       loc
@@ -2169,13 +2105,6 @@
   ?~  got  sfu.state
   ?~(sfu.u.got sfu.state u.sfu.u.got)
 ::
-::  +room-subgroup: the Galène group name for a room we host.
-++  room-subgroup
-  |=  name=@t
-  ^-  @t
-  =/  cfg  (room-sfu name)
-  (rap 3 ~[group.cfg '/' (rsh [3 1] (scot %p our.bowl)) '-' name])
-::
 ::  +listen-url: where a listener points a browser. Not the Galène
 ::  conference UI — that hides audio-only publishers behind a setting
 ::  and cannot autoplay in a tab nobody clicked, which made a link
@@ -2295,7 +2224,8 @@
   |=  [who=ship msg=room-sig:trunk]
   ^-  (list card)
   ?:  =(who our.bowl)
-    ?-  -.msg
+    ::  only these are ever addressed to ourselves
+    ?+  -.msg  ~
       %grant     ~[(fact [%ticket our.bowl ticket.msg])]
       %deny      ~[(fact [%denied our.bowl name.msg why.msg])]
       %announce
@@ -2306,28 +2236,9 @@
       %present     ~[(fact [%present our.bowl name.msg n.msg])]
       %recorders-are  ~[(fact [%recorders our.bowl name.msg who.msg])]
       %on-line     ~[(fact [%on-line our.bowl name.msg who.msg])]
-      ::  none of these is ever addressed to ourselves; the ?- must
-      ::  still be total.
-      %ask         ~
-      %peek        ~
-      %entered     ~
-      %left        ~
-      %occupancy   ~
-      %who         ~
-      %recording-on   ~
-      %recording-off  ~
-      %recorders   ~
-      %configure   ~
-      %share       ~
-      %access      ~
-      %moderate    ~
-      %get-access  ~
       %link        ~[(fact [%listen-link listen-link.msg])]
     ==
-  :~  :*  %pass  (room-wire who)
-          %agent  [who %trunk]
-          %poke  %trunk-room  !>(msg)
-  ==  ==
+  ~[(to-host who msg)]
 ::
 ::  +mirror-roster: one bound room's roster, read back through the
 ::  stable JSON scry. ~ on any failure, and the caller keeps the
@@ -2951,8 +2862,9 @@
   =/  now-secs  (unix-secs:trunk-jwt now.bowl)
   =/  exp  (add now-secs guest-ttl:trunk-guest)
   =/  tok
-    ?:  speak  (mint:trunk-jwt key.cfg id loc now-secs exp)
-    (mint-listen:trunk-jwt key.cfg id loc now-secs exp)
+    %:  mint:trunk-jwt  key.cfg  id  loc  now-secs  exp
+      ?:(speak speaker:trunk-jwt listener:trunk-jwt)
+    ==
   (ticket-pairs:trunk-json id loc (endpoint:trunk-guest base.cfg) tok exp speak)
 ::
 ::  +app-action: one of another agent's room actions (wire 16). Gall

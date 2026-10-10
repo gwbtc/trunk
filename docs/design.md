@@ -353,7 +353,7 @@ minted. A client that ignores the switches still can't get a ticket.
 
 Galène's permissions are `op` / `present` / `message` / `caption` /
 `token`. A token *without* `present` is a listener: it receives streams
-and cannot publish one. `mint-listen:trunk-jwt` grants exactly that.
+and cannot publish one. `listener:trunk-jwt` grants exactly that.
 
 **Links point at Trunk's own page, not Galène's client.** Galène's UI
 is built for video conferencing: `showHideMedia` only displays a remote
