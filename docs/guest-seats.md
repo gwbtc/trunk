@@ -13,11 +13,17 @@ This is the whole recipe for replacing a Google Meet style meeting.
 1. **One party line and one permanent link per meeting.** On the trunk page (`/apps/trunk`), under Guests, pick "New line…" as the party line and give it a title, such as "Groundwire standup". Under "Members from Talon", pick the Tlon group whose members should join from Talon as themselves, or leave it at Nobody. A ship outside that group can still use the link, and shows as a guest. Give the link a name, such as `groundwire-standup`, and press Make a permanent link. The page opens the line, binds it to the group and makes the link. A line stays open until you close it. The link never expires and has no seat limit. You can also make a link for a line you already host, or open the line from Talon or the dojo first.
 2. **Copy or share the link.** Each link on the trunk page has Copy, and on a phone Share, which opens the phone's share sheet.
 3. **Put the link in the calendar series**, once. People with no ship open it at meeting time in any browser, type a name and join. People with ships join the line from Talon as themselves.
-4. **Revoke it** from the same list when the meeting ends for good, or when it leaked. Revoking stops new joins and rejoins. Whoever is already on the call stays until they leave.
+4. **Leave the line open between meetings.** Closing it, from Talon, the dojo or the trunk page, ends its links, and a calendar link then stops working. To bring one back, open the line and make the link again under the same name.
+5. **Try the link yourself** in a private window before the first meeting. That checks the call server, TLS and `allowOrigin` before a guest needs them.
+6. **Revoke it** from the same list when the meeting ends for good, or when it leaked. Revoking stops new joins and rejoins. Whoever is already on the call stays until they leave.
 
 On a ship whose call server has a short-link redirect (see below), the link can also be shared as `https://calls.example.com/groundwire-standup`.
 
-A readable name can be guessed. Anyone who knows or guesses it can join until you revoke it. For a private meeting, add something hard to guess, such as `groundwire-standup-k3f9`.
+A readable name can be guessed, and anyone who knows or guesses it can join until you revoke it. So the trunk page adds a hard-to-guess ending by default, such as `groundwire-standup-k3f9x2qa`. Turn that off only for a link meant for anyone.
+
+Text for the calendar event:
+
+> Join in any browser: <the link>. Type your name, press Join and allow the microphone. No account is needed. On a phone, open the link in Safari or Chrome, not inside the mail or calendar app. With Talon, join the line from its group instead.
 
 From the dojo, the same three steps, then a revoke:
 
@@ -71,7 +77,7 @@ Either one belongs to its line. Closing the line ends its links, so a line opene
 1. A guest opens the link. Trunk serves `app/trunk/guest.html`, which asks for a display name and shows who is hosting and the room's title. Those come from `GET <path>/room`, and are all the page knows of the host.
 2. On Join, the page posts `{"secret": <the secret it was given before, or null>}` to `<path>`. Eyre gives a signed-out request a guest identity, and these routes sit before the sign-in check.
 3. Trunk checks the code: an unexpired invite, or a permanent link, for a room the ship still hosts. The answer is the ticket: `secret`, `username`, `location`, `endpoint`, `token`, `expires` and `speak`. The page keeps the secret.
-4. The page loads `protocol.js` from the SFU and joins with the token and the name.
+4. The page loads Galène's `protocol.js` from the ship (`/apps/trunk/protocol.js`, Galène 1.1's own file, pinned in the desk) and joins with the token and the name. Loaded from the call server, it would run on the ship's origin, so a broken call server would become a broken ship. A call server on another Galène version may need the pinned file changed to match.
 
 The page keeps the secret and the name in the browser, per link. A rejoin, after a reload or a dropped connection, sends the same secret. A revoked or expired link refuses the rejoin, but a guest already on the line stays until they leave.
 
@@ -131,6 +137,7 @@ A room can hold both. Members of a party line still join with `%join-room` and t
 ## What has to be true outside trunk
 
 - **Galène must take the ship's origin.** The guest page is served by the ship, and Galène refuses a websocket from another origin unless its `data/config.json` lists it: `"allowOrigin": ["https://your.ship.example"]`. An app's own page on the ship needs the same entry. Galène's `.status` sends no CORS header either, which is why every ticket carries `endpoint`. Native apps send no Origin header and are not affected.
+- **Each host ship should have its own Galène group and key.** Every ship that holds a group's key can mint a token for any room in it, so a sidecar several ships share should give each its own group (`sidecar/README.md`, step 1).
 - **Galène must speak TLS before guests use an https ship.** A page served over https cannot load `protocol.js` from, or open a websocket to, plain http: the browser blocks mixed content. The guest page says so rather than failing quietly. The fix is a TLS front for Galène (an nginx vhost with a certificate), `"proxyURL": "https://<that host>"` in Galène's `data/config.json` so `.status` names it, and `%set-sfu` pointed at its https base. `sidecar/README.md` has the steps.
 - **The short link is optional.** One nginx rule on the call server's TLS host can send `https://<host>/<name>` to `https://<ship>/apps/trunk/guest/<name>`, as long as it skips Galène's own paths. `sidecar/README.md` has the rule.
 - **TURN.** Galène hands every client its own TURN servers on join, so guests need nothing new.

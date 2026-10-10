@@ -307,7 +307,7 @@ AGENTS.md                  notes for coding agents working on trunk
 ## The desk
 
 **It is not self-contained.** Installing needs `default-agent` and
-`skeleton` from `%base`, plus the `bill`, `hoon`, `html`, `kelvin`,
+`skeleton` from `%base`, plus the `bill`, `hoon`, `html`, `js`, `kelvin`,
 `mime`, `noun`, `svg` and `txt` marks. Since wire 12 the Landscape tile
 also needs the `docket-0` mark, `lib/docket` and `sur/docket` from
 `%landscape`. That list is from a working install, not from memory; a
@@ -325,7 +325,7 @@ helpful.
 PIER=/path/to/your/pier
 cp -r app lib mar sur gen desk.bill desk.docket-0 "$PIER/trunk/"
 cp "$PIER"/base/lib/{default-agent,skeleton}.hoon           "$PIER/trunk/lib/"
-cp "$PIER"/base/mar/{bill,hoon,html,kelvin,mime,noun,svg,txt}.hoon "$PIER/trunk/mar/"
+cp "$PIER"/base/mar/{bill,hoon,html,js,kelvin,mime,noun,svg,txt}.hoon "$PIER/trunk/mar/"
 cp "$PIER"/landscape/mar/docket-0.hoon "$PIER/trunk/mar/"
 cp "$PIER"/landscape/lib/docket.hoon   "$PIER/trunk/lib/"
 cp "$PIER"/landscape/sur/docket.hoon   "$PIER/trunk/sur/"
@@ -484,7 +484,7 @@ the path):
 The dojo form of the same reads is `.^(json %gx /=trunk=/lines/json)`.
 
 **Anonymous listening** mints a token with no `present` permission —
-Galène's listener, receives and cannot publish. It is off unless asked
+Galène's listener, receives and cannot publish (and watches any camera or shared screen). The token rides in the link's fragment, out of server logs. It is off unless asked
 for: a party line is otherwise gated by the host's membership list, and
 a public link deliberately punches through that. The link cannot be
 revoked (Galène's tokens are stateless), so its TTL is the entire

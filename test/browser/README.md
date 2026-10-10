@@ -51,11 +51,13 @@ SHIP=http://localhost:8080 CODE=<the ship's +code> BROWSER=/usr/bin/chromium nod
 The listen check needs a listen link to the `browser-check` line. Mint its token in the dojo with the group key and the line's address, where the subgroup is the ship's name without the `~`, then `-browser-check`:
 
 ```
-+trunk!token 'THE_KEY' 'listener' 'http://127.0.0.1:8445/group/talon/zod-browser-check/' 1800
++trunk!token 'THE_KEY' 'listener' 'http://127.0.0.1:8445/group/talon/zod-browser-check/' 1800, =listen &
 ```
 
 ```bash
-LISTEN='http://127.0.0.1:8445/listen/?token=<the token>' SHIP=... CODE=... BROWSER=... node check.mjs
+LISTEN='http://127.0.0.1:8445/listen/#token=<the token>' SHIP=... CODE=... BROWSER=... node check.mjs
 ```
+
+Use a key made for the test, never the key of a call server other ships use: the dojo keeps it in its history.
 
 The microphone is a test tone the script writes to the system's temp folder: 440 Hz, on for 0.7 s of every second. Chrome's own fake microphone beeps too briefly for the speaking checks to catch.

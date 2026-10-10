@@ -36,6 +36,19 @@ services:
       # host firewalls can open it explicitly.
       - --min-port=49160
       - --max-port=49200
+      # The password is static and reaches every device, so whoever
+      # reads it must not get a relay into private networks.
+      - --no-tcp-relay
+      - --no-multicast-peers
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+      - --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
 
   # Party lines. ONE Galène group ("talon") is configured, with
   # auto-subgroups on: every room is a subgroup created on first join,
@@ -63,7 +76,8 @@ services:
         ENTRYPOINT ["/galene", "-static", "/static"]
     restart: unless-stopped
     network_mode: host
-    command: ["-insecure", "-http", ":8444", "-data", "/data", "-groups", "/groups"]
+    # loopback only: the TLS front (README step 5) is the way in
+    command: ["-insecure", "-http", "127.0.0.1:8444", "-data", "/data", "-groups", "/groups"]
     volumes:
       - ./galene/data:/data
       - ./galene/groups:/groups

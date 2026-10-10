@@ -321,12 +321,15 @@ its own:
 +$ room  [... listen=? sfu=(unit sfu-config)]
 ```
 
-`~` means "the host ship's own sidecar", which is the common case. A
-group that would rather not route its audio through the host's server
-sets its own — the host still mints the tickets, but against the
-group's chosen SFU. The secret never leaves the ship: `/x/rooms`
-reports `sfu-base` and `custom-sfu` so an admin can see *which* server
-is in use, but reading the key back is not part of the deal.
+`~` means "the host ship's own sidecar", which is the common case. The
+host's owner can put a line on another server, with `%configure-room`
+from the host itself, and the host then mints the tickets against it.
+A remote admin cannot: any ship that opens a line here names itself
+its admin, and a server it chose would hear every member, so a remote
+`%configure` keeps the line's server as it is. Reading a key back is
+not part of the deal either: `/x/rooms` reports `sfu-base` and
+`custom-sfu`, never a key. Guest links work only on the host's own
+SFU.
 
 ## Party lines are opt-in, and so is anonymous listening
 
