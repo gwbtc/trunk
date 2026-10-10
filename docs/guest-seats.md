@@ -140,7 +140,7 @@ A room can hold both. Members of a party line still join with `%join-room` and t
 - **Each host ship should have its own Galène group and key.** Every ship that holds a group's key can mint a token for any room in it, so a sidecar several ships share should give each its own group (`sidecar/README.md`, step 1).
 - **Galène must speak TLS before guests use an https ship.** A page served over https cannot load `protocol.js` from, or open a websocket to, plain http: the browser blocks mixed content. The guest page says so rather than failing quietly. The fix is a TLS front for Galène (an nginx vhost with a certificate), `"proxyURL": "https://<that host>"` in Galène's `data/config.json` so `.status` names it, and `%set-sfu` pointed at its https base. `sidecar/README.md` has the steps.
 - **The short link is optional.** One nginx rule on the call server's TLS host can send `https://<host>/<name>` to `https://<ship>/apps/trunk/guest/<name>`, as long as it skips Galène's own paths. `sidecar/README.md` has the rule.
-- **TURN.** Galène hands every client its own TURN servers on join, so guests need nothing new.
+- **TURN.** Guests reach Galène directly, since it has a public address. Galène's own TURN server must stay off (`-turn ''`, as the sidecar's compose file has it): it relays to any address, the host's loopback included, and every guest would get its password.
 - **Capacity.** Galène forwards video without decoding it, so its CPU cost is small, and bandwidth is what grows. Each person's video goes to every other person. About ten people on camera is comfortable for one small server. A ship that hosts bigger or busier rooms should measure first, or run its own sidecar.
 
 ## Worked example: the MUD's party voice

@@ -67,8 +67,14 @@ Open UDP 3478 and 49160-49200 (coturn), and 443 for the TLS front.
 Do not open 8444: the compose file binds Galène to 127.0.0.1, and
 every ticket travels in the websocket's first message, which plain
 http would carry in the clear. Put the TLS front in step 5 up before
-you point a ship at Galène. Galène hands clients its own TURN
-credentials on join, so party-line media needs no extra NAT config.
+you point a ship at Galène. Galène has a public address, so most
+clients reach it directly and party lines need no TURN.
+
+The compose file turns Galène's own TURN server off (`-turn ''`). It
+relays to any address, the host's loopback included, and Galène gives
+its password to everyone who joins, guests too. With it on, anyone
+holding a call link could reach services that listen only on the
+host's loopback, such as a ship's loopback HTTP port. Keep it off.
 
 The compose file also keeps coturn from relaying into private
 addresses (`--denied-peer-ip` for each private range): its password is

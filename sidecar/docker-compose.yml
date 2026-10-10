@@ -76,8 +76,11 @@ services:
         ENTRYPOINT ["/galene", "-static", "/static"]
     restart: unless-stopped
     network_mode: host
-    # loopback only: the TLS front (README step 5) is the way in
-    command: ["-insecure", "-http", "127.0.0.1:8444", "-data", "/data", "-groups", "/groups"]
+    # loopback only: the TLS front (README step 5) is the way in.
+    # -turn '': Galène's own TURN server relays to any address, the
+    # host's loopback included, and every client that joins gets its
+    # password, guests too.
+    command: ["-insecure", "-turn", "", "-http", "127.0.0.1:8444", "-data", "/data", "-groups", "/groups"]
     volumes:
       - ./galene/data:/data
       - ./galene/groups:/groups

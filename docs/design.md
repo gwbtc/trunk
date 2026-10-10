@@ -84,7 +84,7 @@ doc; this file is how it actually fits together and how to run it.
                 so NAT never enters              | (sidecar) |
                                                  +-----------+
      ticket = JWT scoped to  talon/<host>-<room>, 6h expiry
-     Galene issues its own TURN creds on join -> no ICE config
+     Galene has a public address -> no ICE config
      SFU terminates DTLS -> host's machine hears plaintext,
      the same trust boundary as it already storing the posts
 ```
@@ -120,9 +120,11 @@ Two services, needed at different times, both optional:
   a home router on the other. Expect roughly 10-20% of real-world pairs,
   disproportionately mobile.
 
-Galène ships its own TURN server and hands credentials to every joining
-client, which is why party lines need no ICE configuration at all. That
-raises the obvious question of why coturn exists rather than relaying
+Galène has a public address, which is why party lines need no ICE
+configuration at all. It also ships its own TURN server, but the
+sidecar runs it with `-turn ''`: that server relays to any address, the
+host's loopback included, and hands its password to everyone who
+joins, guests too. That raises the obvious question of why coturn exists rather than relaying
 1:1 calls through Galène too — the answer is that an SFU terminates
 DTLS and re-encrypts per listener, so it would hear the call. A TURN
 relay only forwards packets it cannot read. Keeping coturn is what lets
@@ -598,8 +600,9 @@ a correct roster on both sides and clean leave propagation.
   the shared Ktor client; `PeerLink` is the trickling, one-directional
   per-stream media primitive (desktop + Android impls).
 
-Galène hands every client its own TURN credentials on join, so party
-lines need no ICE config from the ship at all — coturn stays for 1:1.
+Party lines need no ICE config from the ship, since Galène has a
+public address. Its own TURN server stays off (`-turn ''`), because it
+relays to any address for anyone who joins. coturn stays for 1:1.
 
 ## Security review of the room path (2026-08-26)
 
