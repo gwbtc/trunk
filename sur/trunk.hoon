@@ -132,6 +132,9 @@
       uses=@ud
       guests=(set @t)
   ==
+::  a permanent link to a room we host (wire 17), under a name the owner
+::  chose. It never expires and has no seat limit.
++$  guest-link  [name=@t speak=?]
 ::  a room another agent on our ship hosts for its own users, keyed by
 ::  [agent room]. The epoch is in its SFU location, so a new one
 ::  strands every token minted for the old.
@@ -237,6 +240,9 @@
       ::  host, for `uses` new guests over `ttl` seconds, and its revoke.
       [%invite-guests name=@t speak=? ttl=@ud uses=@ud]
       [%revoke-invite code=@t]
+      ::  a permanent link under a name the owner picks (wire 17), such
+      ::  as 'groundwire-standup'. %revoke-invite removes it.
+      [%guest-link code=@t name=@t speak=?]
       ::  another agent's: its own rooms, and a ticket for one of its
       ::  users, whom it names by its own id. Answers come on
       ::  /app/<agent>. Only an app the owner let host calls gets one.
@@ -366,5 +372,7 @@
       [%recorders from=ship name=@t who=(set ship)]
       ::  an invite we just made (wire 16)
       [%guest-invite code=@t =invite]
+      ::  a permanent link we just made (wire 17)
+      [%guest-link code=@t =guest-link]
   ==
 --

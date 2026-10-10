@@ -16,8 +16,9 @@
 ::  may seat. An invite can be revoked, so these only bound the state.
 ++  invite-ttl-cap  ^~((div ~d30 ~s1))
 ++  uses-cap  1.000
-::  live invites, app rooms, and guests in one app room
+::  live invites, permanent links, app rooms, and guests in one app room
 ++  invite-cap  64
+++  links-cap  64
 ++  app-room-cap  64
 ++  app-guest-cap  256
 ::  an app room that asks for no ticket for this long closes itself
@@ -33,6 +34,46 @@
   |=  eny=@
   ^-  @t
   (crip (weld "guest-" ((x-co:co 12) (end [2 12] (shas %guest-id eny)))))
+::
+::  +new-secret: what a guest's page keeps, 128 random bits as 32 hex
+::  digits. Their guest id is its hash (+id-of), so only the holder can
+::  rejoin as that guest, and a permanent link stores nothing per guest.
+::
+++  new-secret
+  |=  eny=@
+  ^-  @t
+  (crip ((x-co:co 32) (end [3 16] (shas %guest-secret eny))))
+::
+::  +id-of: the guest id a secret stands for
+::
+++  id-of
+  |=  secret=@t
+  ^-  @t
+  (crip (weld "guest-" ((x-co:co 12) (end [2 12] (shax secret)))))
+::
+::  +valid-secret: 32 hex digits, the shape +new-secret makes
+::
+++  valid-secret
+  |=  s=@t
+  ^-  ?
+  &(=(32 (met 3 s)) (levy (trip s) is-hex))
+::
+++  is-hex
+  |=  c=@tD
+  ^-  ?
+  |(&((gte c '0') (lte c '9')) &((gte c 'a') (lte c 'f')))
+::
+::  +valid-name: a permanent link's name, chosen by the owner. A @tas
+::  of 3 to 64 characters that does not look like a random code.
+::
+++  valid-name
+  |=  c=@t
+  ^-  ?
+  ?&  (gte (met 3 c) 3)
+      (lte (met 3 c) 64)
+      ((sane %tas) c)
+      !&(=(32 (met 3 c)) (levy (trip c) is-hex))
+  ==
 ::
 ::  +new-code: an invite's code, 128 random bits as 32 hex digits
 ::
@@ -59,21 +100,30 @@
   |=  [@t i=invite:trunk]
   &((gth expires.i now) (~(has in rooms) name.i))
 ::
-::  +redeem: seat a guest by invite. `guest` is the id the page was
-::  given before, if any. A guest the invite seated keeps their id and
-::  takes no use, so one person stays one guest. Anyone else takes a
-::  use and a new id. ~ when the invite cannot seat them.
+::  +redeem: seat a guest by invite. `secret` is what the page was given
+::  before, if any, and a new one is made otherwise. A guest the invite
+::  seated takes no use when they rejoin, so one person stays one guest.
+::  Anyone else takes a use. ~ when the invite cannot seat them.
 ::
 ++  redeem
-  |=  [inv=(unit invite:trunk) guest=(unit @t) now=@da eny=@]
-  ^-  (unit [id=@t =invite:trunk])
+  |=  [inv=(unit invite:trunk) secret=(unit @t) now=@da eny=@]
+  ^-  (unit [secret=@t id=@t =invite:trunk])
   ?~  inv  ~
   ?.  (gth expires.u.inv now)  ~
-  ?:  &(?=(^ guest) (~(has in guests.u.inv) u.guest))
-    `[u.guest u.inv]
+  =/  sec  ?^(secret u.secret (new-secret eny))
+  =/  id  (id-of sec)
+  ?:  (~(has in guests.u.inv) id)  `[sec id u.inv]
   ?:  =(0 uses.u.inv)  ~
-  =/  id  (guest-id eny)
-  `[id u.inv(uses (dec uses.u.inv), guests (~(put in guests.u.inv) id))]
+  `[sec id u.inv(uses (dec uses.u.inv), guests (~(put in guests.u.inv) id))]
+::
+::  +link-seat: seat a guest by permanent link, which has no seats to
+::  count and keeps no guests: the secret alone keeps their id.
+::
+++  link-seat
+  |=  [secret=(unit @t) eny=@]
+  ^-  [secret=@t id=@t]
+  =/  sec  ?^(secret u.secret (new-secret eny))
+  [sec (id-of sec)]
 ::
 ::  +seat: the guest id an app's user has in one of its rooms, and the
 ::  room with it noted. The same user keeps the same id for the room's

@@ -6,14 +6,22 @@
 <title>Join a call · Trunk</title>
 <link rel="icon" href="/apps/trunk/icon.svg">
 <!--
-  The guest page (wire 16): a call for someone with no ship, through an
-  invite the host made. It carries nothing of the host's but the
-  room's title and the host's name.
+  The guest page (wire 16 and 17): a call for someone with no ship,
+  through an invite or a permanent link the host made. It carries
+  nothing of the host's but the room's title and the host's name.
 
   The ship mints the ticket. Galène's own protocol.js, served by the
   call server, does the rest, so the wire protocol cannot drift from
   it. The Join button is the user gesture that unlocks audio and asks
   for the microphone.
+
+  It publishes the way Talon does, so Talon can show it: one stream,
+  labelled 'camera', with the microphone and one video sender. The
+  camera and a shared screen take turns on that sender (replaceTrack,
+  no renegotiation), and there is no simulcast. A 'talon-video'
+  message says whether video is on and 'talon-mute' whether the mic
+  is off. Galène does not replay them to newcomers, so both go again
+  whenever someone joins.
 -->
 <style>
   :root {
@@ -21,6 +29,7 @@
     --fg: #1a1a17;
     --muted: #6b6a63;
     --line: #e0ded7;
+    --tile: #e9e7e1;
     --accent: #1f6f4a;
     --accent-fg: #ffffff;
     --bad: #8a2f2f;
@@ -31,6 +40,7 @@
       --fg: #ece9e1;
       --muted: #9a978c;
       --line: #2c2b25;
+      --tile: #22221c;
       --accent: #4bbd85;
       --accent-fg: #0d1a13;
       --bad: #e08585;
@@ -39,18 +49,19 @@
   * { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    padding: 24px 16px;
     background: var(--bg); color: var(--fg);
     font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  main { width: 100%; max-width: 26rem; text-align: center; }
+  main { max-width: 26rem; margin: 0 auto; padding: 24px 16px; text-align: center; }
+  body.in main { max-width: 72rem; }
   h1 {
     margin: 0 0 .25rem; font-size: 1.05rem; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
   }
   .room { margin: 0; font-size: 1.5rem; font-weight: 600; overflow-wrap: anywhere; }
   .host { margin: .25rem 0 2rem; color: var(--muted); overflow-wrap: anywhere; }
+  body.in .host { margin-bottom: 1rem; }
+  form { max-width: 26rem; margin: 0 auto; }
   label { display: block; text-align: left; color: var(--muted); font-size: .9rem; margin-bottom: .35rem; }
   input {
     width: 100%; padding: .8rem 1rem; margin-bottom: 1rem;
@@ -58,21 +69,38 @@
     background: transparent; color: var(--fg); font: inherit;
   }
   button {
-    width: 100%; padding: 1.15rem 1rem; border: 0; border-radius: 999px;
+    padding: .9rem 1.2rem; border: 0; border-radius: 999px;
     background: var(--accent); color: var(--accent-fg);
-    font: inherit; font-size: 1.15rem; font-weight: 600; cursor: pointer;
+    font: inherit; font-weight: 600; cursor: pointer;
   }
+  form button { width: 100%; padding: 1.15rem 1rem; font-size: 1.15rem; }
   button:disabled { opacity: .55; cursor: default; }
-  button.quiet { background: transparent; color: var(--muted); border: 1px solid var(--line); }
-  .controls { display: flex; gap: .75rem; }
-  .status { margin-top: 1.25rem; color: var(--muted); min-height: 1.5rem; }
+  button.quiet { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  button.on { background: var(--fg); color: var(--bg); }
+  .controls { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 1rem; }
+  .status { margin-top: 1rem; color: var(--muted); min-height: 1.5rem; }
   .status.bad { color: var(--bad); }
-  .who {
-    margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line);
-    color: var(--muted); font-size: .9rem; text-align: left;
+  .grid {
+    display: grid; gap: .6rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
   }
-  .who ul { margin: .5rem 0 0; padding: 0; list-style: none; }
-  .who li { padding: .15rem 0; overflow-wrap: anywhere; }
+  .tile {
+    position: relative; aspect-ratio: 16 / 9; border-radius: .75rem;
+    background: var(--tile); overflow: hidden; cursor: pointer;
+  }
+  .tile.big { grid-column: 1 / -1; }
+  .tile video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .tile .face {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--tile); font-size: 1.1rem; padding: 1rem; overflow-wrap: anywhere;
+  }
+  .tile.video .face { display: none; }
+  .tile .name {
+    position: absolute; left: .5rem; bottom: .5rem; max-width: calc(100% - 1rem);
+    padding: .1rem .5rem; border-radius: .5rem; font-size: .85rem;
+    background: rgba(0, 0, 0, .55); color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -88,17 +116,14 @@
     <button id="join" type="submit">Join</button>
   </form>
 
+  <div class="grid" id="grid"></div>
   <div class="controls" id="controls" hidden>
-    <button id="mute" type="button">Mute</button>
+    <button id="mute" type="button" class="quiet">Mute</button>
+    <button id="camera" type="button" class="quiet">Camera</button>
+    <button id="share" type="button" class="quiet">Share screen</button>
     <button id="leave" type="button" class="quiet">Leave</button>
   </div>
   <p class="status" id="status">Loading…</p>
-
-  <div class="who" id="who" hidden>
-    <strong>On the call</strong>
-    <ul id="whoList"></ul>
-  </div>
-  <div id="sinks" hidden></div>
 </main>
 
 <script>
@@ -106,9 +131,13 @@
   var $ = function (id) { return document.getElementById(id); };
   var code = location.pathname.split('/apps/trunk/guest/')[1].split('/')[0];
   var base = '/apps/trunk/guest/' + code;
-  var conn = null, mic = null, muted = false, speak = false;
+  var conn = null, up = null, mic = null, cam = null, screen = null, preview = null;
+  var muted = false, speak = false, myName = '';
+  var videoOn = {};   // by connection id, from talon-video
+  var micOff = {};    // by connection id, from talon-mute
+  var streams = {};   // by connection id: the stream that user publishes
 
-  // Remembered per invite, so a reload or a rejoin is the same guest.
+  // Kept per invite or link, so a reload or a rejoin is the same guest.
   function recall(k) { try { return localStorage.getItem(code + ':' + k); } catch (e) { return null; } }
   function keep(k, v) { try { localStorage.setItem(code + ':' + k, v); } catch (e) {} }
 
@@ -121,33 +150,58 @@
   // a ship, a guest id for a guest. A readable name rides in the
   // per-user data. A guest is always marked, so nobody passes as a ship.
   function nameOf(u) {
-    var shown = (u.data && u.data.name) || u.username || 'someone';
-    if (u.username && u.username.indexOf('guest-') === 0) shown += ' (guest)';
+    var shown = (u && u.data && u.data.name) || (u && u.username) || 'someone';
+    if (u && u.username && u.username.indexOf('guest-') === 0) shown += ' (guest)';
     return shown;
   }
 
-  function renderWho() {
-    var list = $('whoList');
-    list.replaceChildren();
-    var users = (conn && conn.users) || {};
-    Object.keys(users).forEach(function (id) {
-      var li = document.createElement('li');
-      li.textContent = nameOf(users[id]) + (id === conn.id ? ' (you)' : '');
-      list.append(li);
-    });
-    $('who').hidden = !list.children.length;
+  function tile(id) {
+    var t = document.getElementById('t-' + id);
+    if (t) return t;
+    t = document.createElement('div');
+    t.className = 'tile';
+    t.id = 't-' + id;
+    var v = document.createElement('video');
+    v.autoplay = true;
+    v.playsInline = true;
+    var face = document.createElement('div');
+    face.className = 'face';
+    var name = document.createElement('div');
+    name.className = 'name';
+    t.append(v, face, name);
+    t.onclick = function () { t.classList.toggle('big'); };
+    $('grid').append(t);
+    return t;
   }
 
-  function play(id, stream) {
-    var a = document.getElementById('a-' + id);
-    if (!a) {
-      a = document.createElement('audio');
-      a.id = 'a-' + id;
-      a.autoplay = true;
-      $('sinks').append(a);
+  // One tile per person on the call, ourselves first.
+  function render() {
+    var users = (conn && conn.users) || {};
+    var ids = Object.keys(users);
+    if (conn && conn.id && ids.indexOf(conn.id) > 0) {
+      ids.splice(ids.indexOf(conn.id), 1);
+      ids.unshift(conn.id);
     }
-    a.srcObject = stream;
-    a.play().catch(function () {});
+    [].slice.call($('grid').children).forEach(function (t) {
+      if (ids.indexOf(t.id.slice(2)) < 0) t.remove();
+    });
+    ids.forEach(function (id) {
+      var t = tile(id);
+      var me = id === conn.id;
+      var label = nameOf(users[id]) + (me ? ' (you)' : '');
+      if ((me && muted) || (!me && micOff[id])) label += ' · muted';
+      t.querySelector('.name').textContent = label;
+      t.querySelector('.face').textContent = nameOf(users[id]);
+      var v = t.querySelector('video');
+      var src = (me ? preview : streams[id]) || null;
+      if (me) v.muted = true;
+      if (v.srcObject !== src) {
+        v.srcObject = src;
+        if (src) v.play().catch(function () {});
+      }
+      var on = me ? !!(screen || cam) : !!videoOn[id];
+      t.classList.toggle('video', on);
+    });
   }
 
   function loadProtocol(sfu) {
@@ -161,30 +215,65 @@
     });
   }
 
+  function stopTracks(s) { if (s) s.getTracks().forEach(function (t) { t.stop(); }); }
+
   function stop() {
     if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} conn = null; }
-    if (mic) { mic.getTracks().forEach(function (t) { t.stop(); }); mic = null; }
-    $('sinks').replaceChildren();
+    stopTracks(mic); stopTracks(cam); stopTracks(screen);
+    mic = cam = screen = up = preview = null;
+    streams = {}; videoOn = {}; micOff = {};
+    $('grid').replaceChildren();
+    document.body.classList.remove('in');
     $('controls').hidden = true;
-    $('who').hidden = true;
     $('form').hidden = false;
     $('join').disabled = false;
     $('join').textContent = 'Join again';
   }
 
+  function videoSender() {
+    var tr = up && up.pc.getTransceivers().filter(function (t) {
+      return t.receiver.track && t.receiver.track.kind === 'video';
+    })[0];
+    return tr && tr.sender;
+  }
+
+  // What everyone else needs to draw our tile.
+  function announce() {
+    if (!conn || !up) return;
+    conn.userMessage('talon-video', '', !!(screen || cam));
+    conn.userMessage('talon-mute', '', muted);
+  }
+
+  async function showVideo() {
+    var s = videoSender();
+    var t = screen || cam;
+    preview = t ? new MediaStream(t.getVideoTracks()) : null;
+    if (s) await s.replaceTrack(t ? t.getVideoTracks()[0] : null);
+    $('camera').classList.toggle('on', !!cam);
+    $('share').classList.toggle('on', !!screen);
+    $('share').textContent = screen ? 'Stop sharing' : 'Share screen';
+    announce();
+    render();
+  }
+
+  // The microphone and one video sender with no track yet. The camera
+  // or a shared screen later goes on that sender.
   function publish() {
-    var c = conn.newUpStream();
-    c.label = 'camera';
-    c.setStream(mic);
-    mic.getTracks().forEach(function (t) {
-      c.pc.addTransceiver(t, { direction: 'sendonly', streams: [mic] });
+    up = conn.newUpStream();
+    up.label = 'camera';
+    var s = mic || new MediaStream();
+    up.setStream(s);
+    if (mic) mic.getAudioTracks().forEach(function (t) {
+      up.pc.addTransceiver(t, { direction: 'sendonly', streams: [s] });
     });
+    up.pc.addTransceiver('video', { direction: 'sendonly', streams: [s] });
   }
 
   async function join(ev) {
     ev.preventDefault();
     var name = $('name').value.trim();
     if (!name) return;
+    myName = name;
     keep('name', name);
     $('join').disabled = true;
     say('Joining…');
@@ -193,17 +282,17 @@
         try {
           mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         } catch (e) {
-          say('No microphone, so you will only listen.');
+          say('No microphone, so others will not hear you.');
         }
       }
       var r = await fetch(base, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ guest: recall('guest') }),
+        body: JSON.stringify({ secret: recall('secret') }),
       });
       var t = await r.json();
       if (!r.ok) throw new Error(t.error || 'The host refused.');
-      keep('guest', t.username);
+      keep('secret', t.secret);
       var sfu = t.location.split('/group/')[0];
       var group = t.location.split('/group/')[1].replace(/\/$/, '');
       if (location.protocol === 'https:' && t.endpoint.indexOf('ws:') === 0) {
@@ -212,7 +301,7 @@
       await loadProtocol(sfu);
       conn = new ServerConnection();
       conn.onconnected = function () {
-        this.join(group, t.username, { type: 'token', token: t.token }, { name: name });
+        this.join(group, t.username, { type: 'token', token: t.token }, { name: myName });
       };
       conn.onjoined = function (kind, g, perms, status, data, error, message) {
         if (kind === 'fail' || kind === 'redirect') {
@@ -221,20 +310,38 @@
           return;
         }
         if (kind !== 'join') return;
-        this.request({ '': ['audio'] });
-        if (mic && perms.indexOf('present') >= 0) publish();
+        this.request({ '': ['audio', 'video'] });
+        var can = perms.indexOf('present') >= 0;
+        if (can) publish();
+        document.body.classList.add('in');
         $('form').hidden = true;
         $('controls').hidden = false;
         $('mute').hidden = !mic;
-        say(mic ? 'You are on the call.' : 'You are listening.');
-        renderWho();
+        $('camera').hidden = !can;
+        $('share').hidden = !can || !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+        say(can ? 'You are on the call.' : 'You are watching and listening.');
+        announce();
+        render();
       };
-      conn.onuser = renderWho;
+      conn.onuser = function (id, kind) {
+        if (kind === 'delete') { delete streams[id]; delete videoOn[id]; delete micOff[id]; }
+        if (kind === 'add' && id !== conn.id) announce();
+        render();
+      };
+      conn.onusermessage = function (source, dest, username, time, privileged, kind, error, value) {
+        if (kind === 'talon-video') videoOn[source] = !!value;
+        else if (kind === 'talon-mute') micOff[source] = !!value;
+        else return;
+        render();
+      };
       conn.ondownstream = function (s) {
-        s.ondowntrack = function (track, tr, stream) { play(s.id, s.stream || stream); };
+        s.ondowntrack = function (track, tr, stream) {
+          streams[s.source] = s.stream || stream;
+          render();
+        };
         s.onclose = function () {
-          var a = document.getElementById('a-' + s.id);
-          if (a) a.remove();
+          if (streams[s.source] === s.stream) delete streams[s.source];
+          render();
         };
       };
       conn.onclose = function () { say('The call ended.'); stop(); };
@@ -249,10 +356,35 @@
   $('mute').onclick = function () {
     muted = !muted;
     if (mic) mic.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
-    // Talon and the listen page show this beside the speaker.
-    if (conn) conn.userMessage('talon-mute', '', muted);
     $('mute').textContent = muted ? 'Unmute' : 'Mute';
+    $('mute').classList.toggle('on', muted);
+    announce();
+    render();
   };
+
+  $('camera').onclick = async function () {
+    if (cam) { stopTracks(cam); cam = null; return showVideo(); }
+    try {
+      cam = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+    } catch (e) {
+      say('The camera is not available.', true);
+      return;
+    }
+    showVideo();
+  };
+
+  $('share').onclick = async function () {
+    if (screen) { stopTracks(screen); screen = null; return showVideo(); }
+    try {
+      screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    } catch (e) {
+      return;
+    }
+    // The browser's own "Stop sharing" ends the track; go back to the camera.
+    screen.getVideoTracks()[0].onended = function () { screen = null; showVideo(); };
+    showVideo();
+  };
+
   $('leave').onclick = function () { stop(); say('You left the call.'); };
   $('form').onsubmit = join;
 
@@ -265,7 +397,7 @@
       speak = !!x[1].speak;
       $('name').value = recall('name') || '';
       $('form').hidden = false;
-      say(speak ? 'You will be asked for your microphone.' : 'You can listen on this call.');
+      say(speak ? 'You will be asked for your microphone.' : 'You can watch and listen on this call.');
     })
     .catch(function (e) { say(e.message, true); });
 })();

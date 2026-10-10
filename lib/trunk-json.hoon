@@ -38,7 +38,9 @@
 ::            {"push-app":{"id":i,"allow":true,"cap":30}}  (cap 0: no limit)
 ::            {"invite-guests":{"name":n,"speak":true,"ttl":86400,
 ::                              "uses":10}}
-::            {"revoke-invite":code}
+::            {"revoke-invite":code}  (an invite's code or a link's name)
+::            {"guest-link":{"code":"groundwire-standup","name":n,
+::                           "speak":true}}
 ::            {"app-hosting":{"agent":"mud-world","allow":true}}
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
@@ -50,6 +52,7 @@
 ::                             "speak":null|["r"],"muted":["~bus"]}}
 ::            {"guest-invite":{"code":c,"name":n,"path":p,"speak":true,
 ::                             "expires":1787000000,"uses":10,"guests":0}}
+::            {"guest-link":{"code":c,"name":n,"path":p,"speak":true}}
 ::    policy  {"mode":"open","allow":["~zod"],"block":["~bus"]}
 ::    link    {"listen-link":{"name":n,"url":u,"expires":1787000000}}
 ::
@@ -62,8 +65,10 @@
 ::             "endpoint":"wss://...","token":t,"expires":1787000000,
 ::             "speak":true}}
 ::    denied  {"guest-denied":{"room":r,"req":q,"why":w}}
-::  The guest page's POST answers with the ticket's last six fields.
+::  The guest page's POST answers with the ticket's last six fields
+::  and "secret", which the page keeps to rejoin as the same guest.
 ::  /x/guests is {"invites":[<guest-invite's object>],
+::  "links":[<guest-link's object>],
 ::  "apps":[{"agent":a,"allowed":false,"rooms":[r]}]}.
 /-  trunk
 |%
@@ -164,6 +169,7 @@
       [%push-app (ot ~[id+so allow+bo cap+ni])]
       [%invite-guests (ot ~[name+so speak+bo ttl+ni uses+ni])]
       [%revoke-invite so]
+      [%guest-link (ot ~[code+so name+so speak+bo])]
       [%app-hosting (ot ~[agent+(se %tas) allow+bo])]
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
@@ -318,6 +324,18 @@
     ==
   ::
       %guest-invite  (frond %guest-invite (invite-to-json code.u invite.u))
+      %guest-link    (frond %guest-link (link-to-json code.u guest-link.u))
+  ==
+::
+++  link-to-json
+  |=  [code=@t lin=guest-link:trunk]
+  ^-  json
+  =,  enjs:format
+  %-  pairs
+  :~  [%code s+code]
+      [%name s+name.lin]
+      [%path s+(cat 3 '/apps/trunk/guest/' code)]
+      [%speak b+speak.lin]
   ==
 ::
 ++  invite-to-json
@@ -337,6 +355,7 @@
 ::  +guests-to-json: /x/guests, for the trunk page and Talon
 ++  guests-to-json
   |=  $:  invites=(map @t invite:trunk)
+          links=(map @t guest-link:trunk)
           apps=(map [agent=@tas room=@t] app-room:trunk)
           hosts=(map @tas ?)
       ==
@@ -345,6 +364,8 @@
   %-  pairs
   :~  :-  %invites
       a+(turn ~(tap by invites) |=([c=@t i=invite:trunk] (invite-to-json c i)))
+      :-  %links
+      a+(turn ~(tap by links) |=([c=@t l=guest-link:trunk] (link-to-json c l)))
       :-  %apps
       :-  %a
       %+  turn  ~(tap by hosts)
@@ -372,11 +393,6 @@
       ['expires' (numb:enjs:format expires)]
       ['speak' b+speak]
   ==
-::
-++  ticket-to-json
-  |=  [username=@t location=@t endpoint=@t token=@t expires=@ud speak=?]
-  ^-  json
-  (pairs:enjs:format (ticket-pairs username location endpoint token expires speak))
 ::
 ++  app-ticket-to-json
   |=  $:  room=@t
