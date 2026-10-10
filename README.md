@@ -19,7 +19,7 @@ never touches audio.
 **1. Check the wire before anything else.**
 
 ```
-GET /~/scry/trunk/version.json   ->  {"wire":16}
+GET /~/scry/trunk/version.json   ->  {"wire":17}
 ```
 
 A missing scry means no desk, or one too old to say. A number lower
@@ -157,7 +157,7 @@ The ship sends a message, read, notice or badge again when the answer is a 5xx, 
 
 ### The trunk page (wire 12)
 
-Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, a switch for each app that has sent a notice (wire 14), guest invites and a switch for each app that asked to host calls (wire 16), the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page. Only the tile's icon at `/apps/trunk/icon.svg` and the guest routes under `/apps/trunk/guest/` are public.
+Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, a switch for each app that has sent a notice (wire 14), guest links, with a way to start a new line bound to a Tlon group, and a switch for each app that asked to host calls (wire 16 and 17), the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page. Only the tile's icon at `/apps/trunk/icon.svg` and the guest routes under `/apps/trunk/guest/` are public.
 
 The switches are one more `trunk-action`. Channel posts are `all` (every one `%activity` marks notified), `mentions` or `none`. A thread reply needs its chat's switch and `replies` both. `notices` covers alerts from other agents. An upgrade starts with everything on, which is how wire 11 behaved.
 
@@ -188,9 +188,13 @@ Talon reads each device's `sent` and `last` and the `drops` from it, so those na
  "log": [{"at": 1791335355181, "what": "DM: pushed to 1 device"}]}
 ```
 
-### Guest seats (wire 16)
+### Guest seats (wire 16 and 17)
 
-A ship can host calls that people with no ship speak in. The owner makes an invite link to a party line (`invite-guests`), and a guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on. A guest's Galène username is `guest-` and 12 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The live invites and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin`, and an https ship needs Galène behind TLS. [`docs/guest-seats.md`](docs/guest-seats.md) has the whole design.
+A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line: an invite for a set number of people over a set time (`invite-guests`), or a permanent link under a chosen name for a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on.
+
+A guest's Galène username is `guest-` and 12 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin`, and an https ship needs Galène behind TLS.
+
+[`docs/guest-seats.md`](docs/guest-seats.md) has the whole design, and starts with how to run a recurring meeting.
 
 ### Three things that will bite you
 

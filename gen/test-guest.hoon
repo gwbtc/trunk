@@ -1,6 +1,6 @@
-::  +test-guest: guest seats (wire 16). Each limit is checked as a
-::  pair: the last case allowed, and one more refused. Answers %ok, or
-::  the name of each case that came out wrong.
+::  +test-guest: guest seats (wire 16) and permanent links (wire 17).
+::  Each limit is checked as a pair: the last case allowed, and one more
+::  refused. Answers %ok, or the name of each case that came out wrong.
 ::    +trunk!test-guest
 /-  trunk
 /+  tg=trunk-guest
@@ -20,7 +20,9 @@
   ==
 =/  seated  (redeem `inv ~ now 42)
 =/  sid  ?~(seated '' id.u.seated)
+=/  sec  ?~(seated '' secret.u.seated)
 =/  used  ?~(seated inv invite.u.seated)
+=/  other  (new-secret 99)
 =/  full
   %-  ~(gas by *(map @t @t))
   (turn (gulf 1 app-guest-cap) |=(n=@ [(scot %ud n) (guest-id n)]))
@@ -40,15 +42,30 @@
       ['seating takes a use' =(0 uses.used)]
       ['the seated guest is remembered' (~(has in guests.used) sid)]
       ['an invite with no uses seats nobody new' =(~ (redeem `used ~ now 43))]
-      :-  'a seated guest rejoins with the same id'
-      =/  r  (redeem `used `sid now 44)
-      ?~(r | &(=(sid id.u.r) =(0 uses.invite.u.r)))
-      :-  'an unknown guest id is a new guest'
-      =/  r  (redeem `inv `'guest-000000000000' now 45)
-      ?~(r | &(!=('guest-000000000000' id.u.r) =(0 uses.invite.u.r)))
+      ['a guest id is the hash of its secret' =(sid (id-of sec))]
+      ['a secret is 32 hex digits' (valid-secret sec)]
+      ['a guest id is not a secret' !(valid-secret sid)]
+      :-  'a seated guest rejoins by secret with the same id'
+      =/  r  (redeem `used `sec now 44)
+      ?~(r | &(=(sid id.u.r) =(sec secret.u.r) =(0 uses.invite.u.r)))
+      :-  'another secret is a new guest'
+      =/  r  (redeem `inv `other now 45)
+      ?~(r | &(!=(sid id.u.r) =((id-of other) id.u.r) =(0 uses.invite.u.r)))
+      ['another secret finds no seat left' =(~ (redeem `used `other now 46))]
       ['an invite seats until just before it expires' ?=(^ (redeem `inv ~ (sub expires.inv ~s1) 1))]
       ['an invite at its expiry seats nobody' =(~ (redeem `inv ~ expires.inv 1))]
-      ['a rejoin after expiry is refused' =(~ (redeem `used `sid expires.used 1))]
+      ['a rejoin after expiry is refused' =(~ (redeem `used `sec expires.used 1))]
+  ::
+      :-  'a permanent link keeps a guest by secret'
+      =((link-seat `sec 1) [sec sid])
+      :-  'a permanent link makes a new guest'
+      =/  g  (link-seat ~ 7)
+      &((valid-secret secret.g) =(id.g (id-of secret.g)) (is-guest id.g))
+      ['a link name is a @tas' (valid-name 'groundwire-standup')]
+      ['a link name is not too short' !(valid-name 'ab')]
+      ['a link name has no slash' !(valid-name 'a/b-c')]
+      ['a link name is lower case' !(valid-name 'Standup')]
+      ['a link name is not a code' !(valid-name (new-code 3))]
   ::
       :-  'live keeps an unexpired invite for a hosted room'
       =(1 ~(wyt by (live (my ['c' inv]~) now (sy ~['lounge']))))

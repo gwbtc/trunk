@@ -74,12 +74,29 @@ on demand by whichever ship hosts the room.
 
 The page shows each person by the name their client put in Galène's per-user data (`{"name": ...}`), and otherwise by the username the host signed into their ticket, which is their `@p`. A guest (wire 16), whose username is `guest-` and hex, is always marked as one.
 
-## 5. Guests (wire 16)
+## 5. Guests (wire 16 and 17)
 
-People with no ship join through a page the ship serves, and an app on the ship may serve its own. Galène refuses a websocket from another origin, so list the ship's origin in `galene/data/config.json`:
+People with no ship join through a page the ship serves, and an app on the ship may serve its own. Galène refuses a websocket from another origin, so list the ship's origin in `galene/data/config.json`. Galène re-reads the file when it changes, so no restart is needed:
 
 ```json
-{"allowOrigin": ["https://your.ship.example"]}
+{"proxyURL": "https://calls.example.com",
+ "allowOrigin": ["https://your.ship.example"]}
 ```
 
-If the ship's pages are https, Galène must be too: a browser will not let an https page load `protocol.js` from, or open a websocket to, plain http. Put a TLS front (an nginx vhost with a certificate) before :8444, and point `%set-sfu` at its https base.
+If the ship's pages are https, Galène must be too: a browser will not let an https page load `protocol.js` from, or open a websocket to, plain http. Put a TLS front before :8444, such as an nginx vhost that proxies to `127.0.0.1:8444` with the websocket upgrade headers and long timeouts, and get it a certificate (`certbot --nginx -d calls.example.com`). Set `proxyURL` to that host, as above, so Galène's `.status` names it. Then point `%set-sfu` at the https base:
+
+```
+:trunk &trunk-action [%set-sfu ['https://calls.example.com' 'talon' 'THE_KEY']]
+```
+
+Galène checks only the path of a ticket's address, not its host, so tickets minted before the switch still join.
+
+### A short link for permanent guest links
+
+A permanent link (wire 17) lives on the ship, at `https://your.ship.example/apps/trunk/guest/<name>`. To share it as `https://calls.example.com/<name>` instead, add this to the TLS vhost. It skips Galène's own one-segment paths:
+
+```nginx
+location ~ "^/(?!(?:ws|group|recordings|galene-api|listen|example|third-party)$)([a-z][a-z0-9-]{2,63})$" {
+    return 302 https://your.ship.example/apps/trunk/guest/$1;
+}
+```

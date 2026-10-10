@@ -46,6 +46,11 @@
   .row label { flex: 1; }
   .hint { display: block; color: var(--muted); font-size: 13px; }
   input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--amber); }
+  input.field {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
+    width: 13rem; max-width: 45%;
+  }
   select, button {
     font: inherit; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
@@ -71,6 +76,7 @@
   #banner { display: none; margin-top: 16px; padding: 12px 16px; border-radius: 12px; background: #3a1620; border: 1px solid var(--bad); }
   #banner a { color: var(--amber); }
   .empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -112,12 +118,24 @@
 
   <section>
     <h2>Guests</h2>
-    <p>People with no ship can join a party line you host through an invite link. A link seats a set number of people until it expires, and you can revoke it at any time. Someone already on the call stays until they leave.</p>
+    <p>People with no ship can join a party line you host through a link, with audio, video and screen sharing. Pick a line, or start a new one here. A link seats a set number of people until it expires, and you can revoke it at any time. Someone already on the call stays until they leave. For a recurring meeting, give the link a name: it becomes permanent, with no seat limit, until you revoke it.</p>
     <div class="row"><label for="g-room">Party line</label><select id="g-room"></select></div>
+    <div class="row" id="g-new-title" hidden>
+      <label for="g-title">Title<span class="hint">What everyone sees, such as Groundwire standup.</span></label>
+      <input id="g-title" class="field" maxlength="80">
+    </div>
+    <div class="row" id="g-new-group" hidden>
+      <label for="g-group">Members from Talon<span class="hint">People in this Tlon group join from Talon as themselves. Everyone else uses the link.</span></label>
+      <select id="g-group"><option value="">Nobody</option></select>
+    </div>
     <div class="row"><label for="g-speak">Guests may speak<span class="hint">Off, they only listen.</span></label><input type="checkbox" id="g-speak" checked></div>
     <div class="row">
       <label for="g-uses">People</label>
       <select id="g-uses"><option>1</option><option>5</option><option selected>10</option><option>50</option></select>
+    </div>
+    <div class="row">
+      <label for="g-code">Permanent link name<span class="hint">Optional, such as groundwire-standup: lower case letters, digits and hyphens. Anyone who knows or guesses it can join, so add something hard to guess if the meeting is private.</span></label>
+      <input id="g-code" class="field" maxlength="64" placeholder="none">
     </div>
     <div class="row">
       <label for="g-ttl">Lasts</label>
@@ -230,29 +248,31 @@ async function loadGuests() {
   } catch (e) {
     return;
   }
+  hosted = rooms.map((r) => r.name);
   const title = {};
   for (const r of rooms) title[r.name] = r.title || r.name;
 
   const pick = $('g-room');
-  const was = pick.value;
   pick.replaceChildren();
   for (const r of rooms) {
     const o = el('option', null, title[r.name]);
     o.value = r.name;
     pick.append(o);
   }
-  if (title[was]) pick.value = was;
-  $('g-make').disabled = !rooms.length;
+  const fresh = el('option', null, 'New line…');
+  fresh.value = '';
+  pick.append(fresh);
+  pick.value = (chosen === '' || title[chosen]) ? chosen : (rooms.length ? rooms[0].name : '');
+  newLine();
+  $('g-make').disabled = false;
 
   const box = $('invites');
   box.replaceChildren();
-  if (!rooms.length) box.append(el('div', 'empty', 'You host no party lines yet. Open one in Talon, and it appears here.'));
-  for (const i of g.invites.slice().sort((a, b) => b.expires - a.expires)) {
+  if (!g.invites.length && !(g.links || []).length) box.append(el('div', 'empty', 'No links yet.'));
+  const linkRow = (title, meta, link, code) => {
     const row = el('div', 'device');
-    row.append(el('div', 'name', title[i.name] || i.name));
-    const seats = i.uses + ' of ' + (i.uses + i.guests) + ' seats left';
-    row.append(el('div', 'meta', seats + ' · ' + (i.speak ? 'may speak' : 'listen only') + ' · ends in ' + until(i.expires)));
-    const link = location.origin + i.path;
+    row.append(el('div', 'name', title));
+    row.append(el('div', 'meta', meta));
     row.append(el('div', 'meta', link));
     const actions = el('div', 'actions');
     const copy = el('button', null, 'Copy link');
@@ -263,11 +283,25 @@ async function loadGuests() {
     const revoke = el('button', null, 'Revoke');
     revoke.onclick = async () => {
       if (!confirm('Revoke this link? Nobody new can join with it, and its guests cannot rejoin.')) return;
-      if (await act({ 'revoke-invite': i.code })) loadGuests();
+      if (await act({ 'revoke-invite': code })) loadGuests();
     };
-    actions.append(copy, revoke);
+    actions.append(copy);
+    // a phone's own share sheet: messages, mail, a calendar
+    if (navigator.share) {
+      const share = el('button', null, 'Share');
+      share.onclick = () => navigator.share({ title, text: 'Join ' + title, url: link }).catch(() => {});
+      actions.append(share);
+    }
+    actions.append(revoke);
     row.append(actions);
     box.append(row);
+  };
+  for (const l of (g.links || []).slice().sort((a, b) => a.code.localeCompare(b.code))) {
+    linkRow(title[l.name] || l.name, 'Permanent, no seat limit · ' + (l.speak ? 'may speak' : 'listen only'), location.origin + l.path, l.code);
+  }
+  for (const i of g.invites.slice().sort((a, b) => b.expires - a.expires)) {
+    const seats = i.uses + ' of ' + (i.uses + i.guests) + ' seats left';
+    linkRow(title[i.name] || i.name, seats + ' · ' + (i.speak ? 'may speak' : 'listen only') + ' · ends in ' + until(i.expires), location.origin + i.path, i.code);
   }
 
   const hosts = $('hosts');
@@ -293,16 +327,76 @@ async function loadGuests() {
   }
 }
 
+// the Tlon groups this ship is in, for a new line's members
+async function loadGroups() {
+  let groups;
+  try {
+    const r = await fetch('/~/scry/groups/v2/groups.json', { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    groups = await r.json();
+  } catch (e) {
+    return;
+  }
+  const sel = $('g-group');
+  for (const [flag, gr] of Object.entries(groups || {}).sort()) {
+    const o = el('option', null, (gr && gr.meta && gr.meta.title) || flag);
+    o.value = flag;
+    sel.append(o);
+  }
+}
+
+let hosted = [];
+let chosen;  // the line picked, kept across reloads; '' is a new line
+function newLine() {
+  const fresh = $('g-room').value === '';
+  $('g-new-title').hidden = !fresh;
+  $('g-new-group').hidden = !fresh || $('g-group').options.length < 2;
+}
+$('g-room').onchange = () => { chosen = $('g-room').value; newLine(); };
+
+// a room name from a title: lower case, hyphens, and not one we host
+function roomName(t) {
+  const base = t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'line';
+  let n = base, i = 2;
+  while (hosted.includes(n)) n = base + '-' + i++;
+  return n;
+}
+
 $('g-make').onclick = async () => {
-  const name = $('g-room').value;
-  if (!name) return;
+  let name = $('g-room').value;
+  const code = $('g-code').value.trim().toLowerCase();
+  if (code && !/^[a-z][a-z0-9-]{2,63}$/.test(code)) {
+    banner('A link name is 3 to 64 lower case letters, digits and hyphens, starting with a letter.');
+    return;
+  }
   $('g-make').disabled = true;
-  await act({ 'invite-guests': {
-    name,
-    speak: $('g-speak').checked,
-    ttl: Number($('g-ttl').value),
-    uses: Number($('g-uses').value),
-  } });
+  if (!name) {
+    const title = $('g-title').value.trim();
+    if (!title) {
+      banner('Give the new line a title.');
+      $('g-make').disabled = false;
+      return;
+    }
+    name = roomName(title);
+    if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return loadGuests();
+    const grp = $('g-group').value;
+    if (grp) {
+      const cut = grp.indexOf('/');
+      const group = { ship: grp.slice(0, cut), name: grp.slice(cut + 1) };
+      if (!await act({ 'bind-room': { name, group } })) return loadGuests();
+    }
+    $('g-title').value = '';
+    chosen = name;
+  }
+  const ok = code
+    ? await act({ 'guest-link': { code, name, speak: $('g-speak').checked } })
+    : await act({ 'invite-guests': {
+        name,
+        speak: $('g-speak').checked,
+        ttl: Number($('g-ttl').value),
+        uses: Number($('g-uses').value),
+      } });
+  if (ok) $('g-code').value = '';
   loadGuests();
 };
 
@@ -479,6 +573,7 @@ $('copy').onclick = async () => {
   setTimeout(() => { $('copied').textContent = ''; }, 3000);
 };
 
+loadGroups().then(newLine);
 load();
 setInterval(() => { if (!document.hidden) load(); }, 15000);
 </script>
