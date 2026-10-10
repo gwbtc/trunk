@@ -10,8 +10,8 @@ This is a general feature, not a MUD feature. A ship that can put a grandparent,
 
 This is the whole recipe for replacing a Google Meet style meeting.
 
-1. **One party line per meeting.** Open it once, from Talon or the dojo, and leave it open. A line stays open until you close it. If the people with ships are a Tlon group, bind the line to the group so its members follow the group.
-2. **One permanent link per meeting.** On the trunk page (`/apps/trunk`), under Guests, pick the line and give the link a name, such as `groundwire-standup`. It never expires and has no seat limit. Copy it.
+1. **One party line and one permanent link per meeting.** On the trunk page (`/apps/trunk`), under Guests, pick "New line…" as the party line and give it a title, such as "Groundwire standup". Under "Members from Talon", pick the Tlon group whose members should join from Talon as themselves, or leave it at Nobody. Give the link a name, such as `groundwire-standup`, and press the button. The page opens the line, binds it to the group and makes the link. A line stays open until you close it. The link never expires and has no seat limit. You can also make a link for a line you already host, or open the line from Talon or the dojo first.
+2. **Copy or share the link.** Each link on the trunk page has Copy, and on a phone Share, which opens the phone's share sheet.
 3. **Put the link in the calendar series**, once. People with no ship open it at meeting time in any browser, type a name and join. People with ships join the line from Talon as themselves.
 4. **Revoke it** from the same list when the meeting ends for good, or when it leaked. Revoking stops new joins and rejoins. Whoever is already on the call stays until they leave.
 
@@ -19,14 +19,16 @@ On a ship whose call server has a short-link redirect (see below), the link can 
 
 A readable name can be guessed. Anyone who knows or guesses it can join until you revoke it. For a private meeting, add something hard to guess, such as `groundwire-standup-k3f9`.
 
-From the dojo:
+From the dojo, the same three steps, then a revoke:
 
 ```
-:trunk &trunk-action [%guest-link 'groundwire-standup' 'standup' &]
+:trunk &trunk-action [%open-room 'groundwire-standup' 'Groundwire standup' ~ ~]
+:trunk &trunk-action [%bind-room 'groundwire-standup' `[~hodler-lorfeb 'v769287']]
+:trunk &trunk-action [%guest-link 'groundwire-standup' 'groundwire-standup' &]
 :trunk &trunk-action [%revoke-invite 'groundwire-standup']
 ```
 
-The first names the link, then the party line it opens, then whether guests may speak.
+`%bind-room` takes the group's host and name, as in its flag `~hodler-lorfeb/v769287`. `%guest-link` takes the link's name, then the party line it opens, then whether guests may speak.
 
 ## The guest
 

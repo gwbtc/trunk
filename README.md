@@ -157,7 +157,7 @@ The ship sends a message, read, notice or badge again when the answer is a 5xx, 
 
 ### The trunk page (wire 12)
 
-Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, a switch for each app that has sent a notice (wire 14), guest links and a switch for each app that asked to host calls (wire 16 and 17), the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page. Only the tile's icon at `/apps/trunk/icon.svg` and the guest routes under `/apps/trunk/guest/` are public.
+Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, a switch for each app that has sent a notice (wire 14), guest links, with a way to start a new line bound to a Tlon group, and a switch for each app that asked to host calls (wire 16 and 17), the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page. Only the tile's icon at `/apps/trunk/icon.svg` and the guest routes under `/apps/trunk/guest/` are public.
 
 The switches are one more `trunk-action`. Channel posts are `all` (every one `%activity` marks notified), `mentions` or `none`. A thread reply needs its chat's switch and `replies` both. `notices` covers alerts from other agents. An upgrade starts with everything on, which is how wire 11 behaved.
 
