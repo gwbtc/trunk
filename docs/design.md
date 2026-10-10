@@ -134,7 +134,7 @@ one upgrades every call made *to* you.
 
 ## Pieces
 
-- The `%trunk` desk, at this repo's root. `app/trunk.hoon` routes signals, mints room tickets, sends push hints and serves the owner's page (`app/trunk/page.html`, with the tile's `icon.svg`). `lib/trunk-jwt.hoon` signs the Galène JWTs. `lib/trunk-push.hoon` decides what wakes a phone and builds the bytes that do it. `lib/trunk-json.hoon` is the wire's source of truth. `mar/trunk/*` are the eyre-facing and ship-to-ship marks. The desk is not self-contained: the README's "The desk" lists what to copy from `%base` and `%landscape`.
+- The `%trunk` desk, at this repo's root. `app/trunk.hoon` routes signals, mints room tickets, sends push hints and serves the owner's page (`app/trunk/page.html`, with the tile's `icon.svg`) and the public guest page (`app/trunk/guest.html`). `lib/trunk-jwt.hoon` signs the Galène JWTs. `lib/trunk-push.hoon` decides what wakes a phone and builds the bytes that do it. `lib/trunk-guest.hoon` decides who a guest link seats; [`docs/guest-seats.md`](guest-seats.md) has the design. `lib/trunk-json.hoon` is the wire's source of truth. `mar/trunk/*` are the eyre-facing and ship-to-ship marks. The desk is not self-contained: the README's "The desk" lists what to copy from `%base` and `%landscape`.
 - `sidecar/`: compose file and setup for coturn + Galène, and the listen page.
 - `gen/trunk/policy.hoon`: a dojo read-out of the call policy, which
   the trunk page does not show.

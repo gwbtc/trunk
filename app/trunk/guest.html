@@ -65,7 +65,7 @@
   label { display: block; text-align: left; color: var(--muted); font-size: .9rem; margin-bottom: .35rem; }
   input {
     width: 100%; padding: .8rem 1rem; margin-bottom: 1rem;
-    border: 1px solid var(--line); border-radius: .75rem;
+    border: 1px solid var(--muted); border-radius: .75rem;
     background: transparent; color: var(--fg); font: inherit;
   }
   button {
@@ -78,17 +78,22 @@
   button.quiet { background: transparent; color: var(--fg); border: 1px solid var(--line); }
   button.on { background: var(--fg); color: var(--bg); }
   .controls { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 1rem; }
-  .status { margin-top: 1rem; color: var(--muted); min-height: 1.5rem; }
+  /* on a phone the tiles stack, so keep the controls in reach */
+  body.in .controls { position: sticky; bottom: 0; background: var(--bg); padding: .75rem 0; margin-top: .6rem; }
+  #leave { color: var(--bad); border-color: var(--bad); }
+  .status { margin: 1rem 0; color: var(--muted); min-height: 1.5rem; }
+  .alone { color: var(--muted); margin: 0 0 .75rem; }
   .status.bad { color: var(--bad); }
   .grid {
     display: grid; gap: .6rem;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   }
   .tile {
     position: relative; aspect-ratio: 16 / 9; border-radius: .75rem;
     background: var(--tile); overflow: hidden; cursor: pointer;
   }
   .tile.big { grid-column: 1 / -1; }
+  .tile.speaking { box-shadow: 0 0 0 3px var(--accent); }
   .tile video { width: 100%; height: 100%; object-fit: contain; background: #000; }
   .tile .face {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -116,14 +121,16 @@
     <button id="join" type="submit">Join</button>
   </form>
 
+  <p class="status" id="status" role="status">Loading…</p>
+  <button id="sound" type="button" hidden>Turn on sound</button>
+  <p class="alone" id="alone" hidden></p>
   <div class="grid" id="grid"></div>
   <div class="controls" id="controls" hidden>
     <button id="mute" type="button" class="quiet">Mute</button>
-    <button id="camera" type="button" class="quiet">Camera</button>
+    <button id="camera" type="button" class="quiet">Start camera</button>
     <button id="share" type="button" class="quiet">Share screen</button>
     <button id="leave" type="button" class="quiet">Leave</button>
   </div>
-  <p class="status" id="status">Loading…</p>
 </main>
 
 <script>
@@ -136,10 +143,18 @@
   var videoOn = {};   // by connection id, from talon-video
   var micOff = {};    // by connection id, from talon-mute
   var streams = {};   // by connection id: the stream that user publishes
+  var voices = {};    // by connection id: the receiver of their audio
+  var speakTimer = null;
 
   // Kept per invite or link, so a reload or a rejoin is the same guest.
   function recall(k) { try { return localStorage.getItem(code + ':' + k); } catch (e) { return null; } }
   function keep(k, v) { try { localStorage.setItem(code + ':' + k, v); } catch (e) {} }
+
+  // an error of our own reads as it is; anything else (a ship that is
+  // down, an HTML error page) reads as one plain sentence
+  function fail(e) {
+    say(e && e.name === 'Error' ? e.message : 'Could not reach the host. Try again in a minute.', true);
+  }
 
   function say(text, bad) {
     $('status').textContent = text;
@@ -169,15 +184,27 @@
     var name = document.createElement('div');
     name.className = 'name';
     t.append(v, face, name);
+    t.tabIndex = 0;
+    t.title = 'Enlarge';
     t.onclick = function () { t.classList.toggle('big'); };
+    t.onkeydown = function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.onclick(); }
+    };
     $('grid').append(t);
     return t;
   }
 
-  // One tile per person on the call, ourselves first.
+  // One tile per person on the call, ourselves first. Listeners from a
+  // listen link have no voice or video, so they are only counted.
   function render() {
     var users = (conn && conn.users) || {};
-    var ids = Object.keys(users);
+    var all = Object.keys(users);
+    var ids = all.filter(function (id) { return users[id].username !== 'listener'; });
+    var listening = all.length - ids.length;
+    var others = ids.length - 1;
+    $('alone').hidden = others > 0 && !listening;
+    $('alone').textContent = (others > 0 ? '' : 'Nobody else is here yet. Stay on this page and others will appear. ')
+      + (listening ? listening + (listening === 1 ? ' person is' : ' people are') + ' listening.' : '');
     if (conn && conn.id && ids.indexOf(conn.id) > 0) {
       ids.splice(ids.indexOf(conn.id), 1);
       ids.unshift(conn.id);
@@ -188,7 +215,7 @@
     ids.forEach(function (id) {
       var t = tile(id);
       var me = id === conn.id;
-      var label = nameOf(users[id]) + (me ? ' (you)' : '');
+      var label = me ? ((users[id].data && users[id].data.name) || 'You') + ' (you)' : nameOf(users[id]);
       if ((me && muted) || (!me && micOff[id])) label += ' · muted';
       t.querySelector('.name').textContent = label;
       t.querySelector('.face').textContent = nameOf(users[id]);
@@ -197,11 +224,31 @@
       if (me) v.muted = true;
       if (v.srcObject !== src) {
         v.srcObject = src;
-        if (src) v.play().catch(function () {});
+        // Safari plays sound only after a tap when no mic is in use
+        if (src) v.play().catch(function () { $('sound').hidden = false; });
       }
       var on = me ? !!(screen || cam) : !!videoOn[id];
       t.classList.toggle('video', on);
     });
+  }
+
+  // Who is talking. Galène does not negotiate the RTP audio-level
+  // extension, so getSynchronizationSources has no level. The receiver's
+  // stats carry one taken from the decoded audio.
+  function startSpeaking() {
+    if (speakTimer) return;
+    speakTimer = setInterval(function () {
+      Object.keys(voices).forEach(function (id) {
+        voices[id].getStats().then(function (st) {
+          var loud = false;
+          st.forEach(function (r) {
+            if (r.type === 'inbound-rtp' && r.kind === 'audio' && r.audioLevel > 0.02) loud = true;
+          });
+          var t = document.getElementById('t-' + id);
+          if (t) t.classList.toggle('speaking', loud);
+        }).catch(function () {});
+      });
+    }, 300);
   }
 
   function loadProtocol(sfu) {
@@ -221,7 +268,15 @@
     if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} conn = null; }
     stopTracks(mic); stopTracks(cam); stopTracks(screen);
     mic = cam = screen = up = vsend = preview = null;
-    streams = {}; videoOn = {}; micOff = {};
+    streams = {}; videoOn = {}; micOff = {}; voices = {};
+    if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
+    muted = false;
+    $('mute').textContent = 'Mute';
+    $('camera').textContent = 'Start camera';
+    $('share').textContent = 'Share screen';
+    ['mute', 'camera', 'share'].forEach(function (b) { $(b).classList.remove('on'); });
+    $('alone').hidden = true;
+    $('sound').hidden = true;
     $('grid').replaceChildren();
     document.body.classList.remove('in');
     $('controls').hidden = true;
@@ -243,6 +298,7 @@
     preview = t ? new MediaStream(t.getVideoTracks()) : null;
     if (vsend) await vsend.replaceTrack(t ? t.getVideoTracks()[0] : null);
     $('camera').classList.toggle('on', !!cam);
+    $('camera').textContent = cam ? 'Stop camera' : 'Start camera';
     $('share').classList.toggle('on', !!screen);
     $('share').textContent = screen ? 'Stop sharing' : 'Share screen';
     announce();
@@ -312,8 +368,11 @@
         $('mute').hidden = !mic;
         $('camera').hidden = !can;
         $('share').hidden = !can || !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
-        say(can ? 'You are on the call.' : 'You are watching and listening.');
+        say(!can ? 'You are watching and listening.'
+          : mic ? 'You are on the call.'
+          : 'Others cannot hear you. Allow the microphone in your browser, then leave and join again.', can && !mic);
         announce();
+        startSpeaking();
         render();
       };
       conn.onuser = function (id, kind) {
@@ -330,6 +389,7 @@
       conn.ondownstream = function (s) {
         s.ondowntrack = function (track, tr, stream) {
           streams[s.source] = s.stream || stream;
+          if (track.kind === 'audio') voices[s.source] = tr.receiver;
           render();
         };
         s.onclose = function () {
@@ -337,11 +397,11 @@
           render();
         };
       };
-      conn.onclose = function () { say('The call ended.'); stop(); };
+      conn.onclose = function () { say('You were disconnected. Press Join again to come back.'); stop(); };
       conn.onerror = function (e) { say((e && e.message) || 'The connection failed.', true); stop(); };
       conn.connect(t.endpoint);
     } catch (e) {
-      say(e.message, true);
+      fail(e);
       stop();
     }
   }
@@ -379,20 +439,25 @@
   };
 
   $('leave').onclick = function () { stop(); say('You left the call.'); };
+  $('sound').onclick = function () {
+    $('sound').hidden = true;
+    [].slice.call(document.querySelectorAll('.tile video')).forEach(function (v) { v.play().catch(function () {}); });
+  };
   $('form').onsubmit = join;
 
   fetch(base + '/room', { cache: 'no-store' })
     .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
     .then(function (x) {
-      if (!x[0]) throw new Error(x[1].error || 'This invite has ended.');
+      if (!x[0]) throw new Error(x[1].error || 'This link has ended. Ask the host for a new one.');
       $('room').textContent = x[1].title || 'A call';
+      document.title = (x[1].title || 'A call') + ' · Trunk';
       $('host').textContent = 'Hosted by ' + x[1].host;
       speak = !!x[1].speak;
       $('name').value = recall('name') || '';
       $('form').hidden = false;
       say(speak ? 'You will be asked for your microphone.' : 'You can watch and listen on this call.');
     })
-    .catch(function (e) { say(e.message, true); });
+    .catch(fail);
 })();
 </script>
 </body>

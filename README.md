@@ -291,13 +291,15 @@ sequenceDiagram
 
 ```
 app/ lib/ mar/ sur/ gen/   the %trunk desk, laid out for a clay mount
-app/trunk/                 the owner's page and the tile's icon, built into the agent
+app/trunk/                 the owner's page, the guest page and the tile's icon, built into the agent
 desk.docket-0              the Landscape tile
 lib/trunk-push.hoon        what wakes a phone, and the bytes that do it
+lib/trunk-guest.hoon       who a guest link seats, and guest ids
 gen/test-*.hoon            checks to run on a ship, each answering %ok
 sidecar/                   coturn + Galène, and the listen page
 docs/design.md             how it works and why
 docs/notifications.md      how other apps send notifications through trunk
+docs/guest-seats.md        calls with people who have no ship, and recurring meetings
 AGENTS.md                  notes for coding agents working on trunk
 ```
 
@@ -374,7 +376,9 @@ is total.
 ## Party lines
 
 One line per group, hosted by one ship, running on an SFU. The host
-mints a per-member, per-room token; membership is the whole check.
+mints a per-member, per-room token; membership is the whole check
+for ships. People with no ship come in through guest links
+([docs/guest-seats.md](docs/guest-seats.md)).
 
 Rooms carry what their admins decide:
 
@@ -473,6 +477,7 @@ the path):
 /~/scry/trunk/ice.json        the ICE servers this ship advertises
 /~/scry/trunk/sfu.json        the SFU's base url and group, never its key
 /~/scry/trunk/debug.json      push devices, switches, watches and log
+/~/scry/trunk/guests.json     guest links, and the apps that host calls
 ```
 
 The dojo form of the same reads is `.^(json %gx /=trunk=/lines/json)`.

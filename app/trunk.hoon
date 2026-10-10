@@ -2914,7 +2914,7 @@
     lin
   =/  room  ?~(seat ~ (~(get by hosted.s) name.u.seat))
   ?:  |(?=(~ seat) ?=(~ room))
-    [(give 404 (why 'This invite has ended.')) s]
+    [(give 404 (why 'This link has ended. Ask the host for a new one.')) s]
   ?:  &(=(%'GET' method) =('/room' tail))
     :_  s
     (give 200 (room-info-to-json:trunk-json host-name title.u.room speak.u.seat))

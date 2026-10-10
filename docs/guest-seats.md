@@ -10,12 +10,12 @@ This is a general feature, not a MUD feature. A ship that can put a grandparent,
 
 This is the whole recipe for replacing a Google Meet style meeting.
 
-1. **One party line and one permanent link per meeting.** On the trunk page (`/apps/trunk`), under Guests, pick "New line…" as the party line and give it a title, such as "Groundwire standup". Under "Members from Talon", pick the Tlon group whose members should join from Talon as themselves, or leave it at Nobody. Give the link a name, such as `groundwire-standup`, and press the button. The page opens the line, binds it to the group and makes the link. A line stays open until you close it. The link never expires and has no seat limit. You can also make a link for a line you already host, or open the line from Talon or the dojo first.
+1. **One party line and one permanent link per meeting.** On the trunk page (`/apps/trunk`), under Guests, pick "New line…" as the party line and give it a title, such as "Groundwire standup". Under "Members from Talon", pick the Tlon group whose members should join from Talon as themselves, or leave it at Nobody. A ship outside that group can still use the link, and shows as a guest. Give the link a name, such as `groundwire-standup`, and press Make a permanent link. The page opens the line, binds it to the group and makes the link. A line stays open until you close it. The link never expires and has no seat limit. You can also make a link for a line you already host, or open the line from Talon or the dojo first.
 2. **Copy or share the link.** Each link on the trunk page has Copy, and on a phone Share, which opens the phone's share sheet.
 3. **Put the link in the calendar series**, once. People with no ship open it at meeting time in any browser, type a name and join. People with ships join the line from Talon as themselves.
 4. **Revoke it** from the same list when the meeting ends for good, or when it leaked. Revoking stops new joins and rejoins. Whoever is already on the call stays until they leave.
 
-On a ship whose call server has a short-link redirect (see below), the link can also be shared as `https://trunk.nisfeb.com/groundwire-standup`.
+On a ship whose call server has a short-link redirect (see below), the link can also be shared as `https://calls.example.com/groundwire-standup`.
 
 A readable name can be guessed. Anyone who knows or guesses it can join until you revoke it. For a private meeting, add something hard to guess, such as `groundwire-standup-k3f9`.
 
