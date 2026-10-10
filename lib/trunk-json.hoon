@@ -36,6 +36,10 @@
 ::            {"push-notice-as":{"app":a,"tag":t,"title":t,"body":b,
 ::                               "open":j|null}}
 ::            {"push-app":{"id":i,"allow":true,"cap":30}}  (cap 0: no limit)
+::            {"invite-guests":{"name":n,"speak":true,"ttl":86400,
+::                              "uses":10}}
+::            {"revoke-invite":code}
+::            {"app-hosting":{"agent":"mud-world","allow":true}}
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
 ::            {"hangup":{"id":i}}
@@ -44,8 +48,23 @@
 ::            {"denied":{"from":"~zod","name":n,"why":w}}
 ::            {"access-state":{"from":"~zod","name":n,"join":null|["r"],
 ::                             "speak":null|["r"],"muted":["~bus"]}}
+::            {"guest-invite":{"code":c,"name":n,"path":p,"speak":true,
+::                             "expires":1787000000,"uses":10,"guests":0}}
 ::    policy  {"mode":"open","allow":["~zod"],"block":["~bus"]}
 ::    link    {"listen-link":{"name":n,"url":u,"expires":1787000000}}
+::
+::  Guest seats (wire 16). An invite's path is /apps/trunk/guest/<code>
+::  on the ship: trunk does not know its own public URL, so a client
+::  puts its own origin in front. An agent's room actions are nouns, not
+::  JSON, and their answers on /app/<agent> are %json facts:
+::    ticket  {"guest-ticket":{"room":r,"guest":g,"req":q,
+::             "username":"guest-3fa9c07b12de","location":l,
+::             "endpoint":"wss://...","token":t,"expires":1787000000,
+::             "speak":true}}
+::    denied  {"guest-denied":{"room":r,"req":q,"why":w}}
+::  The guest page's POST answers with the ticket's last six fields.
+::  /x/guests is {"invites":[<guest-invite's object>],
+::  "apps":[{"agent":a,"allowed":false,"rooms":[r]}]}.
 /-  trunk
 |%
 ++  ship-from-json  (su:dejs:format ;~(pfix sig fed:ag))
@@ -143,6 +162,9 @@
           open+(uf ~ same)
       ==
       [%push-app (ot ~[id+so allow+bo cap+ni])]
+      [%invite-guests (ot ~[name+so speak+bo ttl+ni uses+ni])]
+      [%revoke-invite so]
+      [%app-hosting (ot ~[agent+(se %tas) allow+bo])]
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]
@@ -294,7 +316,90 @@
         :-  %who
         [%a (turn ~(tap in who.u) |=(w=@p `json`s+(scot %p w)))]
     ==
+  ::
+      %guest-invite  (frond %guest-invite (invite-to-json code.u invite.u))
   ==
+::
+++  invite-to-json
+  |=  [code=@t inv=invite:trunk]
+  ^-  json
+  =,  enjs:format
+  %-  pairs
+  :~  [%code s+code]
+      [%name s+name.inv]
+      [%path s+(cat 3 '/apps/trunk/guest/' code)]
+      [%speak b+speak.inv]
+      [%expires (sect expires.inv)]
+      [%uses (numb uses.inv)]
+      [%guests (numb ~(wyt in guests.inv))]
+  ==
+::
+::  +guests-to-json: /x/guests, for the trunk page and Talon
+++  guests-to-json
+  |=  $:  invites=(map @t invite:trunk)
+          apps=(map [agent=@tas room=@t] app-room:trunk)
+          hosts=(map @tas ?)
+      ==
+  ^-  json
+  =,  enjs:format
+  %-  pairs
+  :~  :-  %invites
+      a+(turn ~(tap by invites) |=([c=@t i=invite:trunk] (invite-to-json c i)))
+      :-  %apps
+      :-  %a
+      %+  turn  ~(tap by hosts)
+      |=  [agent=@tas allowed=?]
+      %-  pairs
+      :~  [%agent s+agent]
+          [%allowed b+allowed]
+          :-  %rooms
+          :-  %a
+          %+  murn  ~(tap in ~(key by apps))
+          |=  [a=@tas r=@t]
+          ?.(=(a agent) ~ `s+r)
+      ==
+  ==
+::
+::  +ticket-pairs: what a guest needs to join. `endpoint` is Galène's
+::  websocket, since a page on the ship cannot read Galène's .status.
+++  ticket-pairs
+  |=  [username=@t location=@t endpoint=@t token=@t expires=@ud speak=?]
+  ^-  (list [@t json])
+  :~  ['username' s+username]
+      ['location' s+location]
+      ['endpoint' s+endpoint]
+      ['token' s+token]
+      ['expires' (numb:enjs:format expires)]
+      ['speak' b+speak]
+  ==
+::
+++  ticket-to-json
+  |=  [username=@t location=@t endpoint=@t token=@t expires=@ud speak=?]
+  ^-  json
+  (pairs:enjs:format (ticket-pairs username location endpoint token expires speak))
+::
+++  app-ticket-to-json
+  |=  $:  room=@t
+          guest=@t
+          req=@t
+          username=@t
+          location=@t
+          endpoint=@t
+          token=@t
+          expires=@ud
+          speak=?
+      ==
+  ^-  json
+  %+  frond:enjs:format  'guest-ticket'
+  %-  pairs:enjs:format
+  %+  weld  `(list [@t json])`~[['room' s+room] ['guest' s+guest] ['req' s+req]]
+  (ticket-pairs username location endpoint token expires speak)
+::
+++  denied-to-json
+  |=  [room=@t req=@t why=@t]
+  ^-  json
+  %+  frond:enjs:format  'guest-denied'
+  (pairs:enjs:format ~[['room' s+room] ['req' s+req] ['why' s+why]])
 ::
 ++  sfu-to-json
   ::  Never the key: a client may see WHICH sidecar its ship uses and

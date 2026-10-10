@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a call · Trunk</title>
+<link rel="icon" href="/apps/trunk/icon.svg">
+<!--
+  The guest page (wire 16): a call for someone with no ship, through an
+  invite the host made. It carries nothing of the host's but the
+  room's title and the host's name.
+
+  The ship mints the ticket. Galène's own protocol.js, served by the
+  call server, does the rest, so the wire protocol cannot drift from
+  it. The Join button is the user gesture that unlocks audio and asks
+  for the microphone.
+-->
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --fg: #1a1a17;
+    --muted: #6b6a63;
+    --line: #e0ded7;
+    --accent: #1f6f4a;
+    --accent-fg: #ffffff;
+    --bad: #8a2f2f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14140f;
+      --fg: #ece9e1;
+      --muted: #9a978c;
+      --line: #2c2b25;
+      --accent: #4bbd85;
+      --accent-fg: #0d1a13;
+      --bad: #e08585;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px 16px;
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { width: 100%; max-width: 26rem; text-align: center; }
+  h1 {
+    margin: 0 0 .25rem; font-size: 1.05rem; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  }
+  .room { margin: 0; font-size: 1.5rem; font-weight: 600; overflow-wrap: anywhere; }
+  .host { margin: .25rem 0 2rem; color: var(--muted); overflow-wrap: anywhere; }
+  label { display: block; text-align: left; color: var(--muted); font-size: .9rem; margin-bottom: .35rem; }
+  input {
+    width: 100%; padding: .8rem 1rem; margin-bottom: 1rem;
+    border: 1px solid var(--line); border-radius: .75rem;
+    background: transparent; color: var(--fg); font: inherit;
+  }
+  button {
+    width: 100%; padding: 1.15rem 1rem; border: 0; border-radius: 999px;
+    background: var(--accent); color: var(--accent-fg);
+    font: inherit; font-size: 1.15rem; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  button.quiet { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .controls { display: flex; gap: .75rem; }
+  .status { margin-top: 1.25rem; color: var(--muted); min-height: 1.5rem; }
+  .status.bad { color: var(--bad); }
+  .who {
+    margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: .9rem; text-align: left;
+  }
+  .who ul { margin: .5rem 0 0; padding: 0; list-style: none; }
+  .who li { padding: .15rem 0; overflow-wrap: anywhere; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Trunk</h1>
+  <p class="room" id="room">A call</p>
+  <p class="host" id="host"></p>
+
+  <form id="form" hidden>
+    <label for="name">Your name, as others will see it</label>
+    <input id="name" maxlength="40" autocomplete="name" required>
+    <button id="join" type="submit">Join</button>
+  </form>
+
+  <div class="controls" id="controls" hidden>
+    <button id="mute" type="button">Mute</button>
+    <button id="leave" type="button" class="quiet">Leave</button>
+  </div>
+  <p class="status" id="status">Loading…</p>
+
+  <div class="who" id="who" hidden>
+    <strong>On the call</strong>
+    <ul id="whoList"></ul>
+  </div>
+  <div id="sinks" hidden></div>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var code = location.pathname.split('/apps/trunk/guest/')[1].split('/')[0];
+  var base = '/apps/trunk/guest/' + code;
+  var conn = null, mic = null, muted = false, speak = false;
+
+  // Remembered per invite, so a reload or a rejoin is the same guest.
+  function recall(k) { try { return localStorage.getItem(code + ':' + k); } catch (e) { return null; } }
+  function keep(k, v) { try { localStorage.setItem(code + ':' + k, v); } catch (e) {} }
+
+  function say(text, bad) {
+    $('status').textContent = text;
+    $('status').className = bad ? 'status bad' : 'status';
+  }
+
+  // Galène names each person by the username in their ticket: an @p for
+  // a ship, a guest id for a guest. A readable name rides in the
+  // per-user data. A guest is always marked, so nobody passes as a ship.
+  function nameOf(u) {
+    var shown = (u.data && u.data.name) || u.username || 'someone';
+    if (u.username && u.username.indexOf('guest-') === 0) shown += ' (guest)';
+    return shown;
+  }
+
+  function renderWho() {
+    var list = $('whoList');
+    list.replaceChildren();
+    var users = (conn && conn.users) || {};
+    Object.keys(users).forEach(function (id) {
+      var li = document.createElement('li');
+      li.textContent = nameOf(users[id]) + (id === conn.id ? ' (you)' : '');
+      list.append(li);
+    });
+    $('who').hidden = !list.children.length;
+  }
+
+  function play(id, stream) {
+    var a = document.getElementById('a-' + id);
+    if (!a) {
+      a = document.createElement('audio');
+      a.id = 'a-' + id;
+      a.autoplay = true;
+      $('sinks').append(a);
+    }
+    a.srcObject = stream;
+    a.play().catch(function () {});
+  }
+
+  function loadProtocol(sfu) {
+    if (window.ServerConnection) return Promise.resolve();
+    return new Promise(function (ok, fail) {
+      var s = document.createElement('script');
+      s.src = sfu + '/protocol.js';
+      s.onload = ok;
+      s.onerror = function () { fail(new Error('Could not reach the call server.')); };
+      document.head.append(s);
+    });
+  }
+
+  function stop() {
+    if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} conn = null; }
+    if (mic) { mic.getTracks().forEach(function (t) { t.stop(); }); mic = null; }
+    $('sinks').replaceChildren();
+    $('controls').hidden = true;
+    $('who').hidden = true;
+    $('form').hidden = false;
+    $('join').disabled = false;
+    $('join').textContent = 'Join again';
+  }
+
+  function publish() {
+    var c = conn.newUpStream();
+    c.label = 'camera';
+    c.setStream(mic);
+    mic.getTracks().forEach(function (t) {
+      c.pc.addTransceiver(t, { direction: 'sendonly', streams: [mic] });
+    });
+  }
+
+  async function join(ev) {
+    ev.preventDefault();
+    var name = $('name').value.trim();
+    if (!name) return;
+    keep('name', name);
+    $('join').disabled = true;
+    say('Joining…');
+    try {
+      if (speak && !mic) {
+        try {
+          mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (e) {
+          say('No microphone, so you will only listen.');
+        }
+      }
+      var r = await fetch(base, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ guest: recall('guest') }),
+      });
+      var t = await r.json();
+      if (!r.ok) throw new Error(t.error || 'The host refused.');
+      keep('guest', t.username);
+      var sfu = t.location.split('/group/')[0];
+      var group = t.location.split('/group/')[1].replace(/\/$/, '');
+      if (location.protocol === 'https:' && t.endpoint.indexOf('ws:') === 0) {
+        throw new Error('The host\'s call server does not take secure connections yet.');
+      }
+      await loadProtocol(sfu);
+      conn = new ServerConnection();
+      conn.onconnected = function () {
+        this.join(group, t.username, { type: 'token', token: t.token }, { name: name });
+      };
+      conn.onjoined = function (kind, g, perms, status, data, error, message) {
+        if (kind === 'fail' || kind === 'redirect') {
+          say(message || error || 'The call server refused.', true);
+          stop();
+          return;
+        }
+        if (kind !== 'join') return;
+        this.request({ '': ['audio'] });
+        if (mic && perms.indexOf('present') >= 0) publish();
+        $('form').hidden = true;
+        $('controls').hidden = false;
+        $('mute').hidden = !mic;
+        say(mic ? 'You are on the call.' : 'You are listening.');
+        renderWho();
+      };
+      conn.onuser = renderWho;
+      conn.ondownstream = function (s) {
+        s.ondowntrack = function (track, tr, stream) { play(s.id, s.stream || stream); };
+        s.onclose = function () {
+          var a = document.getElementById('a-' + s.id);
+          if (a) a.remove();
+        };
+      };
+      conn.onclose = function () { say('The call ended.'); stop(); };
+      conn.onerror = function (e) { say((e && e.message) || 'The connection failed.', true); stop(); };
+      conn.connect(t.endpoint);
+    } catch (e) {
+      say(e.message, true);
+      stop();
+    }
+  }
+
+  $('mute').onclick = function () {
+    muted = !muted;
+    if (mic) mic.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
+    // Talon and the listen page show this beside the speaker.
+    if (conn) conn.userMessage('talon-mute', '', muted);
+    $('mute').textContent = muted ? 'Unmute' : 'Mute';
+  };
+  $('leave').onclick = function () { stop(); say('You left the call.'); };
+  $('form').onsubmit = join;
+
+  fetch(base + '/room', { cache: 'no-store' })
+    .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
+    .then(function (x) {
+      if (!x[0]) throw new Error(x[1].error || 'This invite has ended.');
+      $('room').textContent = x[1].title || 'A call';
+      $('host').textContent = 'Hosted by ' + x[1].host;
+      speak = !!x[1].speak;
+      $('name').value = recall('name') || '';
+      $('form').hidden = false;
+      say(speak ? 'You will be asked for your microphone.' : 'You can listen on this call.');
+    })
+    .catch(function (e) { say(e.message, true); });
+})();
+</script>
+</body>
+</html>

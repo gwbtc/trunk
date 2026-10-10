@@ -111,6 +111,29 @@
   </section>
 
   <section>
+    <h2>Guests</h2>
+    <p>People with no ship can join a party line you host through an invite link. A link seats a set number of people until it expires, and you can revoke it at any time. Someone already on the call stays until they leave.</p>
+    <div class="row"><label for="g-room">Party line</label><select id="g-room"></select></div>
+    <div class="row"><label for="g-speak">Guests may speak<span class="hint">Off, they only listen.</span></label><input type="checkbox" id="g-speak" checked></div>
+    <div class="row">
+      <label for="g-uses">People</label>
+      <select id="g-uses"><option>1</option><option>5</option><option selected>10</option><option>50</option></select>
+    </div>
+    <div class="row">
+      <label for="g-ttl">Lasts</label>
+      <select id="g-ttl"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="604800">1 week</option><option value="2592000">30 days</option></select>
+    </div>
+    <button class="primary" id="g-make">Make an invite link</button>
+    <div id="invites"></div>
+  </section>
+
+  <section>
+    <h2>Apps that host calls</h2>
+    <p>An app on this ship can host calls for its own users, such as a game's party voice. It needs your permission first. Each app that has asked shows here, switched off until you turn it on.</p>
+    <div id="hosts"></div>
+  </section>
+
+  <section>
     <h2>Devices</h2>
     <div id="devices"></div>
   </section>
@@ -184,7 +207,104 @@ async function load() {
   data = await r.json();
   banner('');
   render();
+  loadGuests();
 }
+
+async function scry(path) {
+  const r = await fetch('/~/scry/trunk/' + path, { credentials: 'same-origin', cache: 'no-store' });
+  if (!r.ok) throw new Error(String(r.status));
+  return r.json();
+}
+
+function until(secs) {
+  const s = secs - Date.now() / 1000;
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' min';
+  if (s < 86400) return Math.round(s / 3600) + ' h';
+  return Math.round(s / 86400) + ' days';
+}
+
+async function loadGuests() {
+  let g, rooms;
+  try {
+    [g, rooms] = await Promise.all([scry('guests.json'), scry('rooms.json')]);
+  } catch (e) {
+    return;
+  }
+  const title = {};
+  for (const r of rooms) title[r.name] = r.title || r.name;
+
+  const pick = $('g-room');
+  const was = pick.value;
+  pick.replaceChildren();
+  for (const r of rooms) {
+    const o = el('option', null, title[r.name]);
+    o.value = r.name;
+    pick.append(o);
+  }
+  if (title[was]) pick.value = was;
+  $('g-make').disabled = !rooms.length;
+
+  const box = $('invites');
+  box.replaceChildren();
+  if (!rooms.length) box.append(el('div', 'empty', 'You host no party lines yet. Open one in Talon, and it appears here.'));
+  for (const i of g.invites.slice().sort((a, b) => b.expires - a.expires)) {
+    const row = el('div', 'device');
+    row.append(el('div', 'name', title[i.name] || i.name));
+    const seats = i.uses + ' of ' + (i.uses + i.guests) + ' seats left';
+    row.append(el('div', 'meta', seats + ' · ' + (i.speak ? 'may speak' : 'listen only') + ' · ends in ' + until(i.expires)));
+    const link = location.origin + i.path;
+    row.append(el('div', 'meta', link));
+    const actions = el('div', 'actions');
+    const copy = el('button', null, 'Copy link');
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(link); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'Copy failed'; }
+      setTimeout(() => { copy.textContent = 'Copy link'; }, 2500);
+    };
+    const revoke = el('button', null, 'Revoke');
+    revoke.onclick = async () => {
+      if (!confirm('Revoke this link? Nobody new can join with it, and its guests cannot rejoin.')) return;
+      if (await act({ 'revoke-invite': i.code })) loadGuests();
+    };
+    actions.append(copy, revoke);
+    row.append(actions);
+    box.append(row);
+  }
+
+  const hosts = $('hosts');
+  hosts.replaceChildren();
+  if (!g.apps.length) hosts.append(el('div', 'empty', 'No app has asked to host calls.'));
+  for (const a of g.apps) {
+    const row = el('div', 'row');
+    const lab = el('label', null, a.agent);
+    lab.htmlFor = 'host-' + a.agent;
+    const n = a.rooms.length;
+    lab.append(el('span', 'hint', n ? n + ' room' + (n === 1 ? '' : 's') + ' open' : 'no rooms open'));
+    const on = el('input');
+    on.type = 'checkbox';
+    on.id = 'host-' + a.agent;
+    on.checked = !!a.allowed;
+    on.onchange = async () => {
+      on.disabled = true;
+      await act({ 'app-hosting': { agent: a.agent, allow: on.checked } });
+      loadGuests();
+    };
+    row.append(lab, on);
+    hosts.append(row);
+  }
+}
+
+$('g-make').onclick = async () => {
+  const name = $('g-room').value;
+  if (!name) return;
+  $('g-make').disabled = true;
+  await act({ 'invite-guests': {
+    name,
+    speak: $('g-speak').checked,
+    ttl: Number($('g-ttl').value),
+    uses: Number($('g-uses').value),
+  } });
+  loadGuests();
+};
 
 async function act(body) {
   let r;

@@ -178,12 +178,14 @@
    * host signed into the token. A client may add a readable name in
    * its per-user data ({"name": ...}), which wins. Hosts on wire 10 to
    * 12 signed a comet in as its full mnemonym (.a.b.….l), shown in the
-   * two-word form Talon shows.
+   * two-word form Talon shows. A guest (wire 16) is signed in as
+   * guest-<hex> and is always marked, so nobody passes as a ship by
+   * the name they typed.
    */
   function label(u, n) {
     var d = u && u.data;
-    if (d && typeof d.name === 'string' && d.name) return d.name;
-    return short(n);
+    var shown = (d && typeof d.name === 'string' && d.name) ? d.name : short(n);
+    return /^guest-/.test(n || '') ? shown + ' (guest)' : shown;
   }
 
   function short(n) {

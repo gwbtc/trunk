@@ -116,6 +116,32 @@
   ==
 ::  one line of the push log, for the debug page
 +$  push-note  [at=@da what=@t]
+::  guest seats (wire 16). A guest is a person on a call with no ship
+::  behind their seat. Their Galène username is a guest id that trunk
+::  makes, 'guest-' and 12 hex digits, never an @p. A readable name
+::  travels in Galène's per-user data, which the guest's page sends.
+::
+::  an invite to a room we host: a code the ship keeps, so unlike a
+::  listen link it can be revoked and limited.
+::    uses    new guests it may still seat
+::    guests  the guest ids it seated, which may ask again
++$  invite
+  $:  name=@t
+      speak=?
+      expires=@da
+      uses=@ud
+      guests=(set @t)
+  ==
+::  a room another agent on our ship hosts for its own users, keyed by
+::  [agent room]. The epoch is in its SFU location, so a new one
+::  strands every token minted for the old.
+::    guests  the app's id for a user -> the guest id trunk gave them
+::    last    when it opened or last asked for a ticket
++$  app-room
+  $:  epoch=@t
+      guests=(map @t @t)
+      last=@da
+  ==
 ::  local client -> own agent
 +$  action
   $%  [%send =ship =sig]
@@ -207,6 +233,19 @@
       ::  limit (its pushes still come at most one per 5 s). Only the
       ::  owner, from the trunk page, Talon or the dojo, never an agent.
       [%push-app id=@t allow=? cap=@ud]
+      ::  guest seats (wire 16). The owner's: an invite to a room we
+      ::  host, for `uses` new guests over `ttl` seconds, and its revoke.
+      [%invite-guests name=@t speak=? ttl=@ud uses=@ud]
+      [%revoke-invite code=@t]
+      ::  another agent's: its own rooms, and a ticket for one of its
+      ::  users, whom it names by its own id. Answers come on
+      ::  /app/<agent>. Only an app the owner let host calls gets one.
+      [%app-room-open room=@t]
+      [%app-room-close room=@t]
+      [%app-room-rotate room=@t]
+      [%app-guest-ticket room=@t guest=@t speak=? req=@t]
+      ::  the owner's switch for one app's calls
+      [%app-hosting agent=@tas allow=?]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]
@@ -325,5 +364,7 @@
       [%on-line from=ship name=@t who=(set ship)]
       ::  who is recording a line we asked about (wire 7)
       [%recorders from=ship name=@t who=(set ship)]
+      ::  an invite we just made (wire 16)
+      [%guest-invite code=@t =invite]
   ==
 --
