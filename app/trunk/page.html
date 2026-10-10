@@ -46,15 +46,11 @@
   .row label { flex: 1; }
   .hint { display: block; color: var(--muted); font-size: 13px; }
   input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--amber); }
-  input.field {
-    font: inherit; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
-    width: 13rem; max-width: 45%;
-  }
-  select, button {
+  select, button, input.field {
     font: inherit; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
   }
+  input.field { width: 13rem; max-width: 45%; }
   button { cursor: pointer; }
   button.primary { background: var(--amber); color: #101541; border-color: var(--amber); font-weight: 600; }
   button:disabled { opacity: 0.5; cursor: default; }
@@ -73,7 +69,7 @@
   ol.log li { padding: 6px 0; border-top: 1px solid var(--line); display: flex; gap: 12px; }
   ol.log li:first-child { border-top: 0; }
   ol.log time { color: var(--muted); white-space: nowrap; min-width: 84px; }
-  #banner { display: none; margin-top: 16px; padding: 12px 16px; border-radius: 12px; background: #3a1620; border: 1px solid var(--bad); }
+  #banner { margin-top: 16px; padding: 12px 16px; border-radius: 12px; background: #3a1620; border: 1px solid var(--bad); }
   #banner a { color: var(--amber); }
   .empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
   [hidden] { display: none !important; }
@@ -89,7 +85,7 @@
     </div>
   </header>
 
-  <div id="banner"></div>
+  <div id="banner" hidden></div>
 
   <section>
     <h2>Notifications</h2>
@@ -203,7 +199,7 @@ function banner(text, link) {
     a.href = link.href;
     b.append(a);
   }
-  b.style.display = text ? 'block' : 'none';
+  b.hidden = !text;
 }
 
 async function load() {
@@ -248,6 +244,11 @@ async function loadGuests() {
   } catch (e) {
     return;
   }
+  // a rebuild closes an open picker and loses a button's "Copied", so
+  // rebuild only when something changed
+  const seen = JSON.stringify([g, rooms]);
+  if (seen === lastGuests) return;
+  lastGuests = seen;
   hosted = rooms.map((r) => r.name);
   const title = {};
   for (const r of rooms) title[r.name] = r.title || r.name;
@@ -268,7 +269,7 @@ async function loadGuests() {
 
   const box = $('invites');
   box.replaceChildren();
-  if (!g.invites.length && !(g.links || []).length) box.append(el('div', 'empty', 'No links yet.'));
+  if (!g.invites.length && !g.links.length) box.append(el('div', 'empty', 'No links yet.'));
   const linkRow = (title, meta, link, code) => {
     const row = el('div', 'device');
     row.append(el('div', 'name', title));
@@ -277,7 +278,8 @@ async function loadGuests() {
     const actions = el('div', 'actions');
     const copy = el('button', null, 'Copy link');
     copy.onclick = async () => {
-      try { await navigator.clipboard.writeText(link); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'Copy failed'; }
+      await copyText(link);
+      copy.textContent = 'Copied';
       setTimeout(() => { copy.textContent = 'Copy link'; }, 2500);
     };
     const revoke = el('button', null, 'Revoke');
@@ -296,7 +298,7 @@ async function loadGuests() {
     row.append(actions);
     box.append(row);
   };
-  for (const l of (g.links || []).slice().sort((a, b) => a.code.localeCompare(b.code))) {
+  for (const l of g.links.slice().sort((a, b) => a.code.localeCompare(b.code))) {
     linkRow(title[l.name] || l.name, 'Permanent, no seat limit · ' + (l.speak ? 'may speak' : 'listen only'), location.origin + l.path, l.code);
   }
   for (const i of g.invites.slice().sort((a, b) => b.expires - a.expires)) {
@@ -346,11 +348,18 @@ async function loadGroups() {
 }
 
 let hosted = [];
+let lastGuests = '';
 let chosen;  // the line picked, kept across reloads; '' is a new line
+let groupsAsked = false;
 function newLine() {
   const fresh = $('g-room').value === '';
   $('g-new-title').hidden = !fresh;
   $('g-new-group').hidden = !fresh || $('g-group').options.length < 2;
+  // %groups answers with every group in full, so ask only when needed
+  if (fresh && !groupsAsked) {
+    groupsAsked = true;
+    loadGroups().then(newLine);
+  }
 }
 $('g-room').onchange = () => { chosen = $('g-room').value; newLine(); };
 
@@ -556,9 +565,9 @@ async function saveKinds() {
 }
 for (const f of ['dm', 'club', 'channel', 'replies', 'calls', 'reads', 'notices']) $('k-' + f).addEventListener('change', saveKinds);
 
-$('copy').onclick = async () => {
-  if (!data) return;
-  const text = JSON.stringify(data, null, 2);
+// navigator.clipboard needs a secure context, which a ship on plain
+// http is not, so fall back to the old way
+async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
   } catch (e) {
@@ -569,11 +578,15 @@ $('copy').onclick = async () => {
     document.execCommand('copy');
     ta.remove();
   }
+}
+
+$('copy').onclick = async () => {
+  if (!data) return;
+  await copyText(JSON.stringify(data, null, 2));
   $('copied').textContent = ' Copied.';
   setTimeout(() => { $('copied').textContent = ''; }, 3000);
 };
 
-loadGroups().then(newLine);
 load();
 setInterval(() => { if (!document.hidden) load(); }, 15000);
 </script>

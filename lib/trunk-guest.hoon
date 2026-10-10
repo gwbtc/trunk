@@ -1,12 +1,16 @@
-::  trunk-guest: guest seats (wire 16), with no scries and no cards,
-::  so gen/test-guest.hoon can cover it.
+::  trunk-guest: guest seats (wire 16 and 17), with no scries and no
+::  cards, so gen/test-guest.hoon can cover it.
 ::
 ::  A guest is a person on a call with no ship behind their seat. They
-::  come in by an invite the owner made, or through an app on our ship
-::  that knows who they are. Either way trunk makes their guest id and
-::  mints their Galène token. Neither the guest nor the app names it.
+::  come in by a link the owner made, or through an app on our ship
+::  that knows who they are. Trunk mints their Galène token. A link
+::  guest's id is the hash of a secret only their page holds, and an
+::  app guest's id is one trunk makes. Neither a guest nor an app names
+::  an id.
 /-  trunk
 |%
+::  where the guest page and its routes live on the ship
+++  guest-path  '/apps/trunk/guest/'
 ::  how long a guest's token lasts, in seconds. Galène checks a token
 ::  only when a connection joins, so this bounds a rejoin, not a call.
 ::  A guest already on the line stays until they leave or the room
@@ -17,7 +21,7 @@
 ++  invite-ttl-cap  ^~((div ~d30 ~s1))
 ++  uses-cap  1.000
 ::  live invites, permanent links, app rooms, and guests in one app room
-++  invite-cap  64
+++  guest-invite-cap  64
 ++  links-cap  64
 ++  app-room-cap  64
 ++  app-guest-cap  256
@@ -26,30 +30,37 @@
 ::  the longest user id or request id an app may give
 ++  id-max  128
 ::
-::  +guest-id: 'guest-' and 12 hex digits. An @p always starts with ~
-::  and this never does, so a client can tell a guest from a ship and
-::  no guest can take a ship's name.
+::  +hex: the low `n` hex digits of `a`, as a cord of exactly `n`
 ::
-++  guest-id
-  |=  eny=@
+++  hex
+  |=  [n=@ud a=@]
   ^-  @t
-  (crip (weld "guest-" ((x-co:co 12) (end [2 12] (shas %guest-id eny)))))
+  (crip ((x-co:co n) (end [2 n] a)))
 ::
 ::  +new-secret: what a guest's page keeps, 128 random bits as 32 hex
 ::  digits. Their guest id is its hash (+id-of), so only the holder can
 ::  rejoin as that guest, and a permanent link stores nothing per guest.
 ::
-++  new-secret
-  |=  eny=@
-  ^-  @t
-  (crip ((x-co:co 32) (end [3 16] (shas %guest-secret eny))))
+++  new-secret  |=(eny=@ (hex 32 (shas %guest-secret eny)))
 ::
-::  +id-of: the guest id a secret stands for
+::  +id-of: the guest id a secret stands for: 'guest-' and 12 hex
+::  digits. An @p always starts with ~ and this never does, so a client
+::  can tell a guest from a ship and no guest can take a ship's name.
 ::
-++  id-of
-  |=  secret=@t
-  ^-  @t
-  (crip (weld "guest-" ((x-co:co 12) (end [2 12] (shax secret)))))
+++  id-of  |=(secret=@t (cat 3 'guest-' (hex 12 (shax secret))))
+::
+::  +guest-id: a new guest id, for an app's user
+::
+++  guest-id  |=(eny=@ (id-of (new-secret eny)))
+::
+::  +new-code: an invite's code, 128 random bits as 32 hex digits
+::
+++  new-code  |=(eny=@ (hex 32 (shas %invite eny)))
+::
+::  +new-epoch: an app room's epoch. Random, so a room closed and
+::  opened again does not take back the tokens of its old life.
+::
+++  new-epoch  |=(eny=@ (hex 8 (shas %epoch eny)))
 ::
 ::  +valid-secret: 32 hex digits, the shape +new-secret makes
 ::
@@ -63,32 +74,14 @@
   ^-  ?
   |(&((gte c '0') (lte c '9')) &((gte c 'a') (lte c 'f')))
 ::
-::  +valid-name: a permanent link's name, chosen by the owner. A @tas
-::  of 3 to 64 characters that does not look like a random code.
+::  +valid-name: a permanent link's name, chosen by the owner: a room
+::  name of at least 3 characters. The agent checks it is no invite's
+::  code.
 ::
 ++  valid-name
   |=  c=@t
   ^-  ?
-  ?&  (gte (met 3 c) 3)
-      (lte (met 3 c) 64)
-      ((sane %tas) c)
-      !&(=(32 (met 3 c)) (levy (trip c) is-hex))
-  ==
-::
-::  +new-code: an invite's code, 128 random bits as 32 hex digits
-::
-++  new-code
-  |=  eny=@
-  ^-  @t
-  (crip ((x-co:co 32) (end [3 16] (shas %invite eny))))
-::
-::  +new-epoch: an app room's epoch. Random, so a room closed and
-::  opened again does not take back the tokens of its old life.
-::
-++  new-epoch
-  |=  eny=@
-  ^-  @t
-  (crip ((x-co:co 8) (end [2 8] (shas %epoch eny))))
+  &((gte (met 3 c) 3) (valid-room c))
 ::
 ::  +live: the invites worth keeping: unexpired, for a room we host
 ::
@@ -100,30 +93,26 @@
   |=  [@t i=invite:trunk]
   &((gth expires.i now) (~(has in rooms) name.i))
 ::
-::  +redeem: seat a guest by invite. `secret` is what the page was given
-::  before, if any, and a new one is made otherwise. A guest the invite
-::  seated takes no use when they rejoin, so one person stays one guest.
-::  Anyone else takes a use. ~ when the invite cannot seat them.
+::  +guest-of: the guest a page is, from the secret it was given
+::  before, or a new guest with a new secret
 ::
-++  redeem
-  |=  [inv=(unit invite:trunk) secret=(unit @t) now=@da eny=@]
-  ^-  (unit [secret=@t id=@t =invite:trunk])
-  ?~  inv  ~
-  ?.  (gth expires.u.inv now)  ~
-  =/  sec  ?^(secret u.secret (new-secret eny))
-  =/  id  (id-of sec)
-  ?:  (~(has in guests.u.inv) id)  `[sec id u.inv]
-  ?:  =(0 uses.u.inv)  ~
-  `[sec id u.inv(uses (dec uses.u.inv), guests (~(put in guests.u.inv) id))]
-::
-::  +link-seat: seat a guest by permanent link, which has no seats to
-::  count and keeps no guests: the secret alone keeps their id.
-::
-++  link-seat
+++  guest-of
   |=  [secret=(unit @t) eny=@]
   ^-  [secret=@t id=@t]
   =/  sec  ?^(secret u.secret (new-secret eny))
   [sec (id-of sec)]
+::
+::  +redeem: the invite with guest `id` seated, or ~ when it cannot
+::  seat them. A guest it seated before takes no use, so one person
+::  stays one guest. Anyone else takes a use.
+::
+++  redeem
+  |=  [inv=invite:trunk id=@t now=@da]
+  ^-  (unit invite:trunk)
+  ?.  (gth expires.inv now)  ~
+  ?:  (~(has in guests.inv) id)  `inv
+  ?:  =(0 uses.inv)  ~
+  `inv(uses (dec uses.inv), guests (~(put in guests.inv) id))
 ::
 ::  +seat: the guest id an app's user has in one of its rooms, and the
 ::  room with it noted. The same user keeps the same id for the room's

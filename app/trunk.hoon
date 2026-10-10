@@ -369,6 +369,8 @@
       links=(map @t guest-link:trunk)
   ==
 +$  card  card:agent:gall
+::  the actions another agent may send for its own rooms (wire 16)
++$  app-tag  ?(%app-room-open %app-room-close %app-room-rotate %app-guest-ticket)
 ::  how long a minted ticket stays valid. Long enough for a call that
 ::  outlasts a conversation, short enough that a removed member loses
 ::  access without a key rotation.
@@ -683,8 +685,7 @@
     ::  rooms for guests, and nothing else
     ?>  ?|  by-owner:hc
             ?=(?(%push-notice %push-notice-as) -.act)
-            ?=(?(%app-room-open %app-room-close %app-room-rotate) -.act)
-            ?=(%app-guest-ticket -.act)
+            ?=(app-tag -.act)
         ==
     ?-    -.act
         %set-ice  `this(ice.state servers.act)
@@ -761,7 +762,7 @@
       ?>  &((gth uses.act 0) (lte uses.act uses-cap:trunk-guest))
       =/  live
         (live:trunk-guest invites.state now.bowl ~(key by hosted.state))
-      ?>  (lth ~(wyt by live) invite-cap:trunk-guest)
+      ?>  (lth ~(wyt by live) guest-invite-cap:trunk-guest)
       =/  ttl  (min ttl.act invite-ttl-cap:trunk-guest)
       =/  code  (new-code:trunk-guest eny.bowl)
       =/  =invite:trunk
@@ -780,6 +781,7 @@
         %guest-link
       ?>  (~(has by hosted.state) name.act)
       ?>  (valid-name:trunk-guest code.act)
+      ?<  (~(has by invites.state) code.act)
       ?>  ?|  (~(has by links.state) code.act)
               (lth ~(wyt by links.state) links-cap:trunk-guest)
           ==
@@ -787,7 +789,7 @@
       :-  ~[(fact:hc [%guest-link code.act guest-link])]
       this(links.state (~(put by links.state) code.act guest-link))
     ::
-        ?(%app-room-open %app-room-close %app-room-rotate %app-guest-ticket)
+        app-tag
       =^  cards  state  (app-action:hc state act)
       [cards this]
     ::
@@ -1216,8 +1218,9 @@
       :_  this
       (give 200 ~[['content-type' 'image/svg+xml']] `icon)
     ::  a guest's page and its routes, for anyone with an invite's code
-    ?:  =('/apps/trunk/guest/' (end [3 18] url))
-      =^  cards  state  (guest-http:hc state eid req (rsh [3 18] url))
+    =/  guest-at  (met 3 guest-path:trunk-guest)
+    ?:  =(guest-path:trunk-guest (end [3 guest-at] url))
+      =^  cards  state  (guest-http:hc state eid req (rsh [3 guest-at] url))
       [cards this]
     ?.  authenticated.req
       :_  this
@@ -2214,6 +2217,7 @@
 ::
 ++  host-name
   ^-  @t
+  ?.  ?=(%pawn (clan:title our.bowl))  (scot %p our.bowl)
   (fall (short:mnemonym our.bowl (on-groundwire our.bowl)) (scot %p our.bowl))
 ::
 ::  +announce: tell every member a line opened (or closed). The host
@@ -2885,7 +2889,7 @@
     |=  [status=@ud jon=json]
     =/  hed  ~[['content-type' 'application/json'] ['cache-control' 'no-store']]
     (http-cards eid status hed `(en:json:html jon))
-  =/  why  |=(t=@t (frond:enjs:format 'error' s+t))
+  =/  why  error-to-json:trunk-json
   ::  a live invite, or else a permanent link, for a room we host
   =/  inv  (~(get by invites.s) code)
   =?  inv  &(?=(^ inv) (lte expires.u.inv now.bowl))  ~
@@ -2898,12 +2902,7 @@
     [(give 404 (why 'This invite has ended.')) s]
   ?:  &(=(%'GET' method) =('/room' tail))
     :_  s
-    %+  give  200
-    %-  pairs:enjs:format
-    :~  host+s+host-name
-        title+s+title.u.room
-        speak+b+speak.u.seat
-    ==
+    (give 200 (room-info-to-json:trunk-json host-name title.u.room speak.u.seat))
   ?.  &(=(%'POST' method) =('' tail))
     [(give 405 (why 'No such route.')) s]
   =/  cfg  (room-sfu name.u.seat)
@@ -2911,28 +2910,30 @@
     [(give 503 (why 'The host has no call server set up.')) s]
   =/  secret=(unit @t)
     =/  jon  (biff body.request.req |=(o=octs (de:json:html q.o)))
-    ?.  ?=([~ %o *] jon)  ~
-    =/  g  (~(get by p.u.jon) 'secret')
-    ?.  ?=([~ %s *] g)  ~
-    ?.((valid-secret:trunk-guest p.u.g) ~ `p.u.g)
-  =/  red  ?~(inv ~ (redeem:trunk-guest inv secret now.bowl eny.bowl))
-  ?:  &(?=(^ inv) ?=(~ red))
+    =/  got  (biff jon |=(j=json (cord-at:trunk-push j ~['secret'])))
+    ?~(got ~ ?.((valid-secret:trunk-guest u.got) ~ got))
+  =/  [sec=@t id=@t]  (guest-of:trunk-guest secret eny.bowl)
+  =/  new  ?~(inv ~ (redeem:trunk-guest u.inv id now.bowl))
+  ?:  &(?=(^ inv) ?=(~ new))
     [(give 410 (why 'This invite has no seats left.')) s]
-  =/  [sec=@t id=@t]
-    ?^  red  [secret.u.red id.u.red]
-    (link-seat:trunk-guest secret eny.bowl)
-  =?  invites.s  ?=(^ red)  (~(put by invites.s) code invite.u.red)
-  =/  loc  (room-location name.u.seat)
-  =/  now-secs  (unix-secs:trunk-jwt now.bowl)
-  =/  exp  (add now-secs guest-ttl:trunk-guest)
-  =/  tok
-    ?:  speak.u.seat  (mint:trunk-jwt key.cfg id loc now-secs exp)
-    (mint-listen:trunk-jwt key.cfg id loc now-secs exp)
+  =?  invites.s  ?=(^ new)  (~(put by invites.s) code u.new)
   :_  s
   %+  give  200
   %-  pairs:enjs:format
-  :-  ['secret' s+sec]
-  (ticket-pairs:trunk-json id loc (endpoint:trunk-guest base.cfg) tok exp speak.u.seat)
+  [['secret' s+sec] (guest-ticket cfg (room-location name.u.seat) id speak.u.seat)]
+::
+::  +guest-ticket: a guest's token for one room, and what their page
+::  needs to join with it. Galène checks the token only at join.
+::
+++  guest-ticket
+  |=  [cfg=sfu-config:trunk loc=@t id=@t speak=?]
+  ^-  (list [@t json])
+  =/  now-secs  (unix-secs:trunk-jwt now.bowl)
+  =/  exp  (add now-secs guest-ttl:trunk-guest)
+  =/  tok
+    ?:  speak  (mint:trunk-jwt key.cfg id loc now-secs exp)
+    (mint-listen:trunk-jwt key.cfg id loc now-secs exp)
+  (ticket-pairs:trunk-json id loc (endpoint:trunk-guest base.cfg) tok exp speak)
 ::
 ::  +app-action: one of another agent's room actions (wire 16). Gall
 ::  names the agent in sap.bowl, and an app reaches only rooms under
@@ -2992,11 +2993,6 @@
     =.  apps.s  (~(put by apps.s) [agent room.act] r.u.sat)
     =/  sub  (app-sub:trunk-guest our.bowl agent room.act epoch.r.u.sat)
     =/  loc  (location:trunk-guest sfu.s sub)
-    =/  now-secs  (unix-secs:trunk-jwt now.bowl)
-    =/  exp  (add now-secs guest-ttl:trunk-guest)
-    =/  tok
-      ?:  speak.act  (mint:trunk-jwt key.sfu.s id.u.sat loc now-secs exp)
-      (mint-listen:trunk-jwt key.sfu.s id.u.sat loc now-secs exp)
     :_  s
     :_  ~
     %+  app-fact  agent
@@ -3004,12 +3000,7 @@
       room.act
       guest.act
       req.act
-      id.u.sat
-      loc
-      (endpoint:trunk-guest base.sfu.s)
-      tok
-      exp
-      speak.act
+      (guest-ticket sfu.s loc id.u.sat speak.act)
     ==
   ==
 ::

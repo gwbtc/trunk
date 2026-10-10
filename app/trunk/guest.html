@@ -131,8 +131,8 @@
   var $ = function (id) { return document.getElementById(id); };
   var code = location.pathname.split('/apps/trunk/guest/')[1].split('/')[0];
   var base = '/apps/trunk/guest/' + code;
-  var conn = null, up = null, mic = null, cam = null, screen = null, preview = null;
-  var muted = false, speak = false, myName = '';
+  var conn = null, up = null, vsend = null, mic = null, cam = null, screen = null, preview = null;
+  var muted = false, speak = false;
   var videoOn = {};   // by connection id, from talon-video
   var micOff = {};    // by connection id, from talon-mute
   var streams = {};   // by connection id: the stream that user publishes
@@ -220,7 +220,7 @@
   function stop() {
     if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} conn = null; }
     stopTracks(mic); stopTracks(cam); stopTracks(screen);
-    mic = cam = screen = up = preview = null;
+    mic = cam = screen = up = vsend = preview = null;
     streams = {}; videoOn = {}; micOff = {};
     $('grid').replaceChildren();
     document.body.classList.remove('in');
@@ -230,25 +230,18 @@
     $('join').textContent = 'Join again';
   }
 
-  function videoSender() {
-    var tr = up && up.pc.getTransceivers().filter(function (t) {
-      return t.receiver.track && t.receiver.track.kind === 'video';
-    })[0];
-    return tr && tr.sender;
-  }
-
-  // What everyone else needs to draw our tile.
-  function announce() {
+  // What others need to draw our tile: to everyone (dest ''), or only to
+  // someone who just joined, since Galène does not replay these.
+  function announce(dest) {
     if (!conn || !up) return;
-    conn.userMessage('talon-video', '', !!(screen || cam));
-    conn.userMessage('talon-mute', '', muted);
+    conn.userMessage('talon-video', dest || '', !!(screen || cam));
+    conn.userMessage('talon-mute', dest || '', muted);
   }
 
   async function showVideo() {
-    var s = videoSender();
     var t = screen || cam;
     preview = t ? new MediaStream(t.getVideoTracks()) : null;
-    if (s) await s.replaceTrack(t ? t.getVideoTracks()[0] : null);
+    if (vsend) await vsend.replaceTrack(t ? t.getVideoTracks()[0] : null);
     $('camera').classList.toggle('on', !!cam);
     $('share').classList.toggle('on', !!screen);
     $('share').textContent = screen ? 'Stop sharing' : 'Share screen';
@@ -266,25 +259,18 @@
     if (mic) mic.getAudioTracks().forEach(function (t) {
       up.pc.addTransceiver(t, { direction: 'sendonly', streams: [s] });
     });
-    up.pc.addTransceiver('video', { direction: 'sendonly', streams: [s] });
+    vsend = up.pc.addTransceiver('video', { direction: 'sendonly', streams: [s] }).sender;
   }
 
   async function join(ev) {
     ev.preventDefault();
     var name = $('name').value.trim();
     if (!name) return;
-    myName = name;
     keep('name', name);
     $('join').disabled = true;
     say('Joining…');
     try {
-      if (speak && !mic) {
-        try {
-          mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        } catch (e) {
-          say('No microphone, so others will not hear you.');
-        }
-      }
+      // the ticket first, so a link that has ended never asks for the mic
       var r = await fetch(base, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -293,6 +279,13 @@
       var t = await r.json();
       if (!r.ok) throw new Error(t.error || 'The host refused.');
       keep('secret', t.secret);
+      if (t.speak && !mic) {
+        try {
+          mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (e) {
+          say('No microphone, so others will not hear you.');
+        }
+      }
       var sfu = t.location.split('/group/')[0];
       var group = t.location.split('/group/')[1].replace(/\/$/, '');
       if (location.protocol === 'https:' && t.endpoint.indexOf('ws:') === 0) {
@@ -301,7 +294,7 @@
       await loadProtocol(sfu);
       conn = new ServerConnection();
       conn.onconnected = function () {
-        this.join(group, t.username, { type: 'token', token: t.token }, { name: myName });
+        this.join(group, t.username, { type: 'token', token: t.token }, { name: name });
       };
       conn.onjoined = function (kind, g, perms, status, data, error, message) {
         if (kind === 'fail' || kind === 'redirect') {
@@ -325,7 +318,7 @@
       };
       conn.onuser = function (id, kind) {
         if (kind === 'delete') { delete streams[id]; delete videoOn[id]; delete micOff[id]; }
-        if (kind === 'add' && id !== conn.id) announce();
+        if (kind === 'add' && id !== conn.id) announce(id);
         render();
       };
       conn.onusermessage = function (source, dest, username, time, privileged, kind, error, value) {
