@@ -42,10 +42,10 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 
 - `%trunk-action` is accepted only from our own ship. Another agent may send `push-notice`, `push-notice-as` and the four `app-*` room actions, and nothing else. Every other action, settings, invites and the device registry included, needs `+by-owner`. Keep that allowlist at the top of the `%trunk-action` arm, which the page's action route goes through too.
 - An app reaches only its own rooms: app rooms are keyed by the agent gall names in `sap.bowl`, and `/app/<agent>` admits only that agent.
-- A guest's Galène `sub` is a guest id, `guest-` and 12 hex digits. It never starts with `~`. A link guest's id is the hash of a secret only their page holds (`+id-of`), so nobody else can rejoin as them. An app guest's id is one trunk makes. Neither a guest nor an app ever names an id.
+- A guest's Galène `sub` is a guest id, `guest-` and 24 hex digits. It never starts with `~`. A link guest's id is the hash of a secret only their page holds (`+id-of`), so nobody else can rejoin as them. An app guest's id is one trunk makes. Neither a guest nor an app ever names an id.
 - The guest routes under `/apps/trunk/guest/` are public. They take nothing but a link's code and a guest's secret, and show nothing of the host but its name and the room's title. Codes, link names and secrets are bearer secrets, so they are never in `/x/debug`.
 - A signal's sender is the ames `src`, never anything in the payload.
-- A Galène token's `sub` is the asking ship's `@p`, for every ship. Galène refuses any later message whose username differs, so a readable name travels in Galène's per-user data instead.
+- A ship's Galène token has its `@p` as `sub`, for every ship, and a guest's has its guest id (below). Galène refuses any later message whose username differs, so a readable name travels in Galène's per-user data instead.
 - The debug report (`/x/debug`) never carries a push secret, a gateway handle, an endpoint's path or a chat's id. `gen/test-push.hoon` checks this, so extend that test when you add a field.
 - Push bodies are built by hand in a fixed key order, and the tests pin their bytes. Talon parses them, so a change to a body is a change to the wire.
 

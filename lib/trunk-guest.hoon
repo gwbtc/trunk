@@ -20,7 +20,8 @@
 ::  may seat. An invite can be revoked, so these only bound the state.
 ++  invite-ttl-cap  ^~((div ~d30 ~s1))
 ++  uses-cap  1.000
-::  live invites, permanent links, app rooms, and guests in one app room
+::  live invites, permanent links, rooms per app, and guests in one app
+::  room
 ++  guest-invite-cap  64
 ++  links-cap  64
 ++  app-room-cap  64
@@ -43,11 +44,13 @@
 ::
 ++  new-secret  |=(eny=@ (hex 32 (shas %guest-secret eny)))
 ::
-::  +id-of: the guest id a secret stands for: 'guest-' and 12 hex
+::  +id-of: the guest id a secret stands for: 'guest-' and 24 hex
 ::  digits. An @p always starts with ~ and this never does, so a client
 ::  can tell a guest from a ship and no guest can take a ship's name.
+::  Everyone on a call sees the id, so it keeps 96 bits of the hash:
+::  too many to search for another secret that gives the same id.
 ::
-++  id-of  |=(secret=@t (cat 3 'guest-' (hex 12 (shax secret))))
+++  id-of  |=(secret=@t (cat 3 'guest-' (hex 24 (shax secret))))
 ::
 ::  +guest-id: a new guest id, for an app's user
 ::
@@ -82,6 +85,19 @@
   |=  c=@t
   ^-  ?
   &((gte (met 3 c) 3) (valid-room c))
+::
+::  +drop-invites, +drop-links: a room's links die with it, so a line
+::  opened again under the same name does not take them back
+::
+++  drop-invites
+  |=  [name=@t m=(map @t invite:trunk)]
+  ^-  (map @t invite:trunk)
+  (malt (skip ~(tap by m) |=([@t i=invite:trunk] =(name name.i))))
+::
+++  drop-links
+  |=  [name=@t m=(map @t guest-link:trunk)]
+  ^-  (map @t guest-link:trunk)
+  (malt (skip ~(tap by m) |=([@t l=guest-link:trunk] =(name name.l))))
 ::
 ::  +live: the invites worth keeping: unexpired, for a room we host
 ::

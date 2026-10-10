@@ -34,7 +34,7 @@ From the dojo, the same three steps, then a revoke:
 
 A guest is a person on the call who has no ship behind their seat.
 
-- **Their username is not an `@p`.** It is `guest-` and 12 hex digits, such as `guest-3fa9c07b12de`. An `@p` always starts with `~` and a guest's name never does, so every client can tell a guest from a ship by looking, and a guest can never take a ship's name.
+- **Their username is not an `@p`.** It is `guest-` and 24 hex digits, such as `guest-3fa9c07b12de5e81a7c4d230`. An `@p` always starts with `~` and a guest's name never does, so every client can tell a guest from a ship by looking, and a guest can never take a ship's name.
 - **Their readable name** travels in Galène's per-user data, `"data": {"name": "Grandma"}`, the same place a comet's mnemonym goes since wire 13. The guest's page sends it, so trunk never sees it. Clients mark guests ("Grandma (guest)"), so nobody can pass as a ship by picking a name. Talon, the guest page and the listen page all do.
 - **Their id is the hash of a secret (wire 17).** Trunk makes a 128-bit secret and gives it to the guest's page, which keeps it in the browser. The id is derived from it. Only the holder of the secret can rejoin as that guest, so a guest who sees another's id on the call cannot take it over. Galène refuses any message whose username differs from the token's `sub`, so a guest must join as exactly the name in their ticket. An app's guests get ids trunk makes for them (below).
 - **Permissions.** A speaking guest's token grants `present` and `message`, like a member's. `present` covers the microphone, the camera and a shared screen. A listening guest's token grants nothing, which is Galène's listener: they hear and watch. A guest token never grants `op`. A room's `speak-roles` and `muted` do not apply to guests, who have no roles.
@@ -66,7 +66,7 @@ Either is a code the ship keeps, not a Galène token, so unlike a listen link it
 - **An invite** has `uses` new guests left and lasts `ttl` seconds. A guest it seated who rejoins takes no use. It lasts at most 30 days and seats at most 1,000 guests, and a ship keeps at most 64 live ones. Expired invites, and those for rooms the ship no longer hosts, are pruned when an invite is made.
 - **A permanent link** never expires and has no seat limit. It keeps no guests at all: the guest's secret alone keeps their id. Its name is a `@tas` of 3 to 64 characters, and a ship keeps at most 64. Making a link again under the same name points it at another room.
 
-Either one names a room, and works while a room of that name is open.
+Either one belongs to its line. Closing the line ends its links, so a line opened again later under the same name starts with none. A link works only for a line on the ship's own call server: the guest page runs that server's `protocol.js` on the ship's origin, and a line's admins can point it at another server.
 
 1. A guest opens the link. Trunk serves `app/trunk/guest.html`, which asks for a display name and shows who is hosting and the room's title. Those come from `GET <path>/room`, and are all the page knows of the host.
 2. On Join, the page posts `{"secret": <the secret it was given before, or null>}` to `<path>`. Eyre gives a signed-out request a guest identity, and these routes sit before the sign-in check.
@@ -75,7 +75,7 @@ Either one names a room, and works while a room of that name is open.
 
 The page keeps the secret and the name in the browser, per link. A rejoin, after a reload or a dropped connection, sends the same secret. A revoked or expired link refuses the rejoin, but a guest already on the line stays until they leave.
 
-The answers: 404 when the link has ended or never was, 410 when an invite has no seats left, 503 when the ship has no call server set up.
+The answers: 404 when the link has ended or never was, 410 when an invite has no seats left, 503 when the ship has no call server set up or the line runs on another one.
 
 ## Video and screen sharing
 
@@ -103,7 +103,7 @@ An app on the host's ship can host its own rooms and seat its own users in them 
 ```jsonc
 // the answers, as %json facts on /app/<agent>, a path only that agent may watch
 {"guest-ticket": {"room": "party-0v3a2", "guest": "<app's id>", "req": "<request id>",
-                  "username": "guest-3fa9c07b12de",
+                  "username": "guest-3fa9c07b12de5e81a7c4d230",
                   "location": "https://sfu.example/group/talon/<ship>/mud-world/party-0v3a2/<epoch>/",
                   "endpoint": "wss://sfu.example/ws", "token": "<jwt>", "expires": 1760003600,
                   "speak": true}}
@@ -116,7 +116,7 @@ An app on the host's ship can host its own rooms and seat its own users in them 
 - **Answers come on a subscription.** A poke cannot return data, so the app watches `/app/<agent>` and matches answers by `req`. The facts are `%json`, so an app couples to field names and not to trunk's types.
 - **Removing someone is a rotation.** Galène tokens cannot be revoked, so `app-room-rotate` moves the room to a new location, named by a new random epoch, and the app re-tickets everyone still welcome. They keep their guest ids. The removed person's old token opens only the old location, where nobody is left.
 - **Where the rooms live.** A party line's Galène subgroup is `<ship>-<name>`, and an app room's is `<ship>/<agent>/<room>/<epoch>`. The character after the ship differs, so no line a remote admin opens can land on an app's room. App rooms run on the ship's own sidecar.
-- **Limits:** at most 64 app rooms per ship and 256 guests in one. A room that asks for no ticket for a day closes itself, checked whenever any app acts.
+- **Limits:** at most 64 rooms per app and 256 guests in one. A room that asks for no ticket for a day closes itself, checked whenever any app acts.
 
 An app's page that wants to interoperate with Talon publishes the way the guest page does (above).
 

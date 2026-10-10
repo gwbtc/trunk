@@ -13,7 +13,7 @@
 =/  app  `app-room:trunk`['0e1f2a3b' ~ now]
 =/  is-guest
   |=  id=@t
-  ?&  =(18 (met 3 id))
+  ?&  =(30 (met 3 id))
       =('guest-' (end [3 6] id))
       (levy (trip (rsh [3 6] id)) is-hex)
   ==
@@ -27,7 +27,7 @@
   %-  ~(gas by *(map @t @t))
   (turn (gulf 1 app-guest-cap) |=(n=@ [(scot %ud n) (guest-id n)]))
 =/  cases=(list [@t ?])
-  :~  :-  'a guest id is guest- and 12 hex digits'
+  :~  :-  'a guest id is guest- and 24 hex digits'
       (levy `(list @)`~[0 1 42 (bex 300)] |=(e=@ (is-guest (guest-id e))))
       :-  'a guest id never starts with a sig'
       (levy `(list @)`~[0 1 42 (bex 300)] |=(e=@ !=('~' (end 3 (guest-id e)))))
@@ -66,6 +66,12 @@
       =(1 ~(wyt by (live (my ['c' inv]~) now (sy ~['lounge']))))
       :-  'live drops an expired invite'
       =(~ (live (my ['c' inv]~) expires.inv (sy ~['lounge'])))
+      ['a closed room loses its invites' =(~ (drop-invites 'lounge' (my ['c' inv]~)))]
+      ['another room keeps its invites' =(1 ~(wyt by (drop-invites 'den' (my ['c' inv]~))))]
+      :-  'a closed room loses its permanent links'
+      =(~ (drop-links 'lounge' (my ['standup' ['lounge' &]]~)))
+      :-  'another room keeps its permanent links'
+      =(1 ~(wyt by (drop-links 'den' (my ['standup' ['lounge' &]]~))))
       :-  'live drops an invite for a room no longer hosted'
       =(~ (live (my ['c' inv]~) now ~))
   ::

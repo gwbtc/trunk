@@ -285,7 +285,7 @@ async function loadGuests() {
     const revoke = el('button', null, 'Revoke');
     revoke.onclick = async () => {
       if (!confirm('Revoke this link? Nobody new can join with it, and its guests cannot rejoin.')) return;
-      if (await act({ 'revoke-invite': code })) loadGuests();
+      if (await act({ 'revoke-invite': code })) reloadGuests();
     };
     actions.append(copy);
     // a phone's own share sheet: messages, mail, a calendar
@@ -322,7 +322,7 @@ async function loadGuests() {
     on.onchange = async () => {
       on.disabled = true;
       await act({ 'app-hosting': { agent: a.agent, allow: on.checked } });
-      loadGuests();
+      reloadGuests();
     };
     row.append(lab, on);
     hosts.append(row);
@@ -349,6 +349,12 @@ async function loadGroups() {
 
 let hosted = [];
 let lastGuests = '';
+// after an action, rebuild even if nothing changed: a refused one must
+// still give back the button or switch it disabled
+function reloadGuests() {
+  lastGuests = '';
+  return loadGuests();
+}
 let chosen;  // the line picked, kept across reloads; '' is a new line
 let groupsAsked = false;
 function newLine() {
@@ -387,12 +393,12 @@ $('g-make').onclick = async () => {
       return;
     }
     name = roomName(title);
-    if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return loadGuests();
+    if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return reloadGuests();
     const grp = $('g-group').value;
     if (grp) {
       const cut = grp.indexOf('/');
       const group = { ship: grp.slice(0, cut), name: grp.slice(cut + 1) };
-      if (!await act({ 'bind-room': { name, group } })) return loadGuests();
+      if (!await act({ 'bind-room': { name, group } })) return reloadGuests();
     }
     $('g-title').value = '';
     chosen = name;
@@ -406,7 +412,7 @@ $('g-make').onclick = async () => {
         uses: Number($('g-uses').value),
       } });
   if (ok) $('g-code').value = '';
-  loadGuests();
+  reloadGuests();
 };
 
 async function act(body) {

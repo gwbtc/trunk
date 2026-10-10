@@ -485,6 +485,18 @@
   %+  turn  ~(tap in old)
   |=(k=[=ship name=@t] [k now])
 ::
+::  +forget-room: close a room we host, and end its guest links with
+::  it, so a line opened again under the same name, by us or by a ship
+::  that may open one here, does not take them back.
+++  forget-room
+  |=  [name=@t s=state-18]
+  ^-  state-18
+  %=  s
+    hosted   (~(del by hosted.s) name)
+    invites  (drop-invites:trunk-guest name invites.s)
+    links    (drop-links:trunk-guest name links.s)
+  ==
+::
 ::  The policy a ship starts with: ring for anyone, block nobody.
 ::  Always assign this explicitly — never lean on the bunt of
 ::  +$ policy, which forks to %allow and locks the ship down.
@@ -759,7 +771,7 @@
     ::  with no ship: the owner's alone. Bad numbers crash: a nack.
         %invite-guests
       ?>  (~(has by hosted.state) name.act)
-      ?>  &((gth uses.act 0) (lte uses.act uses-cap:trunk-guest))
+      ?>  &((gth uses.act 0) (lte uses.act uses-cap:trunk-guest) (gth ttl.act 0))
       =/  live
         (live:trunk-guest invites.state now.bowl ~(key by hosted.state))
       ?>  (lth ~(wyt by live) guest-invite-cap:trunk-guest)
@@ -906,7 +918,7 @@
         %close-room
       =/  got  (~(get by hosted.state) name.act)
       :-  ?~(got ~ (announce:hc name.act u.got %.n))
-      this(hosted.state (~(del by hosted.state) name.act))
+      this(state (forget-room name.act state))
     ::
         %send
       ::  Answering, declining or hanging up settles the call for the
@@ -964,7 +976,7 @@
         ?.  open.act
           ?~  got  `this
           :-  (announce:hc name.act u.got %.n)
-          this(hosted.state (~(del by hosted.state) name.act))
+          this(state (forget-room name.act state))
         =/  new=room:trunk
           ?~  got
             ::  a brand-new room starts unbound and ungated; binding
@@ -1452,7 +1464,7 @@
         %-  (slog leaf+"trunk: {<src.bowl>} is not an admin of {<name.msg>}" ~)
         `this
       ?.  open.msg
-        =.  hosted.state  (~(del by hosted.state) name.msg)
+        =.  state  (forget-room name.msg state)
         :_  this
         (announce:hc name.msg u.got %.n)
       ::  State FIRST, announce second. +announce reads the room back
@@ -1629,7 +1641,8 @@
     ::  Codes are bearer secrets, so this is never part of /x/debug.
       [%x %guests ~]
     =/  live  (live:trunk-guest invites.state now.bowl ~(key by hosted.state))
-    ``json+!>((guests-to-json:trunk-json live links.state apps.state hosts.state))
+    =/  apps  (prune-apps:trunk-guest apps.state now.bowl)
+    ``json+!>((guests-to-json:trunk-json live links.state apps hosts.state))
   ==
 ::
 ++  on-agent
@@ -2882,6 +2895,8 @@
   =/  cut  (find "/" (trip rest))
   =/  code=@t  ?~(cut rest (end [3 u.cut] rest))
   =/  tail=@t  ?~(cut '' (rsh [3 u.cut] rest))
+  ::  a link someone shared with a trailing slash is the same link
+  =?  tail  =('/' tail)  ''
   ?:  &(=(%'GET' method) =('' tail))
     :_  s
     (http-cards eid 200 ~[['content-type' 'text/html; charset=utf-8']] `guest-page)
@@ -2905,7 +2920,12 @@
     (give 200 (room-info-to-json:trunk-json host-name title.u.room speak.u.seat))
   ?.  &(=(%'POST' method) =('' tail))
     [(give 405 (why 'No such route.')) s]
-  =/  cfg  (room-sfu name.u.seat)
+  ::  The page loads the call server's protocol.js on this ship's
+  ::  origin, so it must be a server the owner chose. A room's own
+  ::  server can be set by a remote admin, so guests get only ours.
+  ?^  sfu.u.room
+    [(give 503 (why 'This line runs on a call server the host does not keep.')) s]
+  =/  cfg  sfu.s
   ?:  =('' key.cfg)
     [(give 503 (why 'The host has no call server set up.')) s]
   =/  secret=(unit @t)
@@ -2964,7 +2984,8 @@
     ?.  (valid-room:trunk-guest room.act)
       [(deny room.act '' 'not a room name') s]
     ?:  (~(has by apps.s) [agent room.act])  [~ s]
-    ?:  (gte ~(wyt by apps.s) app-room-cap:trunk-guest)
+    =/  mine  (lent (skim ~(tap in ~(key by apps.s)) |=([a=@tas @t] =(a agent))))
+    ?:  (gte mine app-room-cap:trunk-guest)
       [(deny room.act '' 'too many rooms') s]
     =/  new=app-room:trunk  [(new-epoch:trunk-guest eny.bowl) ~ now.bowl]
     [~ s(apps (~(put by apps.s) [agent room.act] new))]

@@ -61,7 +61,8 @@
 ::  puts its own origin in front. An agent's room actions are nouns, not
 ::  JSON, and their answers on /app/<agent> are %json facts:
 ::    ticket  {"guest-ticket":{"room":r,"guest":g,"req":q,
-::             "username":"guest-3fa9c07b12de","location":l,
+::             "username":"guest-3fa9c07b12de5e81a7c4d230",
+::             "location":l,
 ::             "endpoint":"wss://...","token":t,"expires":1787000000,
 ::             "speak":true}}
 ::    denied  {"guest-denied":{"room":r,"req":q,"why":w}}
