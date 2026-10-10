@@ -25,6 +25,8 @@
 ++  guest-invite-cap  64
 ++  links-cap  64
 ++  app-room-cap  64
+::  apps one agent may name with the -as actions (wire 18)
+++  app-name-cap  64
 ++  app-guest-cap  256
 ::  an app room that asks for no ticket for this long closes itself
 ++  app-idle  ~d1

@@ -140,6 +140,7 @@ Every grubbery app reaches trunk as the one gall agent `%grubbery`, so an app na
 [%app-guest-ticket-as app=@t room=@t guest=@t speak=? req=@t]
 ```
 
+- **Opening a room** puts the app on the trunk page, switched off. One agent may name 64 apps at most, and trunk refuses more with `too many apps`.
 - **Answers** come on `/app/grubbery/<name>`, as the same `guest-ticket` and `guest-denied` JSON. A grubbery app gets them by asking the kernel to watch that path (`%gall-watch` with `[our %trunk /app/grubbery/<name>]`). The kernel keeps each fact as a file under `/sys/gall/subs/<ship>/trunk/app/grubbery/<name>/`, and the app matches tickets by `req`.
 - **Rooms** live on the call server at `<ship>/grubbery/<name>/<room>/<epoch>`, one segment deeper than a plain app's, so the two can never meet.
 - **The kernel's trunk marc** must type the four `-as` actions. The exact marc is `docs/grubbery-trunk-action.hoon` in this repo. Deploy it only after the ship's trunk is wire 18: a marc that names actions an older trunk lacks makes that trunk refuse every grubbery poke, notices included. The order is trunk 18, then the marc, then the app.

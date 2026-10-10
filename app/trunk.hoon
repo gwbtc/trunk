@@ -3030,9 +3030,7 @@
     ?:  |(?=(~ declared) =(id agent))  /app/[agent]
     [%app agent ;;(@ta (need declared)) ~]
   =.  apps.s  (prune-apps:trunk-guest apps.s now.bowl)
-  ::  an app that asks shows on the trunk page, switched off
-  =?  hosts.s  !(~(has by hosts.s) id)  (~(put by hosts.s) id %.n)
-  =/  off=?  !(~(got by hosts.s) id)
+  =/  off=?  !(~(gut by hosts.s) id %.n)
   =/  no  'apps may not host calls on this ship'
   =/  deny
     |=  [room=@t req=@t why=@t]
@@ -3044,6 +3042,16 @@
     [~ s(apps (~(del by apps.s) [id room.act]))]
   ::
       %app-room-open
+    ::  an app that opens a room shows on the trunk page, switched off.
+    ::  An agent may name only so many apps, since nothing forgets one.
+    =/  names
+      %+  skim  ~(tap in ~(key by hosts.s))
+      |=(k=@t |(=(k agent) =((end [3 +((met 3 agent))] k) (cat 3 agent '/'))))
+    ?:  ?&  !(~(has by hosts.s) id)
+            (gte (lent names) app-name-cap:trunk-guest)
+        ==
+      [(deny room.act '' 'too many apps') s]
+    =?  hosts.s  !(~(has by hosts.s) id)  (~(put by hosts.s) id %.n)
     ?:  off  [(deny room.act '' no) s]
     ?.  (valid-room:trunk-guest room.act)
       [(deny room.act '' 'not a room name') s]
