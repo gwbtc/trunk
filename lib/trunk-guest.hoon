@@ -147,9 +147,9 @@
 ::  +prune-apps: close the app rooms idle past +app-idle
 ::
 ++  prune-apps
-  |=  [apps=(map [@tas @t] app-room:trunk) now=@da]
-  ^-  (map [@tas @t] app-room:trunk)
-  %-  ~(gas by *(map [@tas @t] app-room:trunk))
+  |=  [apps=(map [@t @t] app-room:trunk) now=@da]
+  ^-  (map [@t @t] app-room:trunk)
+  %-  ~(gas by *(map [@t @t] app-room:trunk))
   %+  skim  ~(tap by apps)
   |=  [* r=app-room:trunk]
   (lth (sub now (min now last.r)) app-idle)
@@ -162,14 +162,17 @@
   &(!=('' room) (lte (met 3 room) 64) ((sane %tas) room))
 ::
 ::  +app-sub: an app room's Galène subgroup. A party line's is
-::  '<ship>-<name>' and an app room's is '<ship>/<agent>/<room>/<epoch>'.
+::  '<ship>-<name>' and an app room's is '<ship>/<app>/<room>/<epoch>'.
 ::  The character after the ship differs, so no line a remote admin
-::  opens can land on an app's room.
+::  opens can land on an app's room. The app is an agent, which has no
+::  '/', or '<agent>/<name>' for an app that names itself (wire 18),
+::  which has exactly one: four segments against five, so a named app's
+::  room cannot land on a plain one's either.
 ::
 ++  app-sub
-  |=  [our=ship agent=@tas room=@t epoch=@t]
+  |=  [our=ship app=@t room=@t epoch=@t]
   ^-  @t
-  (rap 3 ~[(rsh [3 1] (scot %p our)) '/' agent '/' room '/' epoch])
+  (rap 3 ~[(rsh [3 1] (scot %p our)) '/' app '/' room '/' epoch])
 ::
 ::  +location: a subgroup's URL, which a token's aud must match. The
 ::  trailing slash is Galène's: it matches the path as /group/<name>/.
