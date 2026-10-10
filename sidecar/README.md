@@ -70,7 +70,7 @@ on demand by whichever ship hosts the room.
 
 ## 4. The listen page
 
-`%trunk` mints listen links to `<sfu base>/listen/`. The compose file mounts `listen/` read-only at Galène's `/static/listen`, so the page is there once Galène is up. To change it later without recreating the container, and so without dropping anyone on a line, edit the file and also `docker cp listen/index.html <galene container>:/static/listen/index.html`.
+`%trunk` mints listen links to `<sfu base>/listen/`. The page is three files, `index.html`, `listen.js` and `listen.css`: Galène serves its static files with a Content-Security-Policy that blocks inline scripts and styles. The compose file mounts `listen/` read-only at Galène's `/static/listen`, so the page is there once Galène is up. To change it later without recreating the container, and so without dropping anyone on a line, edit the files and also `docker cp listen/. <galene container>:/static/listen/`. A TLS front that serves `/listen/` itself, rather than passing it to Galène, needs all three files too.
 
 The page shows each person by the name their client put in Galène's per-user data (`{"name": ...}`), and otherwise by the username the host signed into their ticket, which is their `@p`. A guest (wire 16), whose username is `guest-` and hex, is always marked as one.
 
@@ -83,7 +83,26 @@ People with no ship join through a page the ship serves, and an app on the ship 
  "allowOrigin": ["https://your.ship.example"]}
 ```
 
-If the ship's pages are https, Galène must be too: a browser will not let an https page load `protocol.js` from, or open a websocket to, plain http. Put a TLS front before :8444, such as an nginx vhost that proxies to `127.0.0.1:8444` with the websocket upgrade headers and long timeouts, and get it a certificate (`certbot --nginx -d calls.example.com`). Set `proxyURL` to that host, as above, so Galène's `.status` names it. Then point `%set-sfu` at the https base:
+If the ship's pages are https, Galène must be too: a browser will not let an https page load `protocol.js` from, or open a websocket to, plain http. Put a TLS front before :8444, such as this nginx vhost, and get it a certificate with `certbot --nginx -d calls.example.com`, which adds the `listen 443 ssl` lines:
+
+```nginx
+server {
+    server_name calls.example.com;
+    location / {
+        proxy_pass http://127.0.0.1:8444;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        # a party line is a long-lived socket
+        proxy_read_timeout 24h;
+        proxy_send_timeout 24h;
+        proxy_buffering off;
+    }
+}
+```
+
+Set `proxyURL` to that host, as above, so Galène's `.status` names it. Once the front works, close :8444 to the outside: nginx reaches it over loopback. Then point `%set-sfu` at the https base:
 
 ```
 :trunk &trunk-action [%set-sfu ['https://calls.example.com' 'talon' 'THE_KEY']]
@@ -93,7 +112,7 @@ Galène checks only the path of a ticket's address, not its host, so tickets min
 
 ### A short link for permanent guest links
 
-A permanent link (wire 17) lives on the ship, at `https://your.ship.example/apps/trunk/guest/<name>`. To share it as `https://calls.example.com/<name>` instead, add this to the TLS vhost. It skips Galène's own one-segment paths:
+A permanent link (wire 17) lives on the ship, at `https://your.ship.example/apps/trunk/guest/<name>`. To share it as `https://calls.example.com/<name>` instead, add this inside the TLS vhost's `server` block. It skips Galène's own one-segment paths:
 
 ```nginx
 location ~ "^/(?!(?:ws|group|recordings|galene-api|listen|example|third-party)$)([a-z][a-z0-9-]{2,63})$" {

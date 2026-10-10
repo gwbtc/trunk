@@ -192,7 +192,7 @@ Talon reads each device's `sent` and `last` and the `drops` from it, so those na
 
 A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line: an invite for a set number of people over a set time (`invite-guests`), or a permanent link under a chosen name for a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on.
 
-A guest's Galène username is `guest-` and 12 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin`, and an https ship needs Galène behind TLS.
+A guest's Galène username is `guest-` and 24 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin`, and an https ship needs Galène behind TLS.
 
 [`docs/guest-seats.md`](docs/guest-seats.md) has the whole design, and starts with how to run a recurring meeting.
 
@@ -291,13 +291,15 @@ sequenceDiagram
 
 ```
 app/ lib/ mar/ sur/ gen/   the %trunk desk, laid out for a clay mount
-app/trunk/                 the owner's page and the tile's icon, built into the agent
+app/trunk/                 the owner's page, the guest page and the tile's icon, built into the agent
 desk.docket-0              the Landscape tile
 lib/trunk-push.hoon        what wakes a phone, and the bytes that do it
+lib/trunk-guest.hoon       who a guest link seats, and guest ids
 gen/test-*.hoon            checks to run on a ship, each answering %ok
 sidecar/                   coturn + Galène, and the listen page
 docs/design.md             how it works and why
 docs/notifications.md      how other apps send notifications through trunk
+docs/guest-seats.md        calls with people who have no ship, and recurring meetings
 AGENTS.md                  notes for coding agents working on trunk
 ```
 
@@ -374,7 +376,9 @@ is total.
 ## Party lines
 
 One line per group, hosted by one ship, running on an SFU. The host
-mints a per-member, per-room token; membership is the whole check.
+mints a per-member, per-room token; membership is the whole check
+for ships. People with no ship come in through guest links
+([docs/guest-seats.md](docs/guest-seats.md)).
 
 Rooms carry what their admins decide:
 
@@ -473,6 +477,7 @@ the path):
 /~/scry/trunk/ice.json        the ICE servers this ship advertises
 /~/scry/trunk/sfu.json        the SFU's base url and group, never its key
 /~/scry/trunk/debug.json      push devices, switches, watches and log
+/~/scry/trunk/guests.json     guest links, and the apps that host calls
 ```
 
 The dojo form of the same reads is `.^(json %gx /=trunk=/lines/json)`.

@@ -61,7 +61,8 @@
 ::  puts its own origin in front. An agent's room actions are nouns, not
 ::  JSON, and their answers on /app/<agent> are %json facts:
 ::    ticket  {"guest-ticket":{"room":r,"guest":g,"req":q,
-::             "username":"guest-3fa9c07b12de","location":l,
+::             "username":"guest-3fa9c07b12de5e81a7c4d230",
+::             "location":l,
 ::             "endpoint":"wss://...","token":t,"expires":1787000000,
 ::             "speak":true}}
 ::    denied  {"guest-denied":{"room":r,"req":q,"why":w}}
@@ -71,6 +72,7 @@
 ::  "links":[<guest-link's object>],
 ::  "apps":[{"agent":a,"allowed":false,"rooms":[r]}]}.
 /-  trunk
+/+  trunk-guest
 |%
 ++  ship-from-json  (su:dejs:format ;~(pfix sig fed:ag))
 ::
@@ -327,29 +329,29 @@
       %guest-link    (frond %guest-link (link-to-json code.u guest-link.u))
   ==
 ::
-++  link-to-json
-  |=  [code=@t lin=guest-link:trunk]
-  ^-  json
-  =,  enjs:format
-  %-  pairs
-  :~  [%code s+code]
-      [%name s+name.lin]
-      [%path s+(cat 3 '/apps/trunk/guest/' code)]
-      [%speak b+speak.lin]
-  ==
-::
 ++  invite-to-json
   |=  [code=@t inv=invite:trunk]
   ^-  json
-  =,  enjs:format
-  %-  pairs
-  :~  [%code s+code]
-      [%name s+name.inv]
-      [%path s+(cat 3 '/apps/trunk/guest/' code)]
-      [%speak b+speak.inv]
-      [%expires (sect expires.inv)]
-      [%uses (numb uses.inv)]
-      [%guests (numb ~(wyt in guests.inv))]
+  %-  pairs:enjs:format
+  %+  weld  (link-pairs code name.inv speak.inv)
+  ^-  (list [@t json])
+  :~  ['expires' (sect:enjs:format expires.inv)]
+      ['uses' (numb:enjs:format uses.inv)]
+      ['guests' (numb:enjs:format ~(wyt in guests.inv))]
+  ==
+::
+++  link-to-json
+  |=  [code=@t lin=guest-link:trunk]
+  ^-  json
+  (pairs:enjs:format (link-pairs code name.lin speak.lin))
+::
+++  link-pairs
+  |=  [code=@t name=@t speak=?]
+  ^-  (list [@t json])
+  :~  ['code' s+code]
+      ['name' s+name]
+      ['path' s+(cat 3 guest-path:trunk-guest code)]
+      ['speak' b+speak]
   ==
 ::
 ::  +guests-to-json: /x/guests, for the trunk page and Talon
@@ -367,6 +369,7 @@
       :-  %links
       a+(turn ~(tap by links) |=([c=@t l=guest-link:trunk] (link-to-json c l)))
       :-  %apps
+      =/  rooms  ~(tap in ~(key by apps))
       :-  %a
       %+  turn  ~(tap by hosts)
       |=  [agent=@tas allowed=?]
@@ -375,7 +378,7 @@
           [%allowed b+allowed]
           :-  %rooms
           :-  %a
-          %+  murn  ~(tap in ~(key by apps))
+          %+  murn  rooms
           |=  [a=@tas r=@t]
           ?.(=(a agent) ~ `s+r)
       ==
@@ -395,21 +398,23 @@
   ==
 ::
 ++  app-ticket-to-json
-  |=  $:  room=@t
-          guest=@t
-          req=@t
-          username=@t
-          location=@t
-          endpoint=@t
-          token=@t
-          expires=@ud
-          speak=?
-      ==
+  |=  [room=@t guest=@t req=@t ticket=(list [@t json])]
   ^-  json
   %+  frond:enjs:format  'guest-ticket'
   %-  pairs:enjs:format
-  %+  weld  `(list [@t json])`~[['room' s+room] ['guest' s+guest] ['req' s+req]]
-  (ticket-pairs username location endpoint token expires speak)
+  [['room' s+room] ['guest' s+guest] ['req' s+req] ticket]
+::
+::  +room-info-to-json: what the guest page shows before Join
+++  room-info-to-json
+  |=  [host=@t title=@t speak=?]
+  ^-  json
+  (pairs:enjs:format ~[['host' s+host] ['title' s+title] ['speak' b+speak]])
+::
+::  +error-to-json: why the guest route refused
+++  error-to-json
+  |=  why=@t
+  ^-  json
+  (frond:enjs:format 'error' s+why)
 ::
 ++  denied-to-json
   |=  [room=@t req=@t why=@t]

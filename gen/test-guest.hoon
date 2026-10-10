@@ -11,66 +11,67 @@
 =/  now  ~2026.10.10..12.00.00
 =/  inv  `invite:trunk`['lounge' & (add now ~h1) 1 ~]
 =/  app  `app-room:trunk`['0e1f2a3b' ~ now]
-=/  hex  |=(c=@tD |(&((gte c '0') (lte c '9')) &((gte c 'a') (lte c 'f'))))
 =/  is-guest
   |=  id=@t
-  ?&  =(18 (met 3 id))
+  ?&  =(30 (met 3 id))
       =('guest-' (end [3 6] id))
-      (levy (trip (rsh [3 6] id)) hex)
+      (levy (trip (rsh [3 6] id)) is-hex)
   ==
-=/  seated  (redeem `inv ~ now 42)
-=/  sid  ?~(seated '' id.u.seated)
-=/  sec  ?~(seated '' secret.u.seated)
-=/  used  ?~(seated inv invite.u.seated)
+=/  first  (guest-of ~ 42)
+=/  sid  id.first
+=/  sec  secret.first
+=/  used  (fall (redeem inv sid now) inv)
 =/  other  (new-secret 99)
+=/  oid  (id-of other)
 =/  full
   %-  ~(gas by *(map @t @t))
   (turn (gulf 1 app-guest-cap) |=(n=@ [(scot %ud n) (guest-id n)]))
 =/  cases=(list [@t ?])
-  :~  :-  'a guest id is guest- and 12 hex digits'
+  :~  :-  'a guest id is guest- and 24 hex digits'
       (levy `(list @)`~[0 1 42 (bex 300)] |=(e=@ (is-guest (guest-id e))))
       :-  'a guest id never starts with a sig'
       (levy `(list @)`~[0 1 42 (bex 300)] |=(e=@ !=('~' (end 3 (guest-id e)))))
       :-  'a code is 32 hex digits'
       =/  c  (new-code 7)
-      &(=(32 (met 3 c)) (levy (trip c) hex))
+      &(=(32 (met 3 c)) (levy (trip c) is-hex))
       :-  'two entropies make two codes'
       !=((new-code 1) (new-code 2))
   ::
-      ['a missing invite seats nobody' =(~ (redeem ~ ~ now 1))]
-      ['an invite seats a new guest' (is-guest sid)]
+      ['a new guest has a guest id' (is-guest sid)]
+      ['an invite seats a new guest' ?=(^ (redeem inv sid now))]
       ['seating takes a use' =(0 uses.used)]
       ['the seated guest is remembered' (~(has in guests.used) sid)]
-      ['an invite with no uses seats nobody new' =(~ (redeem `used ~ now 43))]
+      ['an invite with no uses seats nobody new' =(~ (redeem used oid now))]
       ['a guest id is the hash of its secret' =(sid (id-of sec))]
       ['a secret is 32 hex digits' (valid-secret sec)]
       ['a guest id is not a secret' !(valid-secret sid)]
-      :-  'a seated guest rejoins by secret with the same id'
-      =/  r  (redeem `used `sec now 44)
-      ?~(r | &(=(sid id.u.r) =(sec secret.u.r) =(0 uses.invite.u.r)))
-      :-  'another secret is a new guest'
-      =/  r  (redeem `inv `other now 45)
-      ?~(r | &(!=(sid id.u.r) =((id-of other) id.u.r) =(0 uses.invite.u.r)))
-      ['another secret finds no seat left' =(~ (redeem `used `other now 46))]
-      ['an invite seats until just before it expires' ?=(^ (redeem `inv ~ (sub expires.inv ~s1) 1))]
-      ['an invite at its expiry seats nobody' =(~ (redeem `inv ~ expires.inv 1))]
-      ['a rejoin after expiry is refused' =(~ (redeem `used `sec expires.used 1))]
+      ['a secret gives back the same guest' =((guest-of `sec 1) [sec sid])]
+      :-  'a seated guest rejoins and takes no use'
+      =((redeem used sid now) `used)
+      ['another secret is another guest' !=(sid oid)]
+      ['an invite seats until just before it expires' ?=(^ (redeem inv sid (sub expires.inv ~s1)))]
+      ['an invite at its expiry seats nobody' =(~ (redeem inv sid expires.inv))]
+      ['a rejoin after expiry is refused' =(~ (redeem used sid expires.used))]
   ::
-      :-  'a permanent link keeps a guest by secret'
-      =((link-seat `sec 1) [sec sid])
-      :-  'a permanent link makes a new guest'
-      =/  g  (link-seat ~ 7)
+      :-  'a new guest gets a new secret'
+      =/  g  (guest-of ~ 7)
       &((valid-secret secret.g) =(id.g (id-of secret.g)) (is-guest id.g))
+      ['an app guest id is a guest id' (is-guest (guest-id 5))]
       ['a link name is a @tas' (valid-name 'groundwire-standup')]
       ['a link name is not too short' !(valid-name 'ab')]
       ['a link name has no slash' !(valid-name 'a/b-c')]
       ['a link name is lower case' !(valid-name 'Standup')]
-      ['a link name is not a code' !(valid-name (new-code 3))]
   ::
       :-  'live keeps an unexpired invite for a hosted room'
       =(1 ~(wyt by (live (my ['c' inv]~) now (sy ~['lounge']))))
       :-  'live drops an expired invite'
       =(~ (live (my ['c' inv]~) expires.inv (sy ~['lounge'])))
+      ['a closed room loses its invites' =(~ (drop-invites 'lounge' (my ['c' inv]~)))]
+      ['another room keeps its invites' =(1 ~(wyt by (drop-invites 'den' (my ['c' inv]~))))]
+      :-  'a closed room loses its permanent links'
+      =(~ (drop-links 'lounge' (my ['standup' ['lounge' &]]~)))
+      :-  'another room keeps its permanent links'
+      =(1 ~(wyt by (drop-links 'den' (my ['standup' ['lounge' &]]~))))
       :-  'live drops an invite for a room no longer hosted'
       =(~ (live (my ['c' inv]~) now ~))
   ::

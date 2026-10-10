@@ -1,0 +1,84 @@
+/* The listen page's styles, in their own file because Galène serves
+   /listen/ with a Content-Security-Policy that blocks inline styles. */
+  :root {
+    --bg: #f7f6f3;
+    --fg: #1a1a17;
+    --muted: #6b6a63;
+    --line: #e0ded7;
+    --accent: #1f6f4a;
+    --accent-fg: #ffffff;
+    --bad: #8a2f2f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14140f;
+      --fg: #ece9e1;
+      --muted: #9a978c;
+      --line: #2c2b25;
+      --accent: #4bbd85;
+      --accent-fg: #0d1a13;
+      --bad: #e08585;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { width: 100%; max-width: 26rem; text-align: center; }
+  h1 {
+    margin: 0 0 .25rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .room {
+    margin: 0 0 2rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  button {
+    width: 100%;
+    padding: 1.15rem 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font: inherit;
+    font-size: 1.15rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  button.leave { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .status { margin-top: 1.25rem; color: var(--muted); min-height: 1.5rem; }
+  .status.bad { color: var(--bad); }
+  .who {
+    margin-top: 1.5rem; padding-top: 1rem;
+    border-top: 1px solid var(--line);
+    color: var(--muted); font-size: .9rem;
+    text-align: left;
+  }
+  .who ul { margin: .5rem 0 0; padding: 0; list-style: none; }
+  .who li { display: flex; align-items: center; gap: .5rem; padding: .15rem 0; }
+  .dot { width: .5rem; height: .5rem; border-radius: 50%;
+         background: var(--line); flex: none; }
+  .dot.on { background: var(--accent); }
+  .muted { margin-left: auto; font-size: .75rem; color: var(--muted);
+           border: 1px solid var(--line); border-radius: .6rem;
+           padding: 0 .4rem; flex: none; }
+  .topic { margin: -1.5rem 0 2rem; color: var(--muted); font-size: 1rem; }
+  .trace { margin-top: .75rem; font-size: .75rem; color: var(--muted);
+           opacity: .8; min-height: 1rem; }
+  .live { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%;
+          background: var(--accent); margin-right: .45rem; vertical-align: baseline; }

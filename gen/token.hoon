@@ -5,4 +5,4 @@
 |=  [[now=@da * *] [key=@t sub=@t aud=@t ttl=@ud ~] ~]
 :-  %noun
 =/  t  (unix-secs:trunk-jwt now)
-(mint:trunk-jwt key sub aud t (add t ttl))
+(mint:trunk-jwt key sub aud t (add t ttl) speaker:trunk-jwt)

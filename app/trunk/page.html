@@ -46,15 +46,16 @@
   .row label { flex: 1; }
   .hint { display: block; color: var(--muted); font-size: 13px; }
   input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--amber); }
-  input.field {
-    font: inherit; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
-    width: 13rem; max-width: 45%;
-  }
-  select, button {
+  select, button, input.field {
     font: inherit; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
   }
+  input.field { width: 13rem; max-width: 45%; }
+  @media (max-width: 520px) {
+    .row:has(> input.field) { flex-wrap: wrap; }
+    .row > input.field { width: 100%; max-width: none; }
+  }
+  .device.fresh { outline: 2px solid var(--amber); outline-offset: 4px; border-radius: 6px; }
   button { cursor: pointer; }
   button.primary { background: var(--amber); color: #101541; border-color: var(--amber); font-weight: 600; }
   button:disabled { opacity: 0.5; cursor: default; }
@@ -73,7 +74,7 @@
   ol.log li { padding: 6px 0; border-top: 1px solid var(--line); display: flex; gap: 12px; }
   ol.log li:first-child { border-top: 0; }
   ol.log time { color: var(--muted); white-space: nowrap; min-width: 84px; }
-  #banner { display: none; margin-top: 16px; padding: 12px 16px; border-radius: 12px; background: #3a1620; border: 1px solid var(--bad); }
+  #banner { margin-top: 16px; padding: 12px 16px; border-radius: 12px; background: #3a1620; border: 1px solid var(--bad); }
   #banner a { color: var(--amber); }
   .empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
   [hidden] { display: none !important; }
@@ -89,7 +90,7 @@
     </div>
   </header>
 
-  <div id="banner"></div>
+  <div id="banner" hidden></div>
 
   <section>
     <h2>Notifications</h2>
@@ -128,16 +129,16 @@
       <label for="g-group">Members from Talon<span class="hint">People in this Tlon group join from Talon as themselves. Everyone else uses the link.</span></label>
       <select id="g-group"><option value="">Nobody</option></select>
     </div>
-    <div class="row"><label for="g-speak">Guests may speak<span class="hint">Off, they only listen.</span></label><input type="checkbox" id="g-speak" checked></div>
+    <div class="row"><label for="g-speak">Guests may speak<span class="hint">Off, they can only watch and listen.</span></label><input type="checkbox" id="g-speak" checked></div>
     <div class="row">
+      <label for="g-code">Permanent link name<span class="hint">Leave empty for an invite that expires. A name such as groundwire-standup makes a permanent link: lower case letters, digits and hyphens, starting with a letter. Anyone who knows or guesses the name can join, so add something hard to guess if the meeting is private.</span></label>
+      <input id="g-code" class="field" maxlength="64">
+    </div>
+    <div class="row" id="g-uses-row">
       <label for="g-uses">People</label>
       <select id="g-uses"><option>1</option><option>5</option><option selected>10</option><option>50</option></select>
     </div>
-    <div class="row">
-      <label for="g-code">Permanent link name<span class="hint">Optional, such as groundwire-standup: lower case letters, digits and hyphens. Anyone who knows or guesses it can join, so add something hard to guess if the meeting is private.</span></label>
-      <input id="g-code" class="field" maxlength="64" placeholder="none">
-    </div>
-    <div class="row">
+    <div class="row" id="g-ttl-row">
       <label for="g-ttl">Lasts</label>
       <select id="g-ttl"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="604800">1 week</option><option value="2592000">30 days</option></select>
     </div>
@@ -203,7 +204,9 @@ function banner(text, link) {
     a.href = link.href;
     b.append(a);
   }
-  b.style.display = text ? 'block' : 'none';
+  b.hidden = !text;
+  // the page is long, so bring an error to where the owner is looking
+  if (text) b.scrollIntoView({ block: 'nearest' });
 }
 
 async function load() {
@@ -238,7 +241,8 @@ function until(secs) {
   const s = secs - Date.now() / 1000;
   if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' min';
   if (s < 86400) return Math.round(s / 3600) + ' h';
-  return Math.round(s / 86400) + ' days';
+  const d = Math.round(s / 86400);
+  return d + (d === 1 ? ' day' : ' days');
 }
 
 async function loadGuests() {
@@ -248,6 +252,11 @@ async function loadGuests() {
   } catch (e) {
     return;
   }
+  // a rebuild closes an open picker and loses a button's "Copied", so
+  // rebuild only when something changed
+  const seen = JSON.stringify([g, rooms]);
+  if (seen === lastGuests) return;
+  lastGuests = seen;
   hosted = rooms.map((r) => r.name);
   const title = {};
   for (const r of rooms) title[r.name] = r.title || r.name;
@@ -268,7 +277,7 @@ async function loadGuests() {
 
   const box = $('invites');
   box.replaceChildren();
-  if (!g.invites.length && !(g.links || []).length) box.append(el('div', 'empty', 'No links yet.'));
+  if (!g.invites.length && !g.links.length) box.append(el('div', 'empty', 'No links yet.'));
   const linkRow = (title, meta, link, code) => {
     const row = el('div', 'device');
     row.append(el('div', 'name', title));
@@ -277,13 +286,14 @@ async function loadGuests() {
     const actions = el('div', 'actions');
     const copy = el('button', null, 'Copy link');
     copy.onclick = async () => {
-      try { await navigator.clipboard.writeText(link); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'Copy failed'; }
+      await copyText(link);
+      copy.textContent = 'Copied';
       setTimeout(() => { copy.textContent = 'Copy link'; }, 2500);
     };
     const revoke = el('button', null, 'Revoke');
     revoke.onclick = async () => {
       if (!confirm('Revoke this link? Nobody new can join with it, and its guests cannot rejoin.')) return;
-      if (await act({ 'revoke-invite': code })) loadGuests();
+      if (await act({ 'revoke-invite': code })) reloadGuests();
     };
     actions.append(copy);
     // a phone's own share sheet: messages, mail, a calendar
@@ -295,14 +305,27 @@ async function loadGuests() {
     actions.append(revoke);
     row.append(actions);
     box.append(row);
+    codes.push(code);
+    // the link the owner just made: mark it, and put Copy under their hand
+    if (justMade && !shown.has(code)) {
+      row.classList.add('fresh');
+      if (!box.querySelector('.fresh ~ .fresh')) {
+        row.scrollIntoView({ block: 'nearest' });
+        copy.focus();
+      }
+    }
   };
-  for (const l of (g.links || []).slice().sort((a, b) => a.code.localeCompare(b.code))) {
-    linkRow(title[l.name] || l.name, 'Permanent, no seat limit · ' + (l.speak ? 'may speak' : 'listen only'), location.origin + l.path, l.code);
+  const codes = [];
+  for (const l of g.links.slice().sort((a, b) => a.code.localeCompare(b.code))) {
+    linkRow(title[l.name] || l.name, 'Permanent, no seat limit · ' + (l.speak ? 'may speak' : 'watch and listen only'), location.origin + l.path, l.code);
   }
   for (const i of g.invites.slice().sort((a, b) => b.expires - a.expires)) {
     const seats = i.uses + ' of ' + (i.uses + i.guests) + ' seats left';
-    linkRow(title[i.name] || i.name, seats + ' · ' + (i.speak ? 'may speak' : 'listen only') + ' · ends in ' + until(i.expires), location.origin + i.path, i.code);
+    linkRow(title[i.name] || i.name, seats + ' · ' + (i.speak ? 'may speak' : 'watch and listen only') + ' · ends in ' + until(i.expires), location.origin + i.path, i.code);
   }
+
+  shown = new Set(codes);
+  justMade = false;
 
   const hosts = $('hosts');
   hosts.replaceChildren();
@@ -320,7 +343,7 @@ async function loadGuests() {
     on.onchange = async () => {
       on.disabled = true;
       await act({ 'app-hosting': { agent: a.agent, allow: on.checked } });
-      loadGuests();
+      reloadGuests();
     };
     row.append(lab, on);
     hosts.append(row);
@@ -346,11 +369,26 @@ async function loadGroups() {
 }
 
 let hosted = [];
+let lastGuests = '';
+let shown = new Set();   // the link codes on screen
+let justMade = false;    // the next rebuild follows a Make
+// after an action, rebuild even if nothing changed: a refused one must
+// still give back the button or switch it disabled
+function reloadGuests() {
+  lastGuests = '';
+  return loadGuests();
+}
 let chosen;  // the line picked, kept across reloads; '' is a new line
+let groupsAsked = false;
 function newLine() {
   const fresh = $('g-room').value === '';
   $('g-new-title').hidden = !fresh;
   $('g-new-group').hidden = !fresh || $('g-group').options.length < 2;
+  // %groups answers with every group in full, so ask only when needed
+  if (fresh && !groupsAsked) {
+    groupsAsked = true;
+    loadGroups().then(newLine);
+  }
 }
 $('g-room').onchange = () => { chosen = $('g-room').value; newLine(); };
 
@@ -362,9 +400,18 @@ function roomName(t) {
   return n;
 }
 
+// a name makes a permanent link, which has no seats and no end
+function linkMode() {
+  const named = $('g-code').value.trim() !== '';
+  $('g-uses-row').hidden = named;
+  $('g-ttl-row').hidden = named;
+  $('g-make').textContent = named ? 'Make a permanent link' : 'Make an invite link';
+}
+$('g-code').oninput = linkMode;
+
 $('g-make').onclick = async () => {
   let name = $('g-room').value;
-  const code = $('g-code').value.trim().toLowerCase();
+  const code = $('g-code').value.trim().toLowerCase().replace(/\s+/g, '-');
   if (code && !/^[a-z][a-z0-9-]{2,63}$/.test(code)) {
     banner('A link name is 3 to 64 lower case letters, digits and hyphens, starting with a letter.');
     return;
@@ -378,12 +425,12 @@ $('g-make').onclick = async () => {
       return;
     }
     name = roomName(title);
-    if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return loadGuests();
+    if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return reloadGuests();
     const grp = $('g-group').value;
     if (grp) {
       const cut = grp.indexOf('/');
       const group = { ship: grp.slice(0, cut), name: grp.slice(cut + 1) };
-      if (!await act({ 'bind-room': { name, group } })) return loadGuests();
+      if (!await act({ 'bind-room': { name, group } })) return reloadGuests();
     }
     $('g-title').value = '';
     chosen = name;
@@ -396,8 +443,12 @@ $('g-make').onclick = async () => {
         ttl: Number($('g-ttl').value),
         uses: Number($('g-uses').value),
       } });
-  if (ok) $('g-code').value = '';
-  loadGuests();
+  if (ok) {
+    $('g-code').value = '';
+    linkMode();
+    justMade = true;
+  }
+  reloadGuests();
 };
 
 async function act(body) {
@@ -556,9 +607,9 @@ async function saveKinds() {
 }
 for (const f of ['dm', 'club', 'channel', 'replies', 'calls', 'reads', 'notices']) $('k-' + f).addEventListener('change', saveKinds);
 
-$('copy').onclick = async () => {
-  if (!data) return;
-  const text = JSON.stringify(data, null, 2);
+// navigator.clipboard needs a secure context, which a ship on plain
+// http is not, so fall back to the old way
+async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
   } catch (e) {
@@ -569,11 +620,15 @@ $('copy').onclick = async () => {
     document.execCommand('copy');
     ta.remove();
   }
+}
+
+$('copy').onclick = async () => {
+  if (!data) return;
+  await copyText(JSON.stringify(data, null, 2));
   $('copied').textContent = ' Copied.';
   setTimeout(() => { $('copied').textContent = ''; }, 3000);
 };
 
-loadGroups().then(newLine);
 load();
 setInterval(() => { if (!document.hidden) load(); }, 15000);
 </script>

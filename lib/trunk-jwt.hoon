@@ -15,36 +15,32 @@
 ::
 ::    key  the group's HS256 secret, base64url — the same string that
 ::         appears as the "k" field of Galène's authKeys entry
-::    sub  username the SFU shows for this client (we pass the @p)
+::    sub  username the SFU shows for this client: a ship's @p, or a
+::         guest id
 ::    aud  the group's location URL, e.g.
 ::         'http://host:8444/group/talon-zod-lounge/' (trailing slash
 ::         required: Galène matches the path as /group/<name>/)
 ::    now  current time in unix seconds
 ::    exp  expiry in unix seconds (Galène requires the claim)
+::    perms  what the token may do: +speaker, +listener, or a list of
+::           Galène's own names (a room admin also gets %op)
 ::
-::  +mint grants %present and %message. %present is the right to publish
+::  +speaker grants %present and %message. %present is the right to publish
 ::  audio. %message is the right to have a usermessage relayed, which
 ::  Galène gates the same way it gates chat — without it the server
 ::  silently drops the message and clients cannot tell each other
 ::  anything the SFU does not model, mute state being the first such
 ::  thing. It buys no ability to publish and no access to another room.
 ::
-::  +mint-listen grants nothing, which is Galène's listener: it receives
+::  +listener grants nothing, which is Galène's listener: it receives
 ::  streams and cannot send one. The permission names are Galène's own
 ::  (op, present, message, caption, token); an empty list is a valid
 ::  claim, not a missing one.
 ::
+++  speaker  `(list json)`~[s+'present' s+'message']
+++  listener  `(list json)`~
+::
 ++  mint
-  |=  [key=@t sub=@t aud=@t now=@ud exp=@ud]
-  ^-  @t
-  (mint-with key sub aud now exp ~[s+'present' s+'message'])
-::
-++  mint-listen
-  |=  [key=@t sub=@t aud=@t now=@ud exp=@ud]
-  ^-  @t
-  (mint-with key sub aud now exp ~)
-::
-++  mint-with
   |=  [key=@t sub=@t aud=@t now=@ud exp=@ud perms=(list json)]
   ^-  @t
   =/  sec=octs  (fall (de-b64 key) [0 0])

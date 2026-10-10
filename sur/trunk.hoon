@@ -118,7 +118,7 @@
 +$  push-note  [at=@da what=@t]
 ::  guest seats (wire 16). A guest is a person on a call with no ship
 ::  behind their seat. Their Galène username is a guest id that trunk
-::  makes, 'guest-' and 12 hex digits, never an @p. A readable name
+::  makes, 'guest-' and 24 hex digits, never an @p. A readable name
 ::  travels in Galène's per-user data, which the guest's page sends.
 ::
 ::  an invite to a room we host: a code the ship keeps, so unlike a
