@@ -53,7 +53,7 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 
 Boot fresh fake galaxies from the v4.6 pill: it ships Tlon's `%groups`, so `%activity` and `%settings` are real. Never reuse a fake ship's name after rebuilding its pier, since peers keep ames state for the old one and pokes vanish without an error.
 
-Install the desk as the README's "The desk" says, then run `+trunk!test-push`, `+trunk!test-guest` and `+trunk!test-mnemonym`. For push work, register a device whose endpoint is a local HTTP listener, then drive real events: DMs and channel posts between two fake ships, reads through `%activity`'s `read` action, and rings with `%send`.
+Install the desk as the README's "The desk" says, then run `+trunk!test-push`, `+trunk!test-guest` and `+trunk!test-mnemonym`. For any change to the guest page, the trunk page, the listen page or the guest routes, also run the browser checks in `test/browser/` (its README has the setup). For push work, register a device whose endpoint is a local HTTP listener, then drive real events: DMs and channel posts between two fake ships, reads through `%activity`'s `read` action, and rings with `%send`.
 
 `|commit` adds and changes files in a desk but does not delete them. Remove a file from a mounted desk with `|rm`.
 

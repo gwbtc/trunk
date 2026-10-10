@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "end-to-end checks of trunk's pages; see README.md",
+  "dependencies": {
+    "puppeteer-core": "25.12.0"
+  }
+}
