@@ -81,6 +81,21 @@ addresses (`--denied-peer-ip` for each private range): its password is
 static and reaches every device, so whoever reads it once must not get
 a way into your network.
 
+To give party-line clients a relay as well, for networks that block
+UDP, point Galène at coturn in `galene/data/ice-servers.json`, with the
+port and password the compose file used:
+
+```json
+[{"urls": ["turn:calls.example.com:3478", "turn:calls.example.com:3478?transport=tcp"],
+  "username": "talon", "credential": "THE_TURN_PASS"}]
+```
+
+Galène gives this password to everyone who joins, guests too, and it
+also lists it to anyone who sends an OPTIONS request to a group's
+`.whip` path. So do this only with coturn hardened as above, and only
+behind a TLS front that closes `.whip` (step 5). Galène rereads the file
+within five minutes.
+
 ## 3. Point your ship at it
 
 From the ship's dojo, once:
@@ -122,6 +137,9 @@ server {
     # Galène's admin API: closed while no admin is configured, and
     # never needed from outside
     location /galene-api/ { return 404; }
+    # WHIP is unused, and an OPTIONS there lists Galène's ICE servers,
+    # TURN password included, to anyone
+    location ~ "/\.whip$" { return 404; }
     location / {
         proxy_pass http://127.0.0.1:8444;
         proxy_http_version 1.1;
