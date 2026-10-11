@@ -8,7 +8,8 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 - `app/trunk/page.html` and `app/trunk/icon.svg`: the owner's page and the tile's icon, built into the agent with `/*`.
 - `lib/trunk-push.hoon`: pure push logic, with no scries and no cards: what notifies, every push body, retries, ring bookkeeping, sender records and the debug report. Keep it pure so `gen/test-push.hoon` can cover it.
 - `lib/trunk-guest.hoon`: pure guest-seat logic (wire 16 and 17): guest secrets and ids, invite codes and link names, who an invite or a permanent link seats, app-room seats and SFU locations. `gen/test-guest.hoon` covers it.
-- `app/trunk/guest.html`: the public page a guest opens from a link: audio, video and screen sharing. It publishes the way Talon does (see `docs/guest-seats.md`, "Video and screen sharing"), so change it and Talon together.
+- `app/trunk/guest.html`: the public page a guest opens from a link: audio, video and screen sharing.
+- `app/trunk/protocol.js`: Galène 1.1's own client library, unmodified (MIT), served to the guest page from the ship. Change it only to match the call server's Galène version. It publishes the way Talon does (see `docs/guest-seats.md`, "Video and screen sharing"), so change it and Talon together.
 - `lib/trunk-json.hoon`: the wire's JSON. Talon mirrors it by hand.
 - `lib/trunk-jwt.hoon`: Galène's HS256 tokens. `lib/mnemonym.hoon`: comet names.
 - `sur/trunk.hoon`: the types, including every action.
@@ -43,6 +44,9 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 - `%trunk-action` is accepted only from our own ship. Another agent may send `push-notice`, `push-notice-as` and the four `app-*` room actions, and nothing else. Every other action, settings, invites and the device registry included, needs `+by-owner`. Keep that allowlist at the top of the `%trunk-action` arm, which the page's action route goes through too.
 - An app reaches only its own rooms: app rooms are keyed by the agent gall names in `sap.bowl`, and `/app/<agent>` admits only that agent.
 - A guest's Galène `sub` is a guest id, `guest-` and 24 hex digits. It never starts with `~`. A link guest's id is the hash of a secret only their page holds (`+id-of`), so nobody else can rejoin as them. An app guest's id is one trunk makes. Neither a guest nor an app ever names an id.
+- `/calls` carries invite codes, listen links and our own tickets, so only the owner's sessions (`+by-owner`) may watch it. An app gets its answers on `/app/<agent>`.
+- Only our own ship sets a line's own SFU. A line another ship opens on ours runs on our SFU, under a name that is one clean URL segment, and a remote admin's `%configure` cannot move it to another server. A room's own SFU key never leaves through a scry.
+- The guest page loads only the ship's own copy of `protocol.js`, never the call server's: the page runs on the ship's origin.
 - The guest routes under `/apps/trunk/guest/` are public. They take nothing but a link's code and a guest's secret, and show nothing of the host but its name and the room's title. Codes, link names and secrets are bearer secrets, so they are never in `/x/debug`.
 - A signal's sender is the ames `src`, never anything in the payload.
 - A ship's Galène token has its `@p` as `sub`, for every ship, and a guest's has its guest id (below). Galène refuses any later message whose username differs, so a readable name travels in Galène's per-user data instead.

@@ -3,7 +3,9 @@
 // which blocks inline scripts: inline, the page did nothing.
 (function () {
   var params = new URLSearchParams(location.search);
-  var token = params.get('token');
+  // The token rides in the fragment, which no server logs and no
+  // Referer carries. Links minted before then put it in the query.
+  var token = new URLSearchParams(location.hash.slice(1)).get('token') || params.get('token');
   // The subgroup rides in the token's aud (<base>/group/<subgroup>/),
   // so the link doesn't spell it, nor the host @p inside it. A link
   // minted before wire 10 still says group=.
@@ -53,8 +55,10 @@
    */
   function label(u, n) {
     var d = u && u.data;
-    var shown = (d && typeof d.name === 'string' && d.name) ? d.name : short(n);
-    return /^guest-/.test(n || '') ? shown + ' (guest)' : shown;
+    var typed = (d && typeof d.name === 'string' && d.name) || '';
+    if (/^guest-/.test(n || '')) return (typed || n) + ' (guest)';
+    // a ship's username is signed; a name it typed shows beside it
+    return typed && typed !== n ? typed + ' (' + short(n) + ')' : short(n);
   }
 
   function short(n) {
@@ -149,14 +153,17 @@
     say('This link is missing its room or its token.', true);
     return;
   }
+  // The line's title as the heading and the host below, as on the guest
+  // page. These come from the link, not from the token, so they only
+  // label the page.
   var host = params.get('host');
   var room = params.get('room');
-  roomEl.textContent = room
-    ? (host ? host + ' ' : '') + room.replace(/-/g, ' ')
-    : group.split('/').pop().replace(/-/g, ' ');
   var topic = params.get('topic');
-  if (topic) {
-    document.getElementById('topic').textContent = topic;
+  var title = topic || (room || group.split('/').pop()).replace(/-/g, ' ');
+  roomEl.textContent = title;
+  document.title = title + ' · Trunk';
+  if (host) {
+    document.getElementById('topic').textContent = 'Hosted by ' + host;
     document.getElementById('topic').hidden = false;
   }
 
@@ -328,7 +335,7 @@
         e.s = s;
         e.rs.push(transceiver.receiver);
         startSpeakingPoll();
-        trace('track from ' + (s.username || 'someone'));
+        trace('track from ' + label(conn.users[s.source], s.username || 'someone'));
         play(s.id, s.stream || stream_);
         say('Listening');
       };
@@ -336,7 +343,7 @@
     };
 
     conn.onclose = function () {
-      say('The line ended.');
+      say('You were disconnected. Press Listen to come back.');
       stop();
     };
 

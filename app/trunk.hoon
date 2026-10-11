@@ -18,6 +18,8 @@
 ::  the owner's page at /apps/trunk, the guest's page, and the tile's icon
 /*  page  %html  /app/trunk/page/html
 /*  guest-page  %html  /app/trunk/guest/html
+::  Galène 1.1's protocol.js, as the sidecar pins it (MIT)
+/*  protocol  %js  /app/trunk/protocol/js
 /*  icon  %svg   /app/trunk/icon/svg
 |%
 ::  Rooms as they were before state-6. Old state versions must pin the
@@ -387,9 +389,19 @@
 ++  wire-version  17
 ++  present-ttl  ~s90
 ++  invite-cap  256
+::  ...and how many of them one host may have there
+++  host-line-cap  32
 ::  how many lines one ship will host. A remote admin can open one, so
 ::  this is the brake on that.
 ++  room-cap  64
+::  the most members, or admins, a ship may name for a line it opens here
+++  roster-cap  256
+::  rings we push at once: more than this means someone is ringing with
+::  new call ids to buzz the owner's phones, so the rest go unpushed
+++  live-ring-cap  4
+::  iris must not follow a push server's redirect: it would send the
+::  same request to wherever the server pointed, our own network too
+++  no-redirects  ^-(outbound-config:iris =/(c *outbound-config:iris c(redirects 0)))
 ::  the longest a listen link may live. Galène's tokens are stateless,
 ::  so nothing can revoke one early — a short cap is the only brake.
 ++  listen-ttl-cap  ^~((div ~h1 ~s1))
@@ -1155,6 +1167,12 @@
     ?:  &(get =('/apps/trunk/icon.svg' url))
       :_  this
       (give 200 ~[['content-type' 'image/svg+xml']] `icon)
+    ::  Galène's protocol.js for the guest page, pinned in the desk. Run
+    ::  from the call server, it would run on this ship's origin, so a
+    ::  broken call server would become a broken ship.
+    ?:  &(get =('/apps/trunk/protocol.js' url))
+      :_  this
+      (give 200 ~[['content-type' 'application/javascript']] `protocol)
     ::  a guest's page and its routes, for anyone with an invite's code
     =/  guest-at  (met 3 guest-path:trunk-guest)
     ?:  =(guest-path:trunk-guest (end [3 guest-at] url))
@@ -1166,7 +1184,7 @@
       (give 303 ~[['location' '/~/login?redirect=/apps/trunk']] ~)
     ?:  &(get |(=('/apps/trunk' url) =('/apps/trunk/' url)))
       :_  this
-      (give 200 ~[['content-type' 'text/html; charset=utf-8']] `page)
+      (give 200 ~[['content-type' 'text/html; charset=utf-8'] ['x-frame-options' 'DENY']] `page)
     ?.  &(=(%'POST' method.request.req) =('/apps/trunk/action' url))
       :_(this (give 404 ~ ~))
     =/  type
@@ -1336,6 +1354,8 @@
     ::
     ::  the host answering our %share.
         %link
+      ?:  (~(has in block.pol.state) src.bowl)  `this
+      ?.  (~(has by known.state) [src.bowl name.listen-link.msg])  `this
       :_  this
       ~[(fact:hc [%listen-link listen-link.msg])]
     ::
@@ -1355,8 +1375,19 @@
         ?:  (gth ~(wyt by hosted.state) room-cap)
           %-  (slog leaf+"trunk: too many rooms; refusing {<name.msg>}" ~)
           `this
+        ::  The name becomes part of a Galène address, so it must be one
+        ::  clean segment, and the roster is announced one poke per ship.
+        ?.  ?&  (valid-room:trunk-guest name.msg)
+                (lte ~(wyt in members.msg) roster-cap)
+                (lte ~(wyt in admins.msg) roster-cap)
+            ==
+          %-  (slog leaf+"trunk: refusing {<src.bowl>}'s line {<name.msg>}" ~)
+          `this
+        ::  A stranger's line runs on our own call server. A server they
+        ::  name would hear the whole roster, and +auto-bind may give it
+        ::  a group of ours.
         =/  new=room:trunk
-          [title.msg members.msg admins.msg listen.msg sfu.msg ~ ~ ~ ~ ~]
+          [title.msg members.msg admins.msg listen.msg ~ ~ ~ ~ ~ ~]
         =.  hosted.state  (~(put by hosted.state) name.msg new)
         ::  bind at birth (+auto-bind): a line opened remotely by a
         ::  group admin was the one creation path nothing ever bound —
@@ -1377,7 +1408,11 @@
       ::  out of hosted.state, so announcing before the write told
       ::  everyone the OLD flag — the host changed and no client ever
       ::  heard about it, which is a switch that does nothing.
-      =/  new-sfu  ?:(keep-sfu.msg sfu.u.got sfu.msg)
+      ::  A remote admin may not move a line to another call server:
+      ::  any ship that opens a line here names itself its admin, and
+      ::  the server it chose would hear every member. Only the host
+      ::  sets a line's own server (%configure-room from our own ship).
+      =/  new-sfu  sfu.u.got
       ::  An empty title means "don't touch the topic" — every other
       ::  change sends none, and without this each listen toggle would
       ::  blank whatever an admin had set. Same trap as keep-sfu.
@@ -1392,6 +1427,13 @@
       ::  the list is remote-controlled, so it does not grow forever.
       ?:  (~(has in block.pol.state) src.bowl)  `this
       ?:  (gth ~(wyt by known.state) invite-cap)  `this
+      ::  one host may not fill the list for everyone
+      ?:  ?&  !(~(has by known.state) [src.bowl name.msg])
+              %+  gte  host-line-cap
+              %-  lent
+              (skim ~(tap in ~(key by known.state)) |=([s=ship @t] =(s src.bowl)))
+          ==
+        `this
       =/  =line:trunk  [title.msg listen.msg sfu-base.msg]
       :-  ~[(fact:hc [%open src.bowl name.msg line])]
       ::  deliberately does NOT settle asked.state: joins and peeks
@@ -1516,7 +1558,9 @@
   ?:  ?=([%http-response @ ~] path)  `this
   ?>  =(src.bowl our.bowl)
   ?+  path  (on-watch:def path)
-    [%calls ~]  `this
+  ::  invite codes, listen links and our own tickets ride /calls, so it
+  ::  is the owner's sessions' (eyre: Talon, the page) and the dojo's
+    [%calls ~]  ?>(by-owner:hc `this)
   ::  an app's answers about its rooms (wire 16), for that app alone.
   ::  Gall names the watching agent in sap.bowl.
       [%app @ ~]
@@ -1530,7 +1574,12 @@
   ^-  (unit (unit cage))
   ?+  path  (on-peek:def path)
     [%x %ice ~]    ``trunk-ice+!>(ice.state)
-    [%x %rooms ~]   ``trunk-rooms+!>(hosted.state)
+    ::  without a room's own SFU key, which only the JSON form dropped
+      [%x %rooms ~]
+    =/  rooms
+      %-  ~(run by hosted.state)
+      |=(r=room:trunk r(sfu ?~(sfu.r ~ `u.sfu.r(key ''))))
+    ``trunk-rooms+!>(rooms)
     [%x %lines ~]   ``trunk-lines+!>(known.state)
     [%x %policy ~]  ``trunk-policy+!>(pol.state)
     ::  Readable by any client, and the first thing a new one asks.
@@ -2087,6 +2136,10 @@
           (~(has in members.u.got) who)
       ==
     (reply who [%deny name 'not a member'])
+  ?.  (may-join u.got who)
+    (reply who [%deny name 'missing join role'])
+  ?:  =('' key:(room-sfu name))
+    (reply who [%deny name 'no sfu configured'])
   =/  base=@t  base:(room-sfu name)
   (reply who [%announce name title.u.got listen.u.got base])
 ::
@@ -2126,7 +2179,8 @@
   :~  base.cfg  '/listen/?host='  (crip (en-urlt:html (trip host)))
       '&room='  (crip (en-urlt:html (trip name)))
       '&topic='  (crip (en-urlt:html (trip topic)))
-      '&token='  tok
+      ::  in the fragment, so no server log or Referer carries it
+      '#token='  tok
   ==
 ::
 ::  +on-groundwire: does our Jael hold a Groundwire attestation for
@@ -2455,7 +2509,7 @@
         -.hint  (scot %uv nonce)
     ==
   :_  s
-  `[%pass wire %arvo %i %request u.req *outbound-config:iris]
+  `[%pass wire %arvo %i %request u.req no-redirects]
 ::
 ::  +resend: a push's next try, under the same nonce. A count goes
 ::  out as it is now, not as it was.
@@ -2467,7 +2521,8 @@
     ?.  &(?=(%badge -.hint.fly) ?=(^ n.badge.s))  hint.fly
     [%badge (need n.badge.s)]
   =^  card  s  (one s id.fly dev nonce hint)
-  [?~(card ~ ~[u.card]) s]
+  ?~  card  [~ s(flight (~(del by flight.s) nonce))]
+  [~[u.card] s]
 ::
 ::  +activity-hints: what one %activity fact asks of our devices: a
 ::  read from /v4/reads (`reads`), a new post or a new count from
@@ -2592,6 +2647,11 @@
     ?:  |(=(~ push.s) (gth (met 3 id.sig) id-cap:trunk-push))  [~ s]
     =/  live  (~(get by rung.s) id.sig)
     ?:  &(?=(^ live) (live-rung:trunk-push u.live now.bowl))  [~ s]
+    ::  a caller sending ring after ring with new ids gets no more than
+    ::  this many pushed at once
+    =/  ringing
+      (lent (skim ~(val by (prune-rung:trunk-push rung.s now.bowl)) |=(r=[at=@da answered=? *] !answered.r)))
+    ?:  (gte ringing live-ring-cap)  [~ s]
     =/  =hint:trunk-push  [%ring from id.sig]
     ::  the cancel goes to exactly these
     =/  to=(set @t)
@@ -2708,18 +2768,27 @@
       ==
   ^-  [(list card) state-18]
   ?>  ?|(?=(~ declared) (valid-app:trunk-push u.declared))
+  ::  `open` goes into the push body as it is, so it must be JSON that
+  ::  reads back the same: a poke's noun is never checked otherwise
+  ?>  =(`open (de:json:html (en:json:html open)))
+  ::  measured as it will be sent, quotes and escapes included
   =/  size
-    ;:  add  (met 3 tag)  (met 3 title)  (met 3 body)
-      (met 3 (en:json:html open))  (met 3 (fall declared ''))
+    ;:  add  (met 3 (qt:trunk-push tag))  (met 3 (qt:trunk-push title))
+      (met 3 (qt:trunk-push body))  (met 3 (en:json:html open))
+      (met 3 (qt:trunk-push (fall declared '')))
     ==
   ?>  (lte size 4.096)
   =/  [id=@t name=@t agent=@tas]  (sender-of:trunk-push sap.bowl declared)
   ::  a phone drops a notice with no title, so it takes the app's name
   =?  title  =('' title)  name
   =.  senders.s  (need (admit:trunk-push senders.s id agent))
+  ::  a new name for an app the owner switched off starts off too, so
+  ::  renaming itself does not get around the switch
+  =/  off-agent=?
+    (lien ~(val by senders.s) |=(y=sender:trunk-push &(=(agent agent.y) !allowed.y)))
   =/  x=sender:trunk-push
     %+  ~(gut by senders.s)  id
-    [name agent %.y now.bowl ~ [now.bowl 0] 0 0 ~ 0 ~ default-cap:trunk-push]
+    [name agent !off-agent now.bowl ~ [now.bowl 0] 0 0 ~ 0 ~ default-cap:trunk-push]
   =/  off=(unit tape)
     ?.  notices.kinds.s  `"notices are switched off"
     ?.  allowed.x  `"this app is switched off"
@@ -2810,7 +2879,7 @@
   =?  tail  =('/' tail)  ''
   ?:  &(=(%'GET' method) =('' tail))
     :_  s
-    (http-cards eid 200 ~[['content-type' 'text/html; charset=utf-8']] `guest-page)
+    (http-cards eid 200 ~[['content-type' 'text/html; charset=utf-8'] ['x-frame-options' 'DENY']] `guest-page)
   =/  give
     |=  [status=@ud jon=json]
     =/  hed  ~[['content-type' 'application/json'] ['cache-control' 'no-store']]

@@ -92,7 +92,7 @@
     position: relative; aspect-ratio: 16 / 9; border-radius: .75rem;
     background: var(--tile); overflow: hidden; cursor: pointer;
   }
-  .tile.big { grid-column: 1 / -1; }
+  .tile.big { grid-column: 1 / -1; max-height: 80vh; }
   .tile.speaking { box-shadow: 0 0 0 3px var(--accent); }
   .tile video { width: 100%; height: 100%; object-fit: contain; background: #000; }
   .tile .face {
@@ -105,6 +105,11 @@
     padding: .1rem .5rem; border-radius: .5rem; font-size: .85rem;
     background: rgba(0, 0, 0, .55); color: #fff;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* on a phone, a tile with no video is one line, so ten people fit */
+  @media (max-width: 40rem) {
+    .tile:not(.video):not(.big) { aspect-ratio: auto; height: 2.6rem; }
+    .tile:not(.video):not(.big) .face { display: none; }
   }
   [hidden] { display: none !important; }
 </style>
@@ -145,6 +150,10 @@
   var streams = {};   // by connection id: the stream that user publishes
   var voices = {};    // by connection id: the receiver of their audio
   var speakTimer = null;
+  var leaving = false; // the guest pressed Leave, so do not rejoin
+  var tries = 0;       // rejoins since the last good join
+  var wake = null;     // the screen wake lock, on a phone
+  var tabs = window.BroadcastChannel ? new BroadcastChannel('trunk-guest-' + code) : null;
 
   // Kept per invite or link, so a reload or a rejoin is the same guest.
   function recall(k) { try { return localStorage.getItem(code + ':' + k); } catch (e) { return null; } }
@@ -165,9 +174,11 @@
   // a ship, a guest id for a guest. A readable name rides in the
   // per-user data. A guest is always marked, so nobody passes as a ship.
   function nameOf(u) {
-    var shown = (u && u.data && u.data.name) || (u && u.username) || 'someone';
-    if (u && u.username && u.username.indexOf('guest-') === 0) shown += ' (guest)';
-    return shown;
+    var user = (u && u.username) || '';
+    var typed = u && u.data && u.data.name;
+    if (user.indexOf('guest-') === 0) return (typed || user) + ' (guest)';
+    // a ship's username is signed; a name it typed shows beside it
+    return typed && typed !== user ? typed + ' (' + user + ')' : (user || typed || 'someone');
   }
 
   function tile(id) {
@@ -190,6 +201,12 @@
     t.onkeydown = function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.onclick(); }
     };
+    t.ondblclick = function () { if (t.requestFullscreen) t.requestFullscreen().catch(function () {}); };
+    // A shared screen is wider than any camera here (1280), so give it
+    // the room, unless someone is already enlarged.
+    v.addEventListener('resize', function () {
+      if (conn && id !== conn.id && v.videoWidth > 1280 && !document.querySelector('.tile.big')) t.classList.add('big');
+    });
     $('grid').append(t);
     return t;
   }
@@ -238,6 +255,12 @@
   function startSpeaking() {
     if (speakTimer) return;
     speakTimer = setInterval(function () {
+      if (up && conn && !muted) up.pc.getStats().then(function (st) {
+        var loud = false;
+        st.forEach(function (r) { if (r.type === 'media-source' && r.kind === 'audio' && r.audioLevel > 0.02) loud = true; });
+        var t = document.getElementById('t-' + conn.id);
+        if (t) t.classList.toggle('speaking', loud);
+      }).catch(function () {});
       Object.keys(voices).forEach(function (id) {
         voices[id].getStats().then(function (st) {
           var loud = false;
@@ -251,11 +274,13 @@
     }, 300);
   }
 
-  function loadProtocol(sfu) {
+  // Galène's protocol.js, pinned in the desk: one from the call server
+  // would run on this ship's origin
+  function loadProtocol() {
     if (window.ServerConnection) return Promise.resolve();
     return new Promise(function (ok, fail) {
       var s = document.createElement('script');
-      s.src = sfu + '/protocol.js';
+      s.src = '/apps/trunk/protocol.js';
       s.onload = ok;
       s.onerror = function () { fail(new Error('Could not reach the call server.')); };
       document.head.append(s);
@@ -264,12 +289,17 @@
 
   function stopTracks(s) { if (s) s.getTracks().forEach(function (t) { t.stop(); }); }
 
-  function stop() {
+  // `keep`: a rejoin is coming, so keep the mic, camera, share and mute
+  function stop(keep) {
     if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} conn = null; }
-    stopTracks(mic); stopTracks(cam); stopTracks(screen);
-    mic = cam = screen = up = vsend = preview = null;
+    up = vsend = null;
     streams = {}; videoOn = {}; micOff = {}; voices = {};
     if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
+    if (wake) { wake.release().catch(function () {}); wake = null; }
+    $('grid').replaceChildren();
+    if (keep) return;
+    stopTracks(mic); stopTracks(cam); stopTracks(screen);
+    mic = cam = screen = preview = null;
     muted = false;
     $('mute').textContent = 'Mute';
     $('camera').textContent = 'Start camera';
@@ -277,7 +307,6 @@
     ['mute', 'camera', 'share'].forEach(function (b) { $(b).classList.remove('on'); });
     $('alone').hidden = true;
     $('sound').hidden = true;
-    $('grid').replaceChildren();
     document.body.classList.remove('in');
     $('controls').hidden = true;
     $('form').hidden = false;
@@ -316,15 +345,25 @@
       up.pc.addTransceiver(t, { direction: 'sendonly', streams: [s] });
     });
     vsend = up.pc.addTransceiver('video', { direction: 'sendonly', streams: [s] }).sender;
+    up.onstatus = function (st) {
+      if (st === 'failed') say('Others cannot hear you right now. Leave and join again.', true);
+    };
   }
 
+  function keepAwake() {
+    if (navigator.wakeLock && document.visibilityState === 'visible' && conn && !wake) {
+      navigator.wakeLock.request('screen').then(function (w) { wake = w; w.onrelease = function () { wake = null; }; }).catch(function () {});
+    }
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+
   async function join(ev) {
-    ev.preventDefault();
+    if (ev) { ev.preventDefault(); leaving = false; tries = 0; }
     var name = $('name').value.trim();
     if (!name) return;
     keep('name', name);
     $('join').disabled = true;
-    say('Joining…');
+    say(tries ? 'Connection lost. Rejoining…' : 'Joining…');
     try {
       // the ticket first, so a link that has ended never asks for the mic
       var r = await fetch(base, {
@@ -336,18 +375,18 @@
       if (!r.ok) throw new Error(t.error || 'The host refused.');
       keep('secret', t.secret);
       if (t.speak && !mic) {
+        say('Allow the microphone when your browser asks.');
         try {
           mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         } catch (e) {
           say('No microphone, so others will not hear you.');
         }
       }
-      var sfu = t.location.split('/group/')[0];
       var group = t.location.split('/group/')[1].replace(/\/$/, '');
       if (location.protocol === 'https:' && t.endpoint.indexOf('ws:') === 0) {
         throw new Error('The host\'s call server does not take secure connections yet.');
       }
-      await loadProtocol(sfu);
+      await loadProtocol();
       conn = new ServerConnection();
       conn.onconnected = function () {
         this.join(group, t.username, { type: 'token', token: t.token }, { name: name });
@@ -362,6 +401,11 @@
         this.request({ '': ['audio', 'video'] });
         var can = perms.indexOf('present') >= 0;
         if (can) publish();
+        if (can && (cam || screen)) showVideo();
+        if (mic) mic.getAudioTracks().forEach(function (tr) { tr.enabled = !muted; });
+        tries = 0;
+        if (tabs) tabs.postMessage('joined');
+        keepAwake();
         document.body.classList.add('in');
         $('form').hidden = true;
         $('controls').hidden = false;
@@ -397,10 +441,27 @@
           render();
         };
       };
-      conn.onclose = function () { say('You were disconnected. Press Join again to come back.'); stop(); };
-      conn.onerror = function (e) { say((e && e.message) || 'The connection failed.', true); stop(); };
+      // a drop the guest did not ask for: rejoin, keeping the mic and
+      // camera, a few times before giving up
+      conn.onclose = function () {
+        if (!leaving && tries < 3) {
+          tries++;
+          stop(true);
+          setTimeout(join, 1500 * tries);
+          return;
+        }
+        say('You were disconnected. Press Join again to come back.');
+        stop();
+      };
+      conn.onerror = function (e) { say((e && e.message) || 'The connection failed.', true); };
       conn.connect(t.endpoint);
     } catch (e) {
+      if (!leaving && tries && tries < 3) {
+        tries++;
+        stop(true);
+        setTimeout(join, 1500 * tries);
+        return;
+      }
       fail(e);
       stop();
     }
@@ -420,7 +481,9 @@
     try {
       cam = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
     } catch (e) {
-      say('The camera is not available.', true);
+      say(e && e.name === 'NotAllowedError'
+        ? 'The camera is blocked. Allow it in your browser, then press Start camera again.'
+        : e && e.name === 'NotFoundError' ? 'No camera found.' : 'The camera is not available.', true);
       return;
     }
     showVideo();
@@ -438,7 +501,11 @@
     showVideo();
   };
 
-  $('leave').onclick = function () { stop(); say('You left the call.'); };
+  $('leave').onclick = function () { leaving = true; stop(); say('You left the call.'); };
+  // one person, one seat: joining in another tab leaves this one
+  if (tabs) tabs.onmessage = function (e) {
+    if (e.data === 'joined' && conn) { leaving = true; stop(); say('You joined this call in another tab, so this one left.'); }
+  };
   $('sound').onclick = function () {
     $('sound').hidden = true;
     [].slice.call(document.querySelectorAll('.tile video')).forEach(function (v) { v.play().catch(function () {}); });
@@ -455,7 +522,8 @@
       speak = !!x[1].speak;
       $('name').value = recall('name') || '';
       $('form').hidden = false;
-      say(speak ? 'You will be asked for your microphone.' : 'You can watch and listen on this call.');
+      if (!window.isSecureContext) say('This address is not secure, so your browser blocks the microphone and camera. You can still watch and listen.', true);
+      else say(speak ? 'You will be asked for your microphone. Headphones keep echo off the call.' : 'You can watch and listen on this call.');
     })
     .catch(fail);
 })();

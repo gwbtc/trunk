@@ -22,12 +22,16 @@ for" in `docs/design.md`.
 holds. Generate 32 random bytes, base64url:
 
 ```bash
+umask 077
 KEY=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=')
 echo "$KEY"
 ```
 
 Write the Galène group config (one group; rooms are subgroups created
-on demand):
+on demand). The key is the whole gate: anyone who holds it can mint a
+token for any room in the group, under any name, with any permission,
+moderation included. Keep the file private, and keep it out of anything
+you publish.
 
 ```bash
 mkdir -p galene/groups galene/data
@@ -44,16 +48,38 @@ echo '{}' > galene/data/config.json
 Note the mixed spelling: `authKeys` is camelCase, `auto-subgroups` is
 kebab — Galène wants exactly that, and rejects the file otherwise.
 
+**One group per host ship.** If several ships host lines on one
+sidecar, give each its own group file and key, such as
+`groups/<ship>.json`, and point each ship at its own group in step 3.
+Every ship that holds a group's key can join, hear and moderate every
+room in that group. Separate groups keep one host out of another's
+lines, and one host's key can then be changed without touching the
+others. A key built into a client app, as Talon's fallback sidecar is,
+is a key everyone holds.
+
 ## 2. Run
 
 ```bash
 TURN_PASS=$(openssl rand -hex 16) docker compose up -d
 ```
 
-Open UDP 3478 and 49160-49200 (coturn), and TCP 8444 (Galène). Put
-Galène behind TLS in any real deployment — `-insecure` here keeps the
-local setup simple, and Galène hands clients its own TURN credentials
-on join, so party-line media needs no extra NAT config.
+Open UDP 3478 and 49160-49200 (coturn), and 443 for the TLS front.
+Do not open 8444: the compose file binds Galène to 127.0.0.1, and
+every ticket travels in the websocket's first message, which plain
+http would carry in the clear. Put the TLS front in step 5 up before
+you point a ship at Galène. Galène has a public address, so most
+clients reach it directly and party lines need no TURN.
+
+The compose file turns Galène's own TURN server off (`-turn ''`). It
+relays to any address, the host's loopback included, and Galène gives
+its password to everyone who joins, guests too. With it on, anyone
+holding a call link could reach services that listen only on the
+host's loopback, such as a ship's loopback HTTP port. Keep it off.
+
+The compose file also keeps coturn from relaying into private
+addresses (`--denied-peer-ip` for each private range): its password is
+static and reaches every device, so whoever reads it once must not get
+a way into your network.
 
 ## 3. Point your ship at it
 
@@ -61,8 +87,11 @@ From the ship's dojo, once:
 
 ```
 :trunk &trunk-action [%set-ice ~[['stun:your.host:3478' '' ''] ['turn:your.host:3478' 'talon' 'THE_TURN_PASS']]]
-:trunk &trunk-action [%set-sfu ['http://your.host:8444' 'talon' 'THE_KEY']]
+:trunk &trunk-action [%set-sfu ['https://calls.example.com' 'talon' 'THE_KEY']]
 ```
+
+The dojo keeps both secrets in its history. An `http://` base is for a
+test on one machine only.
 
 Clients scry `/x/ice` at startup and hand the result to the call
 engine — nothing to configure app-side. Party-line tickets are minted
@@ -72,7 +101,9 @@ on demand by whichever ship hosts the room.
 
 `%trunk` mints listen links to `<sfu base>/listen/`. The page is three files, `index.html`, `listen.js` and `listen.css`: Galène serves its static files with a Content-Security-Policy that blocks inline scripts and styles. The compose file mounts `listen/` read-only at Galène's `/static/listen`, so the page is there once Galène is up. To change it later without recreating the container, and so without dropping anyone on a line, edit the files and also `docker cp listen/. <galene container>:/static/listen/`. A TLS front that serves `/listen/` itself, rather than passing it to Galène, needs all three files too.
 
-The page shows each person by the name their client put in Galène's per-user data (`{"name": ...}`), and otherwise by the username the host signed into their ticket, which is their `@p`. A guest (wire 16), whose username is `guest-` and hex, is always marked as one.
+The page shows each person by the name their client put in Galène's per-user data (`{"name": ...}`), with the username the host signed into their ticket beside it when the two differ, so nobody passes as another ship. A guest (wire 16), whose username is `guest-` and hex, is always marked as one.
+
+A listen link is a bearer link: anyone who has it can listen, watch any camera or shared screen, and see who is on the line, until it expires (an hour at most). It cannot be revoked. Its token rides in the fragment (`#token=`), so it stays out of server logs, but it stays in browser history and in whatever chat it was pasted into.
 
 ## 5. Guests (wire 16 and 17)
 
@@ -88,6 +119,9 @@ If the ship's pages are https, Galène must be too: a browser will not let an ht
 ```nginx
 server {
     server_name calls.example.com;
+    # Galène's admin API: closed while no admin is configured, and
+    # never needed from outside
+    location /galene-api/ { return 404; }
     location / {
         proxy_pass http://127.0.0.1:8444;
         proxy_http_version 1.1;

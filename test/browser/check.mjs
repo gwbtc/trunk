@@ -64,12 +64,18 @@ async function page() {
   browsers.push(b);
   const p = await b.newPage();
   p.on('pageerror', (e) => console.log('  page error:', e.message));
-  // keep every peer connection, to read its stats
+  // keep every peer connection, to read its stats, and every websocket,
+  // to drop one the way a network does
   await p.evaluateOnNewDocument(() => {
     const Real = window.RTCPeerConnection;
     window.__pcs = [];
     window.RTCPeerConnection = function (...a) { const pc = new Real(...a); window.__pcs.push(pc); return pc; };
     window.RTCPeerConnection.prototype = Real.prototype;
+    const RealWS = window.WebSocket;
+    window.__ws = [];
+    window.WebSocket = function (...a) { const w = new RealWS(...a); window.__ws.push(w); return w; };
+    window.WebSocket.prototype = RealWS.prototype;
+    Object.assign(window.WebSocket, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
   });
   return p;
 }
@@ -140,6 +146,28 @@ async function guestChecks() {
   check('a speaking ring lights for the other guest', await until(() => a.evaluate(
     () => [...document.querySelectorAll('.tile.speaking')].some((t) => /Bob/.test(t.textContent)))));
   check('your own tile says (you), not (guest)', !!(await tile(a, 'Alice (you)')));
+  // a dropped connection rejoins by itself
+  await b.evaluate(() => {
+    window.__seen = [];
+    new MutationObserver(() => window.__seen.push(document.querySelector('#status').textContent))
+      .observe(document.querySelector('#status'), { childList: true, characterData: true, subtree: true });
+  });
+  await b.evaluate(() => window.__ws.forEach((w) => w.close()));
+  const back = await until(() => b.evaluate(() => window.__seen.some((t) => /Rejoining/.test(t))
+    && /on the call/i.test(document.querySelector('#status').textContent)), 20000);
+  check('a dropped connection rejoins by itself', back, await b.evaluate(() => window.__seen));
+  // the same guest in a second tab: the first one leaves
+  const a2 = await a.browser().newPage();
+  await a2.goto(LINK);
+  await a2.waitForSelector('#form:not([hidden])');
+  await a2.click('#join');
+  await onCall(a2);
+  check('joining in a second tab leaves the first', await until(() => a.evaluate(
+    () => /another tab/.test(document.querySelector('#status').textContent))));
+  await a2.click('#leave');
+  await a.bringToFront();
+  await a.click('#join');
+  await onCall(a);
   const key = (p) => p.evaluate(() => localStorage.getItem(location.pathname.split('/').pop() + ':secret'));
   const before = await key(a);
   await a.click('#mute');
@@ -206,8 +234,11 @@ async function pageChecks(o) {
     return !!f && f.innerText.includes(n) && document.activeElement.textContent === 'Copy link';
   }, name), 10000);
   check('the new line and link are made, marked, with Copy focused', made);
+  const code = await o.evaluate(() => ([...document.querySelectorAll('.device.fresh .meta')]
+    .map((m) => m.textContent).find((t) => t.includes('/apps/trunk/guest/')) || '').split('/').pop());
+  check('a permanent link gets a hard-to-guess ending', new RegExp(`^${name}-[a-z0-9]{8}$`).test(code), code);
   check('the new-line fields hide again', await o.$eval('#g-new-title', (e) => e.offsetParent === null));
-  await act(o, { 'revoke-invite': name });
+  // closing the line ends its link too
   await act(o, { 'close-room': { name } });
 }
 
@@ -223,6 +254,7 @@ async function listenChecks() {
   check('the listen page shows the guest speaking', await until(() => l.evaluate(
     () => [...document.querySelectorAll('#whoList li')].some((li) => /Speaker \(guest\)/.test(li.textContent) && li.querySelector('.dot.on'))), 10000));
   check('the listen page is styled', (await l.$eval('#go', (e) => getComputedStyle(e).borderRadius)) !== '0px');
+  check('the listen page is titled with the line', /· Trunk$/.test(await l.title()), await l.title());
   void g;
 }
 
