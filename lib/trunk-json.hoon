@@ -42,6 +42,7 @@
 ::            {"guest-link":{"code":"groundwire-standup","name":n,
 ::                           "speak":true}}
 ::            {"app-hosting":{"agent":"mud-world","allow":true}}
+::                              (or "grubbery/calendar", wire 18)
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
 ::            {"hangup":{"id":i}}
@@ -66,6 +67,9 @@
 ::             "endpoint":"wss://...","token":t,"expires":1787000000,
 ::             "speak":true}}
 ::    denied  {"guest-denied":{"room":r,"req":q,"why":w}}
+::  An app that names itself (the -as actions, wire 18) gets the same
+::  facts on /app/<agent>/<name>, and shows in /x/guests as
+::  "<agent>/<name>".
 ::  The guest page's POST answers with the ticket's last six fields
 ::  and "secret", which the page keeps to rejoin as the same guest.
 ::  /x/guests is {"invites":[<guest-invite's object>],
@@ -172,7 +176,8 @@
       [%invite-guests (ot ~[name+so speak+bo ttl+ni uses+ni])]
       [%revoke-invite so]
       [%guest-link (ot ~[code+so name+so speak+bo])]
-      [%app-hosting (ot ~[agent+(se %tas) allow+bo])]
+      ::  `agent` is the app's id: the agent, or '<agent>/<name>' (wire 18)
+      [%app-hosting (ot ~[agent+so allow+bo])]
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]
@@ -358,8 +363,8 @@
 ++  guests-to-json
   |=  $:  invites=(map @t invite:trunk)
           links=(map @t guest-link:trunk)
-          apps=(map [agent=@tas room=@t] app-room:trunk)
-          hosts=(map @tas ?)
+          apps=(map [app=@t room=@t] app-room:trunk)
+          hosts=(map @t ?)
       ==
   ^-  json
   =,  enjs:format
@@ -372,15 +377,15 @@
       =/  rooms  ~(tap in ~(key by apps))
       :-  %a
       %+  turn  ~(tap by hosts)
-      |=  [agent=@tas allowed=?]
+      |=  [app=@t allowed=?]
       %-  pairs
-      :~  [%agent s+agent]
+      :~  [%agent s+app]
           [%allowed b+allowed]
           :-  %rooms
           :-  %a
           %+  murn  rooms
-          |=  [a=@tas r=@t]
-          ?.(=(a agent) ~ `s+r)
+          |=  [a=@t r=@t]
+          ?.(=(a app) ~ `s+r)
       ==
   ==
 ::

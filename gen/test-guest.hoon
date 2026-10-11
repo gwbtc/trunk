@@ -97,6 +97,9 @@
       :-  'an app room is a subgroup no party line can name'
       =/  s  (app-sub ~zod %mud 'p' 'e')
       &(=('zod/mud/p/e' s) =('/' (cut 3 [3 1] s)))
+      :-  'a named app room has one more segment than a plain one'
+      .=  'zod/grubbery/cal/p/e'
+      (app-sub ~zod 'grubbery/cal' 'p' 'e')
       :-  'a location ends in a slash'
       .=  'http://h:8444/group/talon/zod-x/'
       (location ['http://h:8444' 'talon' 'k'] 'zod-x')

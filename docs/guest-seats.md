@@ -1,6 +1,6 @@
 # Guest seats: calls with people who have no ship
 
-**Status: built.** Invites and app rooms are wire 16 (state 17). Permanent links, guest secrets and video on the guest page are wire 17 (state 18). This began as a proposal (PR #11). The section near the end lists where the build departs from it and why.
+**Status: built.** Invites and app rooms are wire 16 (state 17). Permanent links, guest secrets and video on the guest page are wire 17 (state 18). Rooms for grubbery apps, named with the `-as` actions, are wire 18 (state 19). This began as a proposal (PR #11). The section near the end lists where the build departs from it and why.
 
 A party line seats ships. Guest seats let a ship host calls that people without a ship can join, with audio, video and screen sharing. They arrive through a link, or through an app on the host's ship that already knows who they are.
 
@@ -128,7 +128,26 @@ An app's page that wants to interoperate with Talon publishes the way the guest 
 
 Like notices, the per-app gate keeps careless apps in their lane. It does not stop a hostile one: gall lets an agent name any origin for its poke. That is the same trust a ship already places in what it installs.
 
-**Grubbery apps cannot use this yet.** Every grubbery app reaches trunk as `%grubbery`, so they would share one switch and one set of rooms, and grubbery's own marc for trunk types only the notice actions. Supporting them means an `-as` variant, as `push-notice-as` did for notices, and a change to that marc.
+### Grubbery apps (wire 18)
+
+Every grubbery app reaches trunk as the one gall agent `%grubbery`, so an app names itself, as calendar does for notices with `push-notice-as`. A named app is `grubbery/<name>` to trunk: its own switch on the trunk page ("calendar (through grubbery)"), its own rooms and room cap, and its own answer path.
+
+```hoon
+::  the same four actions, each naming the app; `app` is a @tas
+[%app-room-open-as app=@t room=@t]
+[%app-room-close-as app=@t room=@t]
+[%app-room-rotate-as app=@t room=@t]
+[%app-guest-ticket-as app=@t room=@t guest=@t speak=? req=@t]
+```
+
+- **Opening a room** puts the app on the trunk page, switched off. One agent may name 64 apps at most, and trunk refuses more with `too many apps`.
+- **Answers** come on `/app/grubbery/<name>`, as the same `guest-ticket` and `guest-denied` JSON. A grubbery app gets them by asking the kernel to watch that path (`%gall-watch` with `[our %trunk /app/grubbery/<name>]`). The kernel keeps each fact as a file under `/sys/gall/subs/<ship>/trunk/app/grubbery/<name>/`, and the app matches tickets by `req`.
+- **Rooms** live on the call server at `<ship>/grubbery/<name>/<room>/<epoch>`, one segment deeper than a plain app's, so the two can never meet.
+- **The kernel's trunk marc** must type the four `-as` actions. The exact marc is `docs/grubbery-trunk-action.hoon` in this repo. Deploy it only after the ship's trunk is wire 18: a marc that names actions an older trunk lacks makes that trunk refuse every grubbery poke, notices included. The order is trunk 18, then the marc, then the app.
+- **Permits:** the owner grants the app a permit to poke `%trunk`, and to read only its own `/sys/gall/subs/…/trunk/app/grubbery/<name>/` path. Ask for that path itself in the app's `weir.json`, not `/sys/gall/subs/` or a parent of it.
+- **The page:** the app's page is on the ship's origin, so it joins Galène the way trunk's guest page does, loading `/apps/trunk/protocol.js`, never the call server's copy. To show in Talon, it publishes the way the guest page does ("Video and screen sharing", above).
+
+The trust limit is the same as for notices. A name is whatever the app writes, and grubbery's kernel does not check it is the app's own. So one grubbery app with a permit to poke trunk could open, close or rotate rooms under another app's name. It cannot read the other app's tickets as long as its approved permits limit its reads to its own answer path, `/sys/gall/subs/<ship>/trunk/app/grubbery/<name>/`. A permit to read `/sys/gall/subs/` as a whole, or an app with no permits set at all, would let it read every app's. The full fix is for the kernel to stamp the calling app's name itself.
 
 ## Mixing ships and guests
 

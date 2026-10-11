@@ -19,7 +19,7 @@ never touches audio.
 **1. Check the wire before anything else.**
 
 ```
-GET /~/scry/trunk/version.json   ->  {"wire":17}
+GET /~/scry/trunk/version.json   ->  {"wire":18}
 ```
 
 A missing scry means no desk, or one too old to say. A number lower
@@ -188,9 +188,9 @@ Talon reads each device's `sent` and `last` and the `drops` from it, so those na
  "log": [{"at": 1791335355181, "what": "DM: pushed to 1 device"}]}
 ```
 
-### Guest seats (wire 16 and 17)
+### Guest seats (wire 16 to 18)
 
-A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line: an invite for a set number of people over a set time (`invite-guests`), or a permanent link under a chosen name for a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on.
+A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line: an invite for a set number of people over a set time (`invite-guests`), or a permanent link under a chosen name for a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on, and an agent that hosts several apps, as grubbery does, names each with the `-as` forms (wire 18).
 
 A guest's Galène username is `guest-` and 24 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin`, and an https ship needs Galène behind TLS.
 

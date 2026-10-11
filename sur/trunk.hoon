@@ -136,7 +136,7 @@
 ::  chose. It never expires and has no seat limit.
 +$  guest-link  [name=@t speak=?]
 ::  a room another agent on our ship hosts for its own users, keyed by
-::  [agent room]. The epoch is in its SFU location, so a new one
+::  [app room], where the app is the agent or '<agent>/<name>'. The epoch is in its SFU location, so a new one
 ::  strands every token minted for the old.
 ::    guests  the app's id for a user -> the guest id trunk gave them
 ::    last    when it opened or last asked for a ticket
@@ -250,8 +250,17 @@
       [%app-room-close room=@t]
       [%app-room-rotate room=@t]
       [%app-guest-ticket room=@t guest=@t speak=? req=@t]
-      ::  the owner's switch for one app's calls
-      [%app-hosting agent=@tas allow=?]
+      ::  the same, naming the app they are for (wire 18). Every grubbery
+      ::  app reaches trunk as %grubbery, so such an app names itself,
+      ::  e.g. 'calendar': it gets its own switch, its own rooms and its
+      ::  answers on /app/grubbery/calendar. The name is a @tas.
+      [%app-room-open-as app=@t room=@t]
+      [%app-room-close-as app=@t room=@t]
+      [%app-room-rotate-as app=@t room=@t]
+      [%app-guest-ticket-as app=@t room=@t guest=@t speak=? req=@t]
+      ::  the owner's switch for one app's calls. `agent` is the app's
+      ::  id: the agent, or '<agent>/<name>' for one that names itself.
+      [%app-hosting agent=@t allow=?]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]

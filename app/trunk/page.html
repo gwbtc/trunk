@@ -337,7 +337,9 @@ async function loadGuests() {
   if (!g.apps.length) hosts.append(el('div', 'empty', 'No app has asked to host calls.'));
   for (const a of g.apps) {
     const row = el('div', 'row');
-    const lab = el('label', null, a.agent);
+    // an app an agent names, such as grubbery's calendar, is agent/name
+    const cut = a.agent.indexOf('/');
+    const lab = el('label', null, cut < 0 ? a.agent : a.agent.slice(cut + 1) + ' (through ' + a.agent.slice(0, cut) + ')');
     lab.htmlFor = 'host-' + a.agent;
     const n = a.rooms.length;
     lab.append(el('span', 'hint', n ? n + ' room' + (n === 1 ? '' : 's') + ' open' : 'no rooms open'));

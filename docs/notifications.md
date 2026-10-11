@@ -69,6 +69,8 @@ So a grubbery app that sends notices must:
 
 The calendar does all three from its version 30.
 
+A grubbery app can also host calls for its own users with the same naming scheme (wire 18). See "Grubbery apps" in `docs/guest-seats.md`. Its kernel marc must then type those actions too, and goes on a ship only after trunk 18 is there.
+
 ## What happens next
 
 The poke's ack says trunk took the notice, not that a phone showed it. A nack means it was malformed (an unshowable app name, or over 4 KiB), or that your agent has used up its 16 names. It can also mean trunk's list of 128 apps is full of apps the owner has set up, with none idle to forget.

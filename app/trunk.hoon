@@ -69,6 +69,7 @@
       state-16
       state-17
       state-18
+      state-19
   ==
 +$  state-0  [%0 ~]
 +$  state-1  [%1 ice=(list ice-server:trunk)]
@@ -370,9 +371,42 @@
       hosts=(map @tas ?)
       links=(map @t guest-link:trunk)
   ==
+::  %19 keys app rooms and switches by the app's id (wire 18): the agent,
+::  or '<agent>/<name>' for an app that names itself, as each grubbery
+::  app does.
++$  state-19
+  $:  %19
+      ice=(list ice-server:trunk)
+      sfu=sfu-config:trunk
+      hosted=(map @t room:trunk)
+      known=lines:trunk
+      asked=(map [=ship name=@t] @da)
+      pol=policy:trunk
+      present=(map @t (map ship @da))
+      recording=(map @t (map ship @da))
+      beat=(unit @da)
+      push=(map @t push-device:trunk)
+      seen=(map @t @da)
+      rung=rung:trunk-push
+      kinds=push-kinds:trunk
+      log=(list push-note:trunk)
+      meta=(map @t device-meta:trunk-push)
+      drops=(list drop:trunk-push)
+      badge=badge-state:trunk-push
+      flight=(map @uv flight:trunk-push)
+      senders=(map @t sender:trunk-push)
+      invites=(map @t invite:trunk)
+      apps=(map [app=@t room=@t] app-room:trunk)
+      hosts=(map @t ?)
+      links=(map @t guest-link:trunk)
+  ==
 +$  card  card:agent:gall
 ::  the actions another agent may send for its own rooms (wire 16)
-+$  app-tag  ?(%app-room-open %app-room-close %app-room-rotate %app-guest-ticket)
++$  app-tag
+  $?  %app-room-open  %app-room-close  %app-room-rotate  %app-guest-ticket
+      ::  the same, for an app the agent names (wire 18)
+      %app-room-open-as  %app-room-close-as  %app-room-rotate-as  %app-guest-ticket-as
+  ==
 ::  how long a minted ticket stays valid. Long enough for a call that
 ::  outlasts a conversation, short enough that a removed member loses
 ::  access without a key rotation.
@@ -386,7 +420,7 @@
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
-++  wire-version  17
+++  wire-version  18
 ++  present-ttl  ~s90
 ++  invite-cap  256
 ::  ...and how many of them one host may have there
@@ -468,12 +502,24 @@
   %+  turn  ~(tap in old)
   |=(k=[=ship name=@t] [k now])
 ::
+::  +rekey-apps, +rekey-hosts: app rooms and switches as states 17 and
+::  18 kept them, by agent, now by app id. An agent's id is its name.
+++  rekey-apps
+  |=  old=(map [agent=@tas room=@t] app-room:trunk)
+  ^-  (map [app=@t room=@t] app-room:trunk)
+  (malt (turn ~(tap by old) |=([[a=@tas r=@t] x=app-room:trunk] [[`@t`a r] x])))
+::
+++  rekey-hosts
+  |=  old=(map @tas ?)
+  ^-  (map @t ?)
+  (malt (turn ~(tap by old) |=([a=@tas y=?] [`@t`a y])))
+::
 ::  +forget-room: close a room we host, and end its guest links with
 ::  it, so a line opened again under the same name, by us or by a ship
 ::  that may open one here, does not take them back.
 ++  forget-room
-  |=  [name=@t s=state-18]
-  ^-  state-18
+  |=  [name=@t s=state-19]
+  ^-  state-19
   %=  s
     hosted   (~(del by hosted.s) name)
     invites  (drop-invites:trunk-guest name invites.s)
@@ -485,7 +531,7 @@
 ::  +$ policy, which forks to %allow and locks the ship down.
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
-=|  state-18
+=|  state-19
 =*  state  -
 ^-  agent:gall
 =<
@@ -513,14 +559,14 @@
   ::  every load binds /apps/trunk again; eyre keeps it ours
   =-  [[bind-card:hc -<] ->]
   ?-  -.old
-    %0  `this(state [%18 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~ ~ ~ ~ ~])
-    %1  `this(state [%18 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~ ~ ~ ~ ~])
-    %2  `this(state [%18 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~ ~ ~ ~ ~])
+    %0  `this(state [%19 ~ ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~ ~ ~ ~ ~])
+    %1  `this(state [%19 ice.old ['' '' ''] ~ ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~ ~ ~ ~ ~])
+    %2  `this(state [%19 ice.old sfu.old (upgrade-rooms hosted.old) ~ ~ open-policy ~ ~ ~ ~ ~ ~ all-kinds:trunk-push ~ ~ ~ [~ ~ ~] ~ ~ ~ ~ ~ ~])
     %3
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %19  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  ~  open-policy  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  upgrading must not silently start refusing calls, so an existing
@@ -529,7 +575,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %19  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  open-policy  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  existing rooms gain no admins and no anonymous listening: both
@@ -538,7 +584,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  (upgrade-rooms hosted.old)
+  :*  %19  ice.old  sfu.old  (upgrade-rooms hosted.old)
       (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %6 already had admins and the listen flag; it gains only the
@@ -547,7 +593,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-6 `room:trunk`[title.r members.r admins.r listen.r ~ ~ ~ ~ ~ ~]))
+  :*  %19  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-6 `room:trunk`[title.r members.r admins.r listen.r ~ ~ ~ ~ ~ ~]))
       (upgrade-lines known.old)  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %7 rooms gain the group binding, unset.
@@ -555,7 +601,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-7 `room:trunk`[title.r members.r admins.r listen.r sfu.r ~ ~ ~ ~ ~]))
+  :*  %19  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-7 `room:trunk`[title.r members.r admins.r listen.r sfu.r ~ ~ ~ ~ ~]))
       known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %8 rooms gain the role gates and mute set, unset — and empty
@@ -565,7 +611,7 @@
   ::  next happens to change.
     %8
   =.  state
-    :*  %18  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-8 `room:trunk`[title.r members.r admins.r listen.r sfu.r group.r ~ ~ ~ ~]))
+    :*  %19  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-8 `room:trunk`[title.r members.r admins.r listen.r sfu.r group.r ~ ~ ~ ~]))
         known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
     ==
   =/  w  (~(get by wex.bowl) [/groups-mirror our.bowl %groups])
@@ -577,7 +623,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %10 gains the recording set, unset.
@@ -585,7 +631,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  (stamp-asked asked.old now.bowl)  pol.old  present.old  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
   ::  %11 gains dated asks so they can be pruned.
@@ -593,7 +639,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  (stamp-asked asked.old now.bowl)  pol.old
       present.old  recording.old  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
@@ -601,7 +647,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
       present.old  recording.old  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
@@ -610,7 +656,7 @@
   :-  ~
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
       present.old  recording.old  beat.old  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~
   ==  ==
@@ -621,7 +667,7 @@
   :-  (activity-cards:hc push.old)
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
       present.old  recording.old  beat.old
       push.old  seen.old  ~  all-kinds:trunk-push  ~
@@ -633,7 +679,7 @@
   :-  (activity-cards:hc push.old)
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
       present.old  recording.old  beat.old
       push.old  seen.old  rung.old  kinds.old  log.old
@@ -644,7 +690,7 @@
   :-  (activity-cards:hc push.old)
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
       present.old  recording.old  beat.old
       push.old  seen.old  rung.old  kinds.old  log.old
@@ -655,15 +701,27 @@
   :-  (activity-cards:hc push.old)
   %=  this
     state
-  :*  %18  ice.old  sfu.old  hosted.old
+  :*  %19  ice.old  sfu.old  hosted.old
       known.old  asked.old  pol.old
       present.old  recording.old  beat.old
       push.old  seen.old  rung.old  kinds.old  log.old
       meta.old  drops.old  badge.old  flight.old  senders.old
-      invites.old  apps.old  hosts.old  ~
+      invites.old  (rekey-apps apps.old)  (rekey-hosts hosts.old)  ~
+  ==  ==
+  ::  %18 keys app rooms and switches by app, which may be named
+    %18
+  :-  (activity-cards:hc push.old)
+  %=  this
+    state
+  :*  %19  ice.old  sfu.old  hosted.old
+      known.old  asked.old  pol.old
+      present.old  recording.old  beat.old
+      push.old  seen.old  rung.old  kinds.old  log.old
+      meta.old  drops.old  badge.old  flight.old  senders.old
+      invites.old  (rekey-apps apps.old)  (rekey-hosts hosts.old)  links.old
   ==  ==
   ::  a reload: re-arm the activity watch if it went missing.
-    %18  [(activity-cards:hc push.old) this(state old)]
+    %19  [(activity-cards:hc push.old) this(state old)]
   ==
 
 ::
@@ -1567,6 +1625,13 @@
     ?>  ?=([%gall @ *] sap.bowl)
     ?>  =(i.t.sap.bowl i.t.path)
     `this
+  ::  ...and a named app's (wire 18), for the agent that hosts it. Which
+  ::  of its apps may watch which path is that agent's to enforce, as
+  ::  grubbery's permits do.
+      [%app @ @ ~]
+    ?>  ?=([%gall @ *] sap.bowl)
+    ?>  =(i.t.sap.bowl i.t.path)
+    `this
   ==
 ::
 ++  on-peek
@@ -1631,7 +1696,7 @@
         =.  log.state
           (note:trunk-push log.state now.bowl "could not read an activity fact")
         `this
-      =/  [cards=(list card) new=state-18 what=(unit tape)]  p.res
+      =/  [cards=(list card) new=state-19 what=(unit tape)]  p.res
       =.  state  new
       =?  log.state  ?=(^ what)  (note:trunk-push log.state now.bowl u.what)
       [cards this]
@@ -2469,11 +2534,11 @@
 ::  answer, after a wait.
 ::
 ++  send
-  |=  [s=state-18 to=(map @t push-device:trunk) =hint:trunk-push]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 to=(map @t push-device:trunk) =hint:trunk-push]
+  ^-  [(list card) state-19]
   =/  todo  ~(tap by to)
   =|  cards=(list card)
-  |-  ^-  [(list card) state-18]
+  |-  ^-  [(list card) state-19]
   ?~  todo  [(flop cards) s]
   =/  nonce=@uv  (sham eny.bowl p.i.todo hint)
   =^  card  s  (one s p.i.todo q.i.todo nonce hint)
@@ -2484,8 +2549,8 @@
 ::  again, and the count an iPhone was given
 ::
 ++  one
-  |=  [s=state-18 id=@t dev=push-device:trunk nonce=@uv =hint:trunk-push]
-  ^-  [(unit card) state-18]
+  |=  [s=state-19 id=@t dev=push-device:trunk nonce=@uv =hint:trunk-push]
+  ^-  [(unit card) state-19]
   =/  count=(unit @ud)
     ?:  ?=(%badge -.hint)  `n.hint
     ?.  ?=(?(%message %notice) -.hint)  ~
@@ -2515,8 +2580,8 @@
 ::  out as it is now, not as it was.
 ::
 ++  resend
-  |=  [s=state-18 nonce=@uv fly=flight:trunk-push dev=push-device:trunk]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 nonce=@uv fly=flight:trunk-push dev=push-device:trunk]
+  ^-  [(list card) state-19]
   =/  =hint:trunk-push
     ?.  &(?=(%badge -.hint.fly) ?=(^ n.badge.s))  hint.fly
     [%badge (need n.badge.s)]
@@ -2535,8 +2600,8 @@
 ::  their mark bumps. Runs under mule in +on-agent.
 ::
 ++  activity-hints
-  |=  [s=state-18 reads=? =cage]
-  ^-  [(list card) state-18 (unit tape)]
+  |=  [s=state-19 reads=? =cage]
+  ^-  [(list card) state-19 (unit tape)]
   ?.  ?:  reads  ?=([%read *] q.q.cage)
       ?=([?(%add %activity) *] q.q.cage)
     [~ s ~]
@@ -2600,8 +2665,8 @@
 ::  count and was told another number gets the new one.
 ::
 ++  count-changed
-  |=  [s=state-18 jon=json]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 jon=json]
+  ^-  [(list card) state-19]
   =/  got  (at:trunk-push jon ~['activity' 'base' 'notify-count'])
   ?.  ?=([~ %n *] got)  [~ s]
   =/  n  (rush p.u.got dem)
@@ -2636,8 +2701,8 @@
 ::  un-rings the ones we woke.
 ::
 ++  signal-cards
-  |=  [s=state-18 from=ship =sig:trunk]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 from=ship =sig:trunk]
+  ^-  [(list card) state-19]
   ?+  -.sig  [~ s]
       %ring
     ::  calls switched off, nothing to wake, an id too long to be a
@@ -2670,8 +2735,8 @@
 ::  devices took the call.
 ::
 ++  settle-cards
-  |=  [s=state-18 id=@t answered=?]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 id=@t answered=?]
+  ^-  [(list card) state-19]
   =/  [to=(set @t) new=rung:trunk-push]
     (settle:trunk-push rung.s id answered now.bowl)
   =.  rung.s  new
@@ -2708,7 +2773,7 @@
 ::  +debug: the debug report, with what only the bowl can tell
 ::
 ++  debug
-  |=  s=state-18
+  |=  s=state-19
   ^-  json
   =/  watch
     |=  w=wire
@@ -2759,14 +2824,14 @@
 ::  go as one push.
 ::
 ++  notice
-  |=  $:  s=state-18
+  |=  $:  s=state-19
           declared=(unit @t)
           tag=@t
           title=@t
           body=@t
           open=json
       ==
-  ^-  [(list card) state-18]
+  ^-  [(list card) state-19]
   ?>  ?|(?=(~ declared) (valid-app:trunk-push u.declared))
   ::  `open` goes into the push body as it is, so it must be JSON that
   ::  reads back the same: a poke's noun is never checked otherwise
@@ -2823,8 +2888,8 @@
 ::  +hold: what `x` has waiting is not pushed, and the log says why
 ::
 ++  hold
-  |=  [s=state-18 id=@t x=sender:trunk-push why=tape]
-  ^-  state-18
+  |=  [s=state-19 id=@t x=sender:trunk-push why=tape]
+  ^-  state-19
   =.  senders.s
     %+  ~(put by senders.s)  id
     x(held (add held.x waited.x), waiting ~, waited 0, timer ~)
@@ -2834,8 +2899,8 @@
 ::  a summary of them all, unless the app is over its hourly cap
 ::
 ++  deliver
-  |=  [s=state-18 id=@t x=sender:trunk-push]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 id=@t x=sender:trunk-push]
+  ^-  [(list card) state-19]
   =.  x  (roll-hour:trunk-push x now.bowl)
   =/  who  "notice from {(trip name.x)}"
   ?~  waiting.x  [~ s(senders (~(put by senders.s) id x(timer ~)))]
@@ -2869,8 +2934,8 @@
 ::                      was given before: {"secret":"<32 hex>"}
 ::
 ++  guest-http
-  |=  [s=state-18 eid=@ta req=inbound-request:eyre rest=@t]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 eid=@ta req=inbound-request:eyre rest=@t]
+  ^-  [(list card) state-19]
   =/  method  method.request.req
   =/  cut  (find "/" (trip rest))
   =/  code=@t  ?~(cut rest (end [3 u.cut] rest))
@@ -2938,47 +3003,73 @@
 ::
 ::  +app-action: one of another agent's room actions (wire 16). Gall
 ::  names the agent in sap.bowl, and an app reaches only rooms under
-::  its own name. A refusal is a guest-denied on /app/<agent>, never a
-::  crash. Only a caller that is no agent at all crashes.
+::  its own name. An agent that hosts several apps, as grubbery does,
+::  names each with the -as actions (wire 18): the app is then
+::  '<agent>/<name>', with its own switch, rooms and answer path, the
+::  way +sender-of names a notice's app. A refusal is a guest-denied on
+::  the app's path, never a crash. Only a caller that is no agent at
+::  all, or a name that is no @tas, crashes.
 ::
 ++  app-action
-  |=  [s=state-18 act=action:trunk]
-  ^-  [(list card) state-18]
+  |=  [s=state-19 act=action:trunk]
+  ^-  [(list card) state-19]
   ?>  ?=([%gall @ *] sap.bowl)
   =/  agent=@tas  i.t.sap.bowl
+  ::  a named action is its plain twin, for the app it names
+  =/  [declared=(unit @t) act=action:trunk]
+    ?+  -.act  [~ act]
+      %app-room-open-as     [`app.act [%app-room-open room.act]]
+      %app-room-close-as    [`app.act [%app-room-close room.act]]
+      %app-room-rotate-as   [`app.act [%app-room-rotate room.act]]
+      %app-guest-ticket-as  [`app.act [%app-guest-ticket room.act guest.act speak.act req.act]]
+    ==
+  ::  the name is a path segment and a Galène subgroup segment
+  ?>  ?|(?=(~ declared) (valid-room:trunk-guest u.declared))
+  =/  id=@t  id:(sender-of:trunk-push sap.bowl declared)
+  =/  here=path
+    ?:  |(?=(~ declared) =(id agent))  /app/[agent]
+    [%app agent ;;(@ta (need declared)) ~]
   =.  apps.s  (prune-apps:trunk-guest apps.s now.bowl)
-  ::  an app that asks shows on the trunk page, switched off
-  =?  hosts.s  !(~(has by hosts.s) agent)  (~(put by hosts.s) agent %.n)
-  =/  off=?  !(~(got by hosts.s) agent)
+  =/  off=?  !(~(gut by hosts.s) id %.n)
   =/  no  'apps may not host calls on this ship'
   =/  deny
     |=  [room=@t req=@t why=@t]
     ^-  (list card)
-    ~[(app-fact agent (denied-to-json:trunk-json room req why))]
+    ~[(app-fact here (denied-to-json:trunk-json room req why))]
   ?+    -.act  !!
   ::  closing works even when switched off
       %app-room-close
-    [~ s(apps (~(del by apps.s) [agent room.act]))]
+    [~ s(apps (~(del by apps.s) [id room.act]))]
   ::
       %app-room-open
+    ::  an app that opens a room shows on the trunk page, switched off.
+    ::  An agent may name only so many apps, since nothing forgets one.
+    =/  names
+      %+  skim  ~(tap in ~(key by hosts.s))
+      |=(k=@t |(=(k agent) =((end [3 +((met 3 agent))] k) (cat 3 agent '/'))))
+    ?:  ?&  !(~(has by hosts.s) id)
+            (gte (lent names) app-name-cap:trunk-guest)
+        ==
+      [(deny room.act '' 'too many apps') s]
+    =?  hosts.s  !(~(has by hosts.s) id)  (~(put by hosts.s) id %.n)
     ?:  off  [(deny room.act '' no) s]
     ?.  (valid-room:trunk-guest room.act)
       [(deny room.act '' 'not a room name') s]
-    ?:  (~(has by apps.s) [agent room.act])  [~ s]
-    =/  mine  (lent (skim ~(tap in ~(key by apps.s)) |=([a=@tas @t] =(a agent))))
+    ?:  (~(has by apps.s) [id room.act])  [~ s]
+    =/  mine  (lent (skim ~(tap in ~(key by apps.s)) |=([a=@t @t] =(a id))))
     ?:  (gte mine app-room-cap:trunk-guest)
       [(deny room.act '' 'too many rooms') s]
     =/  new=app-room:trunk  [(new-epoch:trunk-guest eny.bowl) ~ now.bowl]
-    [~ s(apps (~(put by apps.s) [agent room.act] new))]
+    [~ s(apps (~(put by apps.s) [id room.act] new))]
   ::
   ::  a new epoch is a new subgroup: every token minted for the old
   ::  one stops working there, and its guests keep their ids
       %app-room-rotate
     ?:  off  [(deny room.act '' no) s]
-    =/  got  (~(get by apps.s) [agent room.act])
+    =/  got  (~(get by apps.s) [id room.act])
     ?~  got  [(deny room.act '' 'no such room') s]
     =/  new  u.got(epoch (new-epoch:trunk-guest eny.bowl), last now.bowl)
-    [~ s(apps (~(put by apps.s) [agent room.act] new))]
+    [~ s(apps (~(put by apps.s) [id room.act] new))]
   ::
   ::  app rooms run on the ship's own sidecar
       %app-guest-ticket
@@ -2987,17 +3078,17 @@
             (lte (met 3 req.act) id-max:trunk-guest)
         ==
       [(deny room.act '' 'id too long') s]
-    =/  got  (~(get by apps.s) [agent room.act])
+    =/  got  (~(get by apps.s) [id room.act])
     ?~  got  [(deny room.act req.act 'no such room') s]
     ?:  =('' key.sfu.s)  [(deny room.act req.act 'no sfu configured') s]
     =/  sat  (seat:trunk-guest u.got guest.act now.bowl eny.bowl)
     ?~  sat  [(deny room.act req.act 'room is full') s]
-    =.  apps.s  (~(put by apps.s) [agent room.act] r.u.sat)
-    =/  sub  (app-sub:trunk-guest our.bowl agent room.act epoch.r.u.sat)
+    =.  apps.s  (~(put by apps.s) [id room.act] r.u.sat)
+    =/  sub  (app-sub:trunk-guest our.bowl id room.act epoch.r.u.sat)
     =/  loc  (location:trunk-guest sfu.s sub)
     :_  s
     :_  ~
-    %+  app-fact  agent
+    %+  app-fact  here
     %:  app-ticket-to-json:trunk-json
       room.act
       guest.act
@@ -3010,7 +3101,7 @@
 ::  field names and not to trunk's types
 ::
 ++  app-fact
-  |=  [agent=@tas jon=json]
+  |=  [here=path jon=json]
   ^-  card
-  [%give %fact ~[/app/[agent]] %json !>(jon)]
+  [%give %fact ~[here] %json !>(jon)]
 --
