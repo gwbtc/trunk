@@ -296,6 +296,7 @@ desk.docket-0              the Landscape tile
 lib/trunk-push.hoon        what wakes a phone, and the bytes that do it
 lib/trunk-guest.hoon       who a guest link seats, and guest ids
 gen/test-*.hoon            checks to run on a ship, each answering %ok
+test/browser/              end-to-end checks of the pages, in headless Chromium
 sidecar/                   coturn + Galène, and the listen page
 docs/design.md             how it works and why
 docs/notifications.md      how other apps send notifications through trunk
