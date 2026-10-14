@@ -47,7 +47,9 @@
       ::  an iPhone's app-icon count, with nothing shown (wire 12)
       [%badge n=@ud]
   ==
-::  a post %activity says to notify, before Talon's own level
+::  a post %activity says to notify, before Talon's own level.
+::  `time` is the key's own `time` field, the post's date, ~ for an
+::  event that carried none; +post-at prefers it to re-reading the id.
 +$  post
   $:  whom=@t
       id=@t
@@ -55,6 +57,7 @@
       mention=?
       content=(unit json)
       group=(unit @t)
+      time=(unit @da)
   ==
 ::  rings we pushed, by call id, and the devices each one went to:
 ::  only those get its cancel
@@ -540,6 +543,10 @@
   ?~  e  $(tags t.tags)
   =/  id  (cord-at u.e ~['key' 'id'])
   ?~  id  ~
+  =/  time=(unit @da)
+    =/  tc  (cord-at u.e ~['key' 'time'])
+    ?~  tc  ~
+    (da-of (trip u.tc))
   :-  ~
   :*  u.whom
       u.id
@@ -547,6 +554,7 @@
       =(`[%b %.y] (at u.e ~['mention']))
       (at u.e ~['content'])
       (cord-at u.e ~['group'])
+      time
   ==
 ::
 ::  +read-whom: the chat an %activity /v4 read says is read to the
@@ -577,6 +585,16 @@
   =/  i  (find "/" t)
   `(crip ?~(i t (scag u.i t)))
 ::
+::  +da-of: a dotted-or-undotted decimal tape as a @da, ~ if it holds
+::  no digits or does not parse.
+::
+++  da-of
+  |=  s=tape
+  ^-  (unit @da)
+  =/  digits  (skip s |=(c=@tD =(c '.')))
+  ?~  digits  ~
+  (bind (rush (crip digits) dem) |=(a=@ `@da`a))
+::
 ::  +post-time: when a post was made, from its id. The @da after the
 ::  last slash, with or without its dots.
 ::
@@ -585,18 +603,26 @@
   ^-  (unit @da)
   =/  rev  (flop (trip id))
   =/  i  (find "/" rev)
-  =/  da=tape  (flop ?~(i rev (scag u.i rev)))
-  =/  digits  (skip da |=(c=@tD =(c '.')))
-  ?~  digits  ~
-  (bind (rush (crip digits) dem) |=(a=@ `@da`a))
+  (da-of (flop ?~(i rev (scag u.i rev))))
 ::
-::  +fresh: may a post made at `id`'s time still notify at `now`?
-::  An id with no readable time defers to the rest of the checks.
+::  +post-at: when a post was made. %activity gives the time in the
+::  key, beside the id; trust that over re-reading it off the id,
+::  which breaks the moment an id is shaped differently and then,
+::  with no readable time, +fresh lets a stale post notify on every
+::  re-watch. Falls back to the id for an event that carried none.
+::
+++  post-at
+  |=  p=post
+  ^-  (unit @da)
+  ?^  time.p  time.p
+  (post-time id.p)
+::
+::  +fresh: may a post made at `t` still notify at `now`? A post with
+::  no readable time defers to the rest of the checks.
 ::
 ++  fresh
-  |=  [id=@t now=@da]
+  |=  [t=(unit @da) now=@da]
   ^-  ?
-  =/  t  (post-time id)
   ?~  t  %.y
   ?:  (gth u.t now)  %.y
   (lte (sub now u.t) fresh-for)
