@@ -2628,7 +2628,7 @@
   ?:  (~(has by seen.s) id.u.post)  [~ s ~]
   ::  the log says what kind of chat, never which one
   =/  word  (chat-word:trunk-push u.post)
-  ?.  (fresh:trunk-push id.u.post now.bowl)
+  ?.  (fresh:trunk-push (post-at:trunk-push u.post) now.bowl)
     [~ s `"{word}: not pushed, older than 5 minutes"]
   =.  seen.s  (~(put by seen.s) id.u.post now.bowl)
   ::  a notified post is one more in Tlon's count, whatever we push.
