@@ -99,8 +99,11 @@ if [[ -f "$pier/trunk/app/trunk.hoon" ]]; then
   changed=$(copy)
   dojo "|commit %trunk"
   # every changed file, not just the agent: a change to lib/ or a page
-  # alone leaves app/trunk.hoon landed before the commit does
+  # alone leaves app/trunk.hoon landed before the commit does. Only text
+  # files: +landed reads clay's noun as a cord, and the bill and docket
+  # are not one.
   for f in ${changed:-app/trunk.hoon}; do
+    case "$f" in *.hoon|*.html|*.js|*.css) ;; *) continue ;; esac
     for ((i = 0; i < 60; i++)); do landed "$f" && break; sleep 2; done
     landed "$f" || die "|commit %trunk did not land $f; read the dojo (tmux attach -t $session)"
   done
