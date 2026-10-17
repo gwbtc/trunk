@@ -2,35 +2,25 @@
 
 Voice calls, party lines and push notifications over Urbit.
 
-`%trunk` is a Gall agent. It routes opaque SDP between ships for 1:1 calls, and for party lines it mints short-lived, room-scoped tokens for an SFU. It never sees media and never parses SDP. Its job there is the trust boundary: local-only actions, and a signal's sender is the cryptographic ames source, never a claim in the payload.
+`%trunk` is a Gall agent. It routes opaque SDP between ships for 1:1 calls, and for party lines it mints short-lived, room-scoped tokens for an SFU. It never sees media and never parses SDP. Its job there is the trust boundary. It takes actions only from its own ship, and a signal's sender is the cryptographic ames source, never a claim in the payload.
 
 Since wire 11 it also wakes its owner's phones itself, with push notifications for calls, messages and alerts from other apps on the ship. Since wire 12 it serves its owner a page for those notifications and for debugging them. The one piece left off the ship is signing an iPhone's push with Apple's key, which a small gateway does.
 
-The client is separate. [Talon](https://github.com/nisfeb/talon) is one;
-the agent knows nothing about it, or about Tlon groups, or about
-anything above the wire.
+The client is separate. [Talon](https://github.com/nisfeb/talon) is one. The agent knows nothing about it, or about Tlon groups, or about anything above the wire.
 
 ## Integrating Trunk into your app
 
-Trunk is an agent, not a library. Your app talks to it over the eyre
-channel like any other Gall agent, and owns the media itself — Trunk
-never touches audio.
+Trunk is an agent, not a library. Your app talks to it over the eyre channel like any other Gall agent, and owns the media itself. Trunk never touches audio.
 
 **1. Check the wire before anything else.**
 
 ```
-GET /~/scry/trunk/version.json   ->  {"wire":18}
+GET /~/scry/trunk/version.json   ->  {"wire":19}
 ```
 
-A missing scry means no desk, or one too old to say. A number lower
-than yours means the ship needs updating. Say so; otherwise your pokes
-are refused by gall and every control in your UI looks dead for no
-visible reason. `lib/trunk-json.hoon` is the source of truth for every
-shape below, and clients mirror it by hand.
+A missing scry means no desk, or one too old to say. A number lower than yours means the ship needs updating. Say so. Otherwise your pokes are refused by gall, and every control in your UI looks dead for no visible reason. `lib/trunk-json.hoon` is the source of truth for every shape below, and clients mirror it by hand.
 
-**2. Subscribe to `/calls` on `%trunk`.** Everything the agent tells
-you arrives there as JSON: incoming signals, party-line tickets,
-refusals, policy changes.
+**2. Subscribe to `/calls` on `%trunk`.** Everything the agent tells you arrives there as JSON: incoming signals, party-line tickets, refusals, policy changes.
 
 **3. Poke `%trunk` with the `trunk-action` mark** to do anything.
 
@@ -48,10 +38,7 @@ refusals, policy changes.
 {"recv": {"from": "~zod", "sig": {"ring": {"id": "..."}}}}
 ```
 
-`from` is the ames source, not a claim in the payload. The SDP should
-be complete — gather ICE before you send it — because there is no
-trickling over ames. Advertise your ship's ICE servers from
-`/~/scry/trunk/ice.json`.
+`from` is the ames source, not a claim in the payload. The SDP should be complete, so gather ICE before you send it. There is no trickling over ames. Advertise your ship's ICE servers from `/~/scry/trunk/ice.json`.
 
 ### A party line
 
@@ -66,10 +53,7 @@ trickling over ames. Advertise your ship's ICE servers from
 {"denied": {"from": "~zod", "name": "lounge", "why": "not a member"}}
 ```
 
-Take the ticket to the SFU: fetch `<location>/.status` for its
-websocket endpoint, then join with the token. That is Galène's own
-protocol from there on, and its `protocol.js` is a usable client
-library.
+Take the ticket to the SFU. Fetch `<location>/.status` for its websocket endpoint, then join with the token. That is Galène's own protocol from there on, and its `protocol.js` is a usable client library.
 
 Galène names everyone by the token's `sub`, so a username on the line is the ship's `@p`, comets included. Galène refuses any later message whose username differs from the token's, so a client must send its `@p` and nothing else. A readable name, such as a nickname or a comet's mnemonym, travels in Galène's per-user data as `"data": {"name": "..."}` on the join, and other clients get it in `user` messages. Hosts on wire 10 to 12 signed a comet in as its full mnemonym instead (up to twelve words joined by dots, one dot in front when the host's Jael holds a Groundwire attestation and two otherwise), and Galène then refused that comet's every message, so comets could not speak there. Wire 13 puts the `@p` back.
 
@@ -96,14 +80,14 @@ An unknown platform, an endpoint or gateway that is not a URL, an empty handle o
 
 What gets pushed:
 
-- **ring** when a peer rings us and the policy lets it through, and **ring-cancel** when that ring ends: the caller hangs up (`"reason": "hangup"`), or one of our devices answers or declines (`"answered"`). A cancel goes only to the devices that ring went to, within a minute of it, or within four hours once a device took the call.
+- **ring** when a peer rings us and the policy lets it through, and **ring-cancel** when that ring ends. A cancel says `"reason": "hangup"` when the caller hangs up, and `"answered"` when one of our devices answers or declines. A cancel goes only to the devices that ring went to, within a minute of it, or within four hours once a device took the call. At most four unanswered rings are pushed at once, so a caller who rings again and again under new ids cannot flood the phones. A ring from a ship on the owner's allow list is pushed whatever the count.
 - **new-message** for each post or thread reply that `%activity` marks notified, as long as Talon's per-chat level allows it. The level comes from `%settings`, desk `talon`, bucket `notify-prefs`, where each entry is a string of JSON such as `{"level":"mentions"}`. It is `all`, `mentions` or `none`. A channel with no entry of its own takes its group's, kept under the key `group/<flag>` such as `group/~host/name` (wire 15). A chat with neither is at `mentions`, as Talon shows it. At `mentions`, a channel post notifies only when it mentions you, while a DM, a group DM and a reply in a thread you wrote, replied in or were mentioned in always do. Posts more than 5 minutes old never notify, and none is pushed twice. A reply carries `parent`, the id of the post it answers.
 - **read** when a chat is read to the end on any client, to devices whose `caps` include `read`, since an older app shows any push it does not know as a new message. An iPhone gets it as a **clear**.
-- **notice** when another agent on our ship asks (wire 12), to devices whose `caps` include `notice`. Talon's levels do not apply; the agent decides what is worth it.
+- **notice** when another agent on our ship asks (wire 12), to devices whose `caps` include `notice`. Talon's levels do not apply. The agent decides what is worth it.
 - **badge**, an iPhone's app-icon count (wire 12), to iPhones whose `caps` include `badge`. Android has none.
 - **push-test** on request.
 
-Any agent on our ship can send a notice, such as a calendar reminder or a time to leave. Another ship cannot. [`docs/notifications.md`](docs/notifications.md) is the guide for app developers; in short:
+Any agent on our ship can send a notice, such as a calendar reminder or a time to leave. Another ship cannot. [`docs/notifications.md`](docs/notifications.md) is the guide for app developers. In short:
 
 ```jsonc
 // wire 14: name the app. A grubbery app must, since its pokes all come from %grubbery
@@ -114,7 +98,7 @@ Any agent on our ship can send a notice, such as a calendar reminder or a time t
 {"push-notice": {"tag": "cal-e1", "title": "Leave now", "body": "Meeting at 3"}}
 ```
 
-`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. An empty title becomes the app's name, the app name may be 40 bytes, and all the fields together may be 4 KiB. One agent may send under 16 names, and trunk keeps 128 apps, forgetting the one idle longest that the owner never changed. Each app gets at most one push every five seconds: what comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<agent>` or `batch-<agent>/<app>`. An app gets 30 pushes an hour unless the owner sets another limit for it, up to 720 or none at all. The owner can switch off all notices, or any one app, on the trunk page. Another agent may send notices and nothing else: every other action, settings and devices included, is taken only from the owner's web session, Talon or the dojo. That stops a careless app, not a hostile one, since gall lets an agent name any origin for its poke.
+`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. An empty title becomes the app's name, the app name may be 40 bytes, and the whole push body, as sent, may be 4 KiB. That body adds about 200 bytes of its own fields to the notice's text. One agent may use up to 16 names, and trunk keeps 128 apps, forgetting the one idle longest that the owner never changed. Each app gets at most one push every five seconds. What comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<agent>` or `batch-<agent>/<app>`. An app gets 30 pushes an hour unless the owner sets another limit for it, up to 720 or none at all. The owner can switch off all notices, or any one app, on the trunk page. A new app name starts allowed, unless the owner switched off the notices its agent sends under no name. It also starts with its agent's own hourly limit, when the owner set that to a limit below 30. Another agent may send notices and nothing else. Every other action, settings and devices included, is taken only from the owner's web session, Talon or the dojo. That stops a careless app, not a hostile one, since gall lets an agent name any origin for its poke.
 
 UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, notices with `TTL: 3600` and `Urgency: high`, and everything else with `TTL: 86400` and `Urgency: normal`.
 
@@ -151,13 +135,13 @@ An iPhone needs APNs, which speaks only HTTP/2 with ES256 tokens. Iris has neith
 {"handle": "<h>", "secret": "<s>", "kind": "badge", "badge": 3}
 ```
 
-For an iPhone whose `caps` include `badge`, every message and notice alert also carries `"badge": n`. `n` is `%activity`'s base notify-count, which it gives on `/v4` after each post and read. A message alert carries the count it makes, one more than the last, and `%activity`'s next fact confirms it. When the count moves without an alert, after a read on another client say, it settles for 30 seconds and then goes as a `badge` push to each iPhone told another number.
+For an iPhone whose `caps` include `badge`, every message and notice alert also carries `"badge": n`. `n` is `%activity`'s base notify-count, which it gives on `/v4` after each post and read. A message alert carries the count it makes, one more than the last, and `%activity`'s next fact confirms it. When the count moves without an alert, after a read on another client say, it settles for 30 seconds and then goes as a `badge` push to each iPhone told another number. A device that registers with `badge` in its `caps`, as a new device or with a new gateway or handle, gets the current count at once when the ship has one. The first device on a ship with none gets it after `%activity`'s next count.
 
-The ship sends a message, read, notice or badge again when the answer is a 5xx, a 429 or nothing at all: after 30 seconds, then after 5 minutes, then it gives up and logs it. A ring, a cancel and a test are never sent twice, since they are stale in seconds. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept, and a retry goes only to the target it was meant for. Any other answer is only logged.
+The ship sends a message, read, notice or badge again when the answer is a 5xx, a 429 or nothing at all. It tries again after 30 seconds and then after 5 minutes, and then it gives up and logs it. A ring, a cancel and a test are never sent twice, since they are stale in seconds. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept, and a retry goes only to the target it was meant for. Any other answer is only logged.
 
 ### The trunk page (wire 12)
 
-Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches, a switch for each app that has sent a notice (wire 14), guest links, with a way to start a new line bound to a Tlon group, and a switch for each app that asked to host calls (wire 16 and 17), the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page. Only the tile's icon at `/apps/trunk/icon.svg` and the guest routes under `/apps/trunk/guest/` are public.
+Trunk serves its owner a page at `/apps/trunk`, with a Landscape tile. It holds the ship-wide push switches and a switch for each app that has sent a notice (wire 14). It holds guest links, with a way to start a new line bound to a Tlon group, and a switch for each app that asked to host calls (wire 16 and 17). Since wire 19 it holds the ship's public address too. It also holds the registered devices with a test button for each, the state of the `%activity` watches, and a log of recent push decisions and failures. A signed-out visitor is sent to the login page. Only the tile's icon at `/apps/trunk/icon.svg`, Galène's client library at `/apps/trunk/protocol.js` and the guest routes under `/apps/trunk/guest/` are public. Trunk serves them before it checks who is signed in.
 
 The switches are one more `trunk-action`. Channel posts are `all` (every one `%activity` marks notified), `mentions` or `none`. A thread reply needs its chat's switch and `replies` both. `notices` covers alerts from other agents. An upgrade starts with everything on, which is how wire 11 behaved.
 
@@ -166,9 +150,9 @@ The switches are one more `trunk-action`. Channel posts are `all` (every one `%a
                 "replies": true, "calls": true, "reads": true, "notices": true}}
 ```
 
-The page posts its actions to `POST /apps/trunk/action` with the same JSON as a poke, and the route hands them to the poke code. It takes `content-type: application/json` only, which a page on another site cannot send without a CORS preflight that eyre refuses. It answers 204 when the action went through, 400 for JSON it cannot read, 415 for anything but JSON, and 422 when trunk refused the action.
+The page posts its actions to `POST /apps/trunk/action` with the same JSON as a poke, and the route hands them to the poke code. It takes `content-type: application/json` only, which a page on another site cannot send without a CORS preflight that eyre refuses. It answers 204 when the action went through, and 415 for anything but JSON. It answers 400 for a body that is not an action, whether the JSON is malformed or is well-formed but not a valid action. It answers 422 when trunk refused the action, which means the poke crashed.
 
-Everything the page shows is one owner-only scry, `/~/scry/trunk/debug.json`, so a user can hand it to whoever helps them or to their agent. It never carries a secret, a handle, an endpoint's path or a chat's id: devices show only the host their pushes go to, and the log names the kind of chat, never which one.
+The push half of the page is one owner-only scry, `/~/scry/trunk/debug.json`, so a user can hand it to whoever helps them or to their agent. For guests the page also reads trunk's `guests.json` and `rooms.json`, and `%groups`' `/~/scry/groups/v2/groups.json` for the groups a new line can be bound to. The debug report never carries a secret, a handle, an endpoint's path or a chat's id. Devices show only the host their pushes go to, and the log names the kind of chat, never which one.
 
 Talon reads each device's `sent` and `last` and the `drops` from it, so those names are part of the wire. A `last.code` of 0 means the push got no answer at all.
 
@@ -188,32 +172,23 @@ Talon reads each device's `sent` and `last` and the `drops` from it, so those na
  "log": [{"at": 1791335355181, "what": "DM: pushed to 1 device"}]}
 ```
 
-### Guest seats (wire 16 to 18)
+### Guest seats (wire 16 to 19)
 
-A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line: an invite for a set number of people over a set time (`invite-guests`), or a permanent link under a chosen name for a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on, and an agent that hosts several apps, as grubbery does, names each with the `-as` forms (wire 18). Since wire 19 an app can also make a link anyone may open to one of its rooms (`app-guest-link`), such as a calendar event's call. That link opens on the call server's join page, `<sfu base>/join/`, which fetches the guest's ticket by way of the ship's page, so the owner sets the ship's public address first (`set-origin`).
+A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line. An invite seats a set number of people over a set time (`invite-guests`). A permanent link, under a chosen name, serves a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on. An agent that hosts several apps, as grubbery does, names each with the `-as` forms (wire 18). Since wire 19 an app can also make a link anyone may open to one of its rooms (`app-guest-link`), such as a calendar event's call. That link opens on the call server's join page, `<sfu base>/join/`, which fetches the guest's ticket by way of the ship's page, so the owner sets the ship's public address first (`set-origin`).
 
-A guest's Galène username is `guest-` and 24 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin` for the ship's own guest page, though not for the join page, and an https ship needs Galène behind TLS.
+A guest's Galène username is `guest-` and 24 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links, the apps that asked and the ship's public address (`origin`) are at `/~/scry/trunk/guests.json`. Apps' links are not listed there, so an app link's code is only in its URL. Galène must list the ship's origin in `allowOrigin` for the ship's own guest page, though not for the join page, and an https ship needs Galène behind TLS.
 
 [`docs/guest-seats.md`](docs/guest-seats.md) has the whole design, and starts with how to run a recurring meeting.
 
 ### Three things that will bite you
 
-- **A ticket is a fact every device of the ship sees.** Only the device
-  that asked may act on it, or a desktop joining drags the phone onto
-  the line too — one person twice in the roster, and a second stream
-  that is nobody talking.
-- **So is a ring.** Every device rings, which is the point; but a busy
-  device must not reply "busy" on behalf of the others, or a phone
-  mid-call cancels a ring the desktop was about to answer.
-- **A refusal is silence.** No error comes back when policy declines a
-  caller. Your ring timeout is what ends it.
+- **A ticket is a fact every device of the ship sees.** Only the device that asked may act on it, or a desktop joining drags the phone onto the line too. That makes one person twice in the roster, and a second stream that is nobody talking.
+- **So is a ring.** Every device rings, which is the point. But a busy device must not reply "busy" on behalf of the others, or a phone mid-call cancels a ring the desktop was about to answer.
+- **A refusal is silence.** No error comes back when policy declines a caller. Your ring timeout is what ends it.
 
 ## How a 1:1 call works
 
-Signalling travels through ames, ship to ship. Media never does — it
-goes directly between the two clients, and the ships never see it. The
-SDP is complete when it is sent: one offer and one answer, no
-trickling, because every ames round trip is expensive.
+Signalling travels through ames, ship to ship. Media never does. It goes directly between the two clients, and the ships never see it. The SDP is complete when it is sent. There is one offer and one answer, with no trickling, because every ames round trip is expensive.
 
 ```mermaid
 sequenceDiagram
@@ -239,11 +214,7 @@ sequenceDiagram
 
 ## How a party line works
 
-A line belongs to one host ship, and only that host can mint a ticket
-for it. Membership is checked there, on the ship that owns the group —
-the same boundary the group's messages already use, extended to audio.
-Media goes through the SFU rather than peer to peer, so a line does not
-cost each speaker a connection to every other.
+A line belongs to one host ship, and only that host can mint a ticket for it. Membership is checked there, on the ship that owns the group. That is the same boundary the group's messages already use, extended to audio. Media goes through the SFU rather than peer to peer, so a line does not cost each speaker a connection to every other.
 
 ```mermaid
 sequenceDiagram
@@ -266,9 +237,7 @@ sequenceDiagram
     G-->>M: one offer per other speaker
 ```
 
-A listener is the same room reached without a ship. The token carries
-no `present` permission, so Galène will hand it streams and refuse to
-take one.
+A listener is the same room reached without a ship. The token carries no `present` permission, so Galène will hand it streams and refuse to take one.
 
 ```mermaid
 sequenceDiagram
@@ -295,24 +264,24 @@ app/trunk/                 the owner's page, the guest page and the tile's icon,
 desk.docket-0              the Landscape tile
 lib/trunk-push.hoon        what wakes a phone, and the bytes that do it
 lib/trunk-guest.hoon       who a guest link seats, and guest ids
-gen/test-*.hoon            checks to run on a ship, each answering %ok
+gen/test-*.hoon            checks to run on a ship: test-push, test-guest and test-mnemonym answer %ok
+gen/test-roster.hoon       a probe of the group-roster parser, which answers [%parsed ...]
+gen/token.hoon             mints a Galène token by hand, to test the signing path
+gen/trunk/policy.hoon      prints who may ring this ship
+tests/                     offline suites for the libraries, run by scripts/offline-tests.sh
+scripts/                   offline tests, live ship checks and a deploy to a dev fleet ship
 test/browser/              end-to-end checks of the pages, in headless Chromium
 sidecar/                   coturn + Galène, and the listen page
 docs/design.md             how it works and why
 docs/notifications.md      how other apps send notifications through trunk
 docs/guest-seats.md        calls with people who have no ship, and recurring meetings
 AGENTS.md                  notes for coding agents working on trunk
+TESTING.md                 how to test trunk on the dev platform's fleet
 ```
 
 ## The desk
 
-**It is not self-contained.** Installing needs `default-agent` and
-`skeleton` from `%base`, plus the `bill`, `hoon`, `html`, `js`, `kelvin`,
-`mime`, `noun`, `svg` and `txt` marks, and since wire 19 `css`. Since wire 12 the Landscape tile
-also needs the `docket-0` mark, `lib/docket` and `sur/docket` from
-`%landscape`. That list is from a working install, not from memory; a
-missing mark fails the commit with a mark error rather than anything
-helpful.
+**It is not self-contained.** Installing needs `default-agent` and `skeleton` from `%base`, plus the `bill`, `hoon`, `html`, `js`, `kelvin`, `mime`, `noun`, `svg` and `txt` marks, and since wire 19 `css`. Since wire 12 the Landscape tile also needs the `docket-0` mark, `lib/docket` and `sur/docket` from `%landscape`. That list is from a working install, not from memory. A missing mark fails the commit with a mark error rather than anything helpful.
 
 ```dojo
 |mount %base
@@ -342,10 +311,7 @@ cp "$PIER/base/sys.kelvin" "$PIER/trunk/sys.kelvin"
 +trunk!test-mnemonym
 ```
 
-Each check answers `%ok`, or names the cases that came out wrong. Both ends of a call need the desk. Read the current settings with
-`=dir /=trunk=` then `+trunk/policy`, or over HTTP at
-`/~/scry/trunk/policy.json` (eyre supplies the `%x` care itself — do
-not put it in the path).
+Each check answers `%ok`, or names the cases that came out wrong. Both ends of a call need the desk. Read the current settings with `=dir /=trunk=` then `+trunk/policy`, or over HTTP at `/~/scry/trunk/policy.json` (eyre supplies the `%x` care itself, so do not put it in the path).
 
 ## Who may ring you
 
@@ -354,9 +320,7 @@ not put it in the path).
 +$  policy  [mode=call-mode allow=(set ship) block=(set ship)]
 ```
 
-Enforced in the agent, deliberately. A filter in the client still lets
-the poke land, still rings the ship's other clients, and does nothing
-at all for a second app sharing the agent.
+Enforced in the agent, deliberately. A filter in the client still lets the poke land, still rings the ship's other clients, and does nothing at all for a second app sharing the agent.
 
 ```dojo
 :trunk &trunk-action [%set-call-mode %allow]
@@ -364,22 +328,13 @@ at all for a second app sharing the agent.
 :trunk &trunk-action [%block ~bus]
 ```
 
-A refused caller gets **silence**, not a rejection: a rejection would
-confirm the ship is live and filtering, and tell a blocked caller they
-were blocked. Their ring watchdog gives up on its own, which is what
-an offline ship looks like.
+A refused caller gets **silence**, not a rejection. A rejection would confirm the ship is live and filtering, and tell a blocked caller they were blocked. Their ring watchdog gives up on its own, which is what an offline ship looks like.
 
-The mode gates rings only. Offer, accept and hangup pass even from a
-ship the mode would refuse, because *you* may have called *them* — a
-client ignores any signal whose call id it doesn't recognise. A block
-is total.
+The mode gates rings only. Offer, accept and hangup pass even from a ship the mode would refuse, because *you* may have called *them*. A client ignores any signal whose call id it doesn't recognise. A block is total. It also takes away the blocked ship's admin powers over your lines, so it can no longer share or configure them, and it forgets the lines that ship announced to you.
 
 ## Party lines
 
-One line per group, hosted by one ship, running on an SFU. The host
-mints a per-member, per-room token; membership is the whole check
-for ships. People with no ship come in through guest links
-([docs/guest-seats.md](docs/guest-seats.md)).
+One line per group, hosted by one ship, running on an SFU. The host mints a per-member, per-room token. Membership is the whole check for ships. People with no ship come in through guest links ([docs/guest-seats.md](docs/guest-seats.md)).
 
 Rooms carry what their admins decide:
 
@@ -391,21 +346,11 @@ Rooms carry what their admins decide:
           muted=(set ship) seat-roles=(map ship (set @t))]
 ```
 
-`admins` is just "ships that may reconfigure this room" — the agent has
-no idea what a group is. A client seeds it from whatever roster it has,
-or binds the room to a group source and the roster (and each member's
-roles) mirrors it from then on. `sfu` overrides the ship's own sidecar,
-so a group needn't route its audio through the host's server. The role
-gates are wire 5: `~` for either gate means everyone on the roster,
-which is exactly the pre-wire-5 behavior; a set gate admits a member
-iff their mirrored roles intersect it, the host and admins bypass both
-gates, and `muted` is moderation that beats everything except the host.
+`admins` is just "ships that may reconfigure this room". The agent has no idea what a group is. A client seeds it from whatever roster it has, or binds the room to a group source and the roster (and each member's roles) mirrors it from then on. `sfu` overrides the ship's own sidecar, so a group needn't route its audio through the host's server. The role gates are wire 5. `~` for either gate means everyone on the roster, which is exactly the pre-wire-5 behavior. A set gate admits a member iff their mirrored roles intersect it, the host and admins bypass both gates, and `muted` is moderation that beats everything except the host. A gate set by a remote admin may hold at most 256 roles.
 
 ### From the dojo
 
-Every action a client can poke works by hand, and a few are genuinely
-useful for operating a host. All of these are local-only pokes — run
-them on the ship they act for.
+Every action a client can poke works by hand, and a few are genuinely useful for operating a host. All of these are local-only pokes, so run them on the ship they act for.
 
 ```dojo
 ::  host a room, with yourself as admin
@@ -417,7 +362,7 @@ them on the ship they act for.
 ::  ask whether a line exists without joining it. This is the recovery
 ::  path for a missed invitation: a member whose ship had no %trunk
 ::  when the host announced (or whose announce was lost) has no other
-::  way to learn of the line — a member's peek is answered %announce.
+::  way to learn of the line. A member's peek is answered %announce.
 :trunk &trunk-action [%peek-room ~zod 'lounge']
 
 ::  bind a hosted room's roster to a group, and unbind it. A room
@@ -428,11 +373,17 @@ them on the ship they act for.
 :trunk &trunk-action [%bind-room 'v769287' [~ [~hodler-lorfeb 'v769287']]]
 :trunk &trunk-action [%bind-room 'v769287' ~]
 
-::  reconfigure a line — on the host, or from any ship on its admin
+::  reconfigure a line, on the host or from any ship on its admin
 ::  list (the poke relays and the host checks). Empty members/admins
-::  keep the existing roster, '' keeps the title, keep-sfu=%.y keeps
-::  the sfu, so this exact form is a no-op that re-announces the line
-::  to every member — the manual re-delivery for a lost invitation:
+::  keep the existing roster, '' keeps the title and keep-sfu=%.y
+::  keeps the sfu. A remote admin's members and admins count only
+::  when the line is new, and its title may be 256 bytes at most.
+::  The host's own may be longer, but members show it as no title.
+::  An sfu key that is not base64url is refused, as %set-sfu refuses
+::  one. Listen is always set, so pass the line's current
+::  value. This one turns anonymous listening off. With the current
+::  value, the form changes nothing else and re-announces the line to
+::  every member, the manual re-delivery for a lost invitation.
 :trunk &trunk-action [%configure-room ~zod 'lounge' %.y %.n ~ %.y '' ~ ~]
 ::                                    host  name  open listen sfu keep title members admins
 
@@ -450,7 +401,8 @@ them on the ship they act for.
 :trunk &trunk-action [%set-room-listen 'lounge' %.y]
 :trunk &trunk-action [%share-room ~zod 'lounge' 3.600]
 
-::  point the ship at its SFU (base url, Galène group, signing key)
+::  point the ship at its SFU (base url, Galène group, signing key).
+::  The key must be base64url, or '' for none, or the poke is refused.
 :trunk &trunk-action [%set-sfu 'https://sfu.example' 'talon' '<key>']
 
 ::  push by hand (wire 11 to 14): register a device, send it a test,
@@ -467,8 +419,7 @@ them on the ship they act for.
 :trunk &trunk-action [%push-unregister 'my-phone']
 ```
 
-Read state over HTTP (eyre supplies the `%x` care — don't put it in
-the path):
+Read state over HTTP (eyre supplies the `%x` care, so don't put it in the path):
 
 ```
 /~/scry/trunk/version.json    what wire the desk speaks
@@ -478,35 +429,19 @@ the path):
 /~/scry/trunk/ice.json        the ICE servers this ship advertises
 /~/scry/trunk/sfu.json        the SFU's base url and group, never its key
 /~/scry/trunk/debug.json      push devices, switches, watches and log
-/~/scry/trunk/guests.json     guest links, and the apps that host calls
+/~/scry/trunk/guests.json     guest links, the apps that host calls, and the public address
 ```
 
 The dojo form of the same reads is `.^(json %gx /=trunk=/lines/json)`.
 
-**Anonymous listening** mints a token with no `present` permission —
-Galène's listener, receives and cannot publish (and watches any camera or shared screen). The token rides in the link's fragment, out of server logs. It is off unless asked
-for: a party line is otherwise gated by the host's membership list, and
-a public link deliberately punches through that. The link cannot be
-revoked (Galène's tokens are stateless), so its TTL is the entire
-security model and the agent caps it at an hour.
+**Anonymous listening** mints a token with no `present` permission, which is Galène's listener. It receives and cannot publish, and watches any camera or shared screen. The token rides in the link's fragment, out of server logs. It is off unless asked for. A party line is otherwise gated by the host's membership list, and a public link deliberately punches through that. The link cannot be revoked (Galène's tokens are stateless), so its TTL is the entire security model and the agent caps it at an hour.
 
 ## The sidecar
 
-See [`sidecar/`](sidecar/). Galène for party lines, coturn for the
-hostile-NAT fallback on 1:1 calls, and `sidecar/listen/index.html` —
-Trunk's own one-button listen page.
+See [`sidecar/`](sidecar/). Galène for party lines, coturn for the hostile-NAT fallback on 1:1 calls, and `sidecar/listen/index.html`, Trunk's own one-button listen page.
 
-That page exists because Galène's own client is a video-conferencing
-UI: it only displays a remote stream when a track is `kind === 'video'`,
-so an audio-only line renders no tile at all, and a tab nobody clicked
-cannot autoplay. Getting sound out of it took a settings panel and a
-play button. The listen page instead takes the click as both the
-autoplay gesture and the connect, and offers nothing a listener can't
-use.
+That page exists because Galène's own client is a video-conferencing UI. It only displays a remote stream when a track is `kind === 'video'`, so an audio-only line renders no tile at all, and a tab nobody clicked cannot autoplay. Getting sound out of it took a settings panel and a play button. The listen page instead takes the click as both the autoplay gesture and the connect, and offers nothing a listener can't use.
 
 ## History
 
-Trunk was developed inside the Talon repository and split out once it
-worked. Commits before this repo's first are in
-[nisfeb/talon](https://github.com/nisfeb/talon), under `urbit/trunk`
-and `sidecar`.
+Trunk was developed inside the Talon repository and split out once it worked. Commits before this repo's first are in [nisfeb/talon](https://github.com/nisfeb/talon), under `urbit/trunk` and `sidecar`.

@@ -30,6 +30,7 @@
         [%app-room-close-as 'cal' 'party']
         [%app-room-rotate-as 'cal' 'party']
         [%app-guest-ticket-as 'cal' 'party' 'user-1' & 'r1']
+        [%app-guest-link-as 'cal' 'party' 'Weekly' & 'r2']
     ==
   %-  zing
   %+  turn  acts

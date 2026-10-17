@@ -116,6 +116,34 @@
       ['an origin has no fragment' !(valid-origin 'https://a.example#b')]
       ['an origin has no user' !(valid-origin 'https://u@a.example')]
       ['an origin is lower case' !(valid-origin 'https://Urbit.example')]
+      ['an origin port is digits' !(valid-origin 'https://a:b')]
+      ['an origin has a host before its port' !(valid-origin 'https://:1')]
+      ['an origin port is not empty' !(valid-origin 'https://a:')]
+      ['an origin may have a port' (valid-origin 'http://a.b:8080')]
+      :-  'an origin of 256 bytes is one'
+      (valid-origin (cat 3 'https://' (crip (reap 248 'a'))))
+      :-  'an origin of 257 bytes is not'
+      !(valid-origin (cat 3 'https://' (crip (reap 249 'a'))))
+      ['a room name of 64 bytes is one' (valid-room (crip (reap 64 'a')))]
+      ['a room name of 65 bytes is not' !(valid-room (crip (reap 65 'a')))]
+      ['a link name of 3 bytes is one' (valid-name 'abc')]
+      :-  'a host may announce a new line under its cap'
+      =/  k  (silt (turn (gulf 1 31) |=(n=@ [~nec (scot %ud n)])))
+      (line-fits k ~nec 'new' 32 256)
+      :-  'a host at its cap may not announce a new line'
+      =/  k  (silt (turn (gulf 1 32) |=(n=@ [~nec (scot %ud n)])))
+      !(line-fits k ~nec 'new' 32 256)
+      :-  'a host at its cap may still update a line it has'
+      =/  k  (silt (turn (gulf 1 32) |=(n=@ [~nec (scot %ud n)])))
+      (line-fits k ~nec '1' 32 256)
+      :-  'one host at its cap does not stop another'
+      =/  k  (silt (turn (gulf 1 32) |=(n=@ [~nec (scot %ud n)])))
+      (line-fits k ~bud 'new' 32 256)
+      :-  'a full list takes no new line'
+      =/  k  (silt (turn (gulf 1 256) |=(n=@ [`@p`(add 256 n) 'x'])))
+      !(line-fits k ~nec 'new' 32 256)
+      :-  'an app room used just now stays, even dated ahead of us'
+      =(1 ~(wyt by (prune-apps (my [[%mud 'p'] app(last (add now ~m5))]~) now)))
       :-  'an app link opens on the call server with the ship host'
       .=  'https://calls.example/join/#urbit.example/0a1b'
       (join-url 'https://calls.example' 'https://urbit.example' '0a1b')

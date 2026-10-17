@@ -1,5 +1,6 @@
 ::  trunk-guest: guest seats (wire 16 to 19), with no scries and no
-::  cards, so gen/test-guest.hoon can cover it.
+::  cards, so gen/test-guest.hoon can cover it. +line-fits, the one
+::  pure check party lines have, lives here for the same reason.
 ::
 ::  A guest is a person on a call with no ship behind their seat. They
 ::  come in by a link the owner made, or through an app on our ship
@@ -176,9 +177,9 @@
   ?~(l ~ `-.i.l)
 ::
 ::  +valid-origin: the ship's public address, as the owner gives it: http
-::  or https, then a host and maybe a port, and nothing after. '' is
-::  none. It goes into a URL's fragment, so it may hold no '/', '#',
-::  '?' or '@'.
+::  or https, a host of letters, digits, dots and hyphens, and maybe a
+::  :port, with nothing after. '' is none. It goes into a URL's fragment,
+::  and the join page checks it the same way.
 ::
 ++  valid-origin
   |=  o=@t
@@ -190,14 +191,15 @@
     ?:  =("http://" (scag 7 t))  `(slag 7 t)
     ~
   ?~  rest  |
-  ?&  (lte (lent t) 256)
-      !=(~ u.rest)
-      %+  levy  u.rest
-      |=  c=@tD
-      ?|  &((gte c 'a') (lte c 'z'))
-          &((gte c '0') (lte c '9'))
-          =(c '.')  =(c '-')  =(c ':')
-      ==
+  ?.  (lte (lent t) 256)  |
+  =/  cut  (find ":" u.rest)
+  =/  host=tape  ?~(cut u.rest (scag u.cut u.rest))
+  =/  port=tape  ?~(cut "" (slag +(u.cut) u.rest))
+  =/  digit  |=(c=@tD &((gte c '0') (lte c '9')))
+  ?&  !=(~ host)
+      %+  levy  host
+      |=(c=@tD |(&((gte c 'a') (lte c 'z')) (digit c) =(c '.') =(c '-')))
+      |(=(~ cut) &(!=(~ port) (levy port digit)))
   ==
 ::
 ::  +join-url: an app link on the call server's join page (wire 19). The
@@ -211,6 +213,19 @@
   =/  t=tape  (trip origin)
   =/  host=tape  (slag (add 2 (need (find "//" t))) t)
   (rap 3 ~[base '/join/#' (crip host) '/' code])
+::
+::  +line-fits: may a host's %announce add a line to the lines we know?
+::  An update to a line we know always may. A new one must fit under
+::  the host's own cap and the cap on all lines together, since the
+::  list is remote-controlled.
+::
+++  line-fits
+  |=  [known=(set [ship @t]) host=ship name=@t host-cap=@ud all-cap=@ud]
+  ^-  ?
+  ?:  (~(has in known) [host name])  &
+  ?&  (lth ~(wyt in known) all-cap)
+      (lth (lent (skim ~(tap in known) |=([s=ship @t] =(s host)))) host-cap)
+  ==
 ::
 ::  +app-sub: an app room's Galène subgroup. A party line's is
 ::  '<ship>-<name>' and an app room's is '<ship>/<app>/<room>/<epoch>'.

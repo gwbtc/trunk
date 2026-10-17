@@ -126,8 +126,15 @@ const bytes = (p, kind, dir) => p.evaluate(async (kind, dir) => {
   return n;
 }, kind, dir);
 
+// polls f until it holds; a navigation destroys the page's context
+// mid-check, so an error is a no for now. A timeout logs the last one.
 async function until(f, ms = 6000) {
-  for (let t = 0; t < ms; t += 250) { if (await f()) return true; await sleep(250); }
+  let last = null;
+  for (let t = 0; t < ms; t += 250) {
+    try { if (await f()) return true; } catch (e) { last = e; }
+    await sleep(250);
+  }
+  if (last) console.log('  last error:', last?.message ?? last);
   return false;
 }
 
@@ -135,14 +142,12 @@ async function until(f, ms = 6000) {
 // speaking ring and the mute reset
 async function guestChecks() {
   const a = await guest('Alice');
-  await sleep(1000);
-  const alone = await a.$eval('#alone', (e) => !e.hidden && /Nobody else/.test(e.textContent));
-  check('a guest alone is told others will appear', alone);
+  check('a guest alone is told others will appear', await until(() => a.$eval(
+    '#alone', (e) => !e.hidden && /Nobody else/.test(e.textContent))));
   const b = await guest('Bob');
-  await sleep(4000);
-  check('audio flows both ways',
-    (await bytes(a, 'audio', 'inbound-rtp')) > 0 && (await bytes(b, 'audio', 'inbound-rtp')) > 0);
-  check('the alone line goes when someone joins', await a.$eval('#alone', (e) => e.hidden));
+  check('audio flows both ways', await until(async () =>
+    (await bytes(a, 'audio', 'inbound-rtp')) > 0 && (await bytes(b, 'audio', 'inbound-rtp')) > 0, 10000));
+  check('the alone line goes when someone joins', await until(() => a.$eval('#alone', (e) => e.hidden)));
   check('a speaking ring lights for the other guest', await until(() => a.evaluate(
     () => [...document.querySelectorAll('.tile.speaking')].some((t) => /Bob/.test(t.textContent)))));
   check('your own tile says (you), not (guest)', !!(await tile(a, 'Alice (you)')));
@@ -178,18 +183,18 @@ async function guestChecks() {
   await a.click('#join');
   await onCall(a);
   check('a rejoin is the same guest', (await key(a)) === before);
-  await sleep(1000);
-  const t = await tile(a, 'Alice');
-  check('a rejoin after leaving muted is unmuted',
-    (await a.$eval('#mute', (e) => e.textContent)) === 'Mute' && !/muted/.test(t.label), t);
+  let t = null;
+  check('a rejoin after leaving muted is unmuted', await until(async () => {
+    t = await tile(a, 'Alice');
+    return !!t && !/muted/.test(t.label) && (await a.$eval('#mute', (e) => e.textContent)) === 'Mute';
+  }), t);
 }
 
 // camera frames, a late joiner, mute, a share on the same tile, video off
 async function videoChecks() {
   const a = await guest('Ann');
   const b = await guest('Ben');
-  await sleep(2000);
-  check('no video before the camera', (await tile(b, 'Ann'))?.video === false);
+  check('no video before the camera', await until(async () => (await tile(b, 'Ann'))?.video === false));
   await a.click('#camera');
   check('the camera reaches the others', await until(async () => {
     const t = await tile(b, 'Ann');
@@ -206,8 +211,8 @@ async function videoChecks() {
   await a.click('#share');
   check('a share replaces the camera on the same tile', await until(async () => {
     const t = await tile(b, 'Ann');
-    return t && t.video && t.w > 0 && (t.w !== cam.w || t.h !== cam.h);
-  }), await tile(b, 'Ann'));
+    return cam && t && t.video && t.w > 0 && (t.w !== cam.w || t.h !== cam.h);
+  }), [cam, await tile(b, 'Ann')]);
   await a.click('#share');
   await a.click('#camera');
   check('video off is seen', await until(async () => (await tile(b, 'Ann'))?.video === false));
@@ -242,10 +247,13 @@ async function pageChecks(o) {
   await act(o, { 'close-room': { name } });
   // the ship's public address, which apps' links name (wire 19)
   const was = await o.$eval('#g-public', (e) => e.value);
-  await o.$eval('#g-public', (e) => { e.value = 'https://urbit.example/'; e.dispatchEvent(new Event('change')); });
-  check('the public address field sets the address', await until(() => o.evaluate(
-    async () => (await (await fetch('/~/scry/trunk/guests.json')).json()).origin === 'https://urbit.example')));
-  await act(o, { 'set-origin': was });
+  try {
+    await o.$eval('#g-public', (e) => { e.value = 'https://urbit.example/'; e.dispatchEvent(new Event('change')); });
+    check('the public address field sets the address', await until(() => o.evaluate(
+      async () => (await (await fetch('/~/scry/trunk/guests.json')).json()).origin === 'https://urbit.example')));
+  } finally {
+    await act(o, { 'set-origin': was });
+  }
 }
 
 // The call server's join page (wire 19): the guest page's three files,
@@ -255,10 +263,16 @@ async function pageChecks(o) {
 async function joinChecks(o) {
   const sfu = await o.evaluate(async () => (await (await fetch('/~/scry/trunk/sfu.json')).json()).base);
   const text = async (u) => { try { const r = await fetch(u); return r.ok ? r.text() : null; } catch (e) { return null; } };
-  if (!(await text(`${sfu}/join/`))) { console.log(`-- join: skipped, no join page at ${sfu}/join/`); return; }
+  // asked for on its own, a missing join page is a failure
+  if (!(await text(`${sfu}/join/`))) {
+    if (only === 'join') check('the call server has a join page', false, `${sfu}/join/`);
+    else console.log(`-- join: skipped, no join page at ${sfu}/join/`);
+    return;
+  }
   const host = new URL(SHIP).host;
   for (const [f, on] of [['', LINE], ['guest.js', 'guest.js'], ['guest.css', 'guest.css']]) {
-    check(`the call server's join/${f} is the ship's`, (await text(`${sfu}/join/${f}`)) === (await text(`${SHIP}/apps/trunk/guest/${on}`)));
+    const ship = await text(`${SHIP}/apps/trunk/guest/${on}`);
+    check(`the call server's join/${f} is the ship's`, ship !== null && (await text(`${sfu}/join/${f}`)) === ship);
   }
   const a = await page();
   await a.goto(`${sfu}/join/#${host}/${LINE}`);
@@ -275,21 +289,46 @@ async function joinChecks(o) {
   check('it calls through the call server\'s own websocket', ws.length > 0 && ws.every((u) => new URL(u).host === new URL(sfu).host), ws);
   const kept = await a.evaluate(() => Object.keys(localStorage));
   check('the call server\'s origin keeps no secret', kept.length > 0 && kept.every((k) => !/secret/.test(k)), kept);
-  // a ticket gone stale: Join fetches a new one by way of the ship
+  // back from the ship: the right hash, the line's own title, the form
+  const home = (p) => until(() => p.evaluate(
+    (h) => location.hash === h && /Browser check/.test(document.querySelector('#room').textContent)
+      && !document.querySelector('#form').hidden, `#${host}/${LINE}`), 15000);
+  // a ticket gone stale: Join fetches a new one by way of the ship. The
+  // page takes a ticket only in a tab that went to the ship for it, with
+  // the word it took there, so mark this one as having gone, once.
+  const went = (p, word) => p.evaluateOnNewDocument((o, k, w) => {
+    if (location.origin === o && !sessionStorage.getItem('went')) { sessionStorage.setItem('went', '1'); sessionStorage.setItem(k, w); }
+  }, new URL(sfu).origin, `${host}/${LINE}:hop`, word);
   const c = await page();
-  const old = { host: '~old', title: 'Old', speak: true, ticket: { username: 'guest-0', location: `${sfu}/group/x/`, token: 'x', expires: 1, speak: true } };
+  await went(c, 'w');
+  const old = { host: '~old', title: 'Old', speak: true, hop: 'w', ticket: { username: 'guest-0', location: `${sfu}/group/x/`, token: 'x', expires: 1, speak: true } };
   await c.goto(`${sfu}/join/#${host}/${LINE}/${encodeURIComponent(JSON.stringify(old))}`);
   await c.waitForSelector('#form:not([hidden])');
+  check('a ticket the tab went for is shown', (await c.$eval('#room', (e) => e.textContent)) === 'Old');
+  // an hour on, by the page's clock, which is what the page goes by
+  await c.evaluate(() => { const now = Date.now; Date.now = () => now() + 3600000; });
   await c.type('#name', 'Stale');
-  await Promise.all([c.waitForNavigation(), c.click('#join')]);
-  check('a stale ticket goes back to the ship for a new one', await until(() => c.evaluate(
-    (h) => location.hash === h && /Browser check/.test(document.querySelector('#room').textContent)
-      && !document.querySelector('#form').hidden, `#${host}/${LINE}`), 15000));
+  // the hop starts inside the click, which may then find its page gone
+  await c.click('#join').catch(() => {});
+  check('a stale ticket goes back to the ship for a new one', await home(c));
+  check('and asks for Join once more', await c.evaluate(() => /Press Join again/.test(document.querySelector('#status').textContent)));
   await c.close();
+  // a ticket in a link someone made up: the page asks the ship instead
+  const d = await page();
+  await d.goto(`${sfu}/join/#${host}/${LINE}/${encodeURIComponent(JSON.stringify({ ...old, title: 'Forged' }))}`);
+  check('a ticket the tab did not go for is not shown', await home(d));
+  await d.close();
+  // one sent while the tab was away, by a page that steers it: the word
+  // is wrong
+  const e = await page();
+  await went(e, 'w');
+  await e.goto(`${sfu}/join/#${host}/${LINE}/${encodeURIComponent(JSON.stringify({ ...old, title: 'Forged', hop: 'guess' }))}`);
+  check('a ticket with the wrong word is not shown', await home(e));
+  await e.close();
   const b = await guest('Shipley');
   check('a join page guest and a ship page guest meet', await until(async () => !!(await tile(a, 'Shipley')) && !!(await tile(b, 'Joan')), 10000));
-  await sleep(3000);
-  check('and hear each other', (await bytes(a, 'audio', 'inbound-rtp')) > 0 && (await bytes(b, 'audio', 'inbound-rtp')) > 0);
+  check('and hear each other', await until(async () =>
+    (await bytes(a, 'audio', 'inbound-rtp')) > 0 && (await bytes(b, 'audio', 'inbound-rtp')) > 0, 10000));
 }
 
 // LISTEN is a listen link for the line 'browser-check' (README.md)

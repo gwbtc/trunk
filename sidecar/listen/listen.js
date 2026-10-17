@@ -24,7 +24,7 @@
   //
   // Keyed by stream rather than by publisher name: protocol.js may not
   // have filled in s.username by the time ondowntrack fires, and a name
-  // captured then could be the 'someone' fallback forever — a dot that
+  // captured then could be the 'someone' fallback forever, a dot that
   // never lands on a row anybody displays. Resolving the name at poll
   // time costs nothing and is always current.
   var streams = {};
@@ -32,6 +32,7 @@
   var elements = {};
   var ctx = null;
   var speakTimer = null;
+  var wake = null;   // the screen wake lock, on a phone
 
   function audGroup(tok) {
     try {
@@ -69,8 +70,8 @@
   /**
    * Take the gesture and hold it.
    *
-   * An <audio> created later — when a track finally arrives, seconds
-   * after the click — does not carry the click's activation, and
+   * An <audio> created later, when a track finally arrives seconds
+   * after the click, does not carry the click's activation, and
    * play() is refused with NotAllowedError. An AudioContext resumed
    * inside the click stays resumed, and sources attached to it
    * afterwards need no further gesture.
@@ -78,6 +79,8 @@
   function unlock() {
     try {
       var Ctx = window.AudioContext || window.webkitAudioContext;
+      // so the iPhone's silent switch does not silence the line
+      if (navigator.audioSession) navigator.audioSession.type = 'playback';
       if (!ctx && Ctx) ctx = new Ctx();
       if (ctx && ctx.state === 'suspended') ctx.resume();
     } catch (e) {
@@ -91,7 +94,7 @@
    * in Chrome.
    *
    * Uses the MediaStream protocol.js received with the track, rather
-   * than a hand-built one — that is what Galene's own client attaches,
+   * than a hand-built one. That is what Galene's own client attaches,
    * and a stream assembled by hand does not reliably play.
    */
   function play(id, mediaStream) {
@@ -100,7 +103,7 @@
 
     // Chrome will not pump a WebRTC stream that is only wired into an
     // AudioContext, so the stream is also parked on a MUTED element.
-    // That element is silent by design — the sound comes out of the
+    // That element is silent by design. The sound comes out of the
     // context below, which the click already unlocked.
     var pump = document.createElement('audio');
     pump.muted = true;
@@ -168,7 +171,7 @@
   }
 
   // protocol.js maintains conn.users itself; onuser is only a
-  // notification and carries (id, kind) — no username. Reading a
+  // notification and carries (id, kind), no username. Reading a
   // third argument that isn't there is why this list was empty.
   //
   // 'present' separates people on the line from other listeners:
@@ -256,8 +259,24 @@
     }, 250);
   }
 
+  // A phone that sleeps drops the line, so keep the screen on while
+  // listening.
+  function keepAwake() {
+    if (navigator.wakeLock && document.visibilityState === 'visible' && conn && !wake) {
+      navigator.wakeLock.request('screen').then(function (w) { wake = w; w.onrelease = function () { wake = null; }; }).catch(function () {});
+    }
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+
   function stop() {
-    if (conn) { try { conn.close(); } catch (e) {} conn = null; }
+    // the old connection's handlers go first, so its close cannot
+    // overwrite why we stopped or tear down a new one
+    if (conn) {
+      conn.onclose = conn.onerror = conn.onjoined = conn.onuser = conn.onusermessage = conn.ondownstream = null;
+      try { conn.close(); } catch (e) {}
+      conn = null;
+    }
+    if (wake) { wake.release().catch(function () {}); wake = null; }
     if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
     Object.keys(elements).forEach(function (k) {
       try { elements[k].src.disconnect(); } catch (e) {}
@@ -283,7 +302,7 @@
     // start on its own.
     unlock();
 
-    conn = new ServerConnection();
+    var c = conn = new ServerConnection();
 
     conn.onconnected = function () {
       this.join(group, 'listener', { type: 'token', token: token });
@@ -305,9 +324,10 @@
       goBtn.className = 'leave';
       goBtn.disabled = false;
       goBtn.onclick = function () { stop(); say('Stopped.'); };
+      keepAwake();
     };
 
-    // (id, kind) only — the user record lives in conn.users.
+    // (id, kind) only. The user record lives in conn.users.
     conn.onuser = function () { renderWho(); };
 
     // Mic state, broadcast by Talon clients. Galène relays kinds it
@@ -330,7 +350,7 @@
         if (st === 'connected') say('Listening');
       };
       s.ondowntrack = function (track, transceiver, stream_) {
-        // Hold the stream, not its name — see the `streams` comment.
+        // Hold the stream, not its name. See the `streams` comment.
         var e = streams[s.id] || (streams[s.id] = { s: s, rs: [] });
         e.s = s;
         e.rs.push(transceiver.receiver);
@@ -339,7 +359,8 @@
         play(s.id, s.stream || stream_);
         say('Listening');
       };
-      s.onclose = function () { say('Listening. Nothing to hear yet.'); };
+      // a stream of a connection we stopped closes after the fact
+      s.onclose = function () { if (c === conn) say('Listening. Nothing to hear yet.'); };
     };
 
     conn.onclose = function () {
@@ -347,16 +368,22 @@
       stop();
     };
 
+    // stop() takes the close handler away, so this says the last word.
+    // protocol.js's own errors are kept, but a socket error or a timeout
+    // says nothing a listener can use.
     conn.onerror = function (e) {
-      say((e && e.message) || 'Connection failed.', true);
+      var m = (e && e.message) || '';
+      if (m && !/^(Socket error|Timeout)/.test(m)) say(m, true);
+      else say('You were disconnected. Press Listen to come back.');
       stop();
     };
 
     // Galène tells us its websocket endpoint in the group's status.
     fetch('/group/' + group + '/.status')
       .then(function (r) { return r.json(); })
-      .then(function (st) { conn.connect(st.endpoint); })
+      .then(function (st) { if (c === conn) c.connect(st.endpoint); })
       .catch(function () {
+        if (c !== conn) return;
         say('Could not reach the server.', true);
         stop();
       });

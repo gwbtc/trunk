@@ -7,8 +7,9 @@
 //   on the call server, at /join/#<ship's host>/<code> (wire 19). There
 //   Galène's CSP lets the page connect only to its own origin, so it
 //   cannot reach the ship. It sends the guest to the ship's page with
-//   #hop, which gets a ticket and sends them back with it in the
-//   fragment. The call then runs on the call server's own origin, so
+//   #hop/<a random word>, which gets a ticket and sends them back with
+//   it and the word in the fragment. The call then runs on the call
+//   server's own origin, so
 //   Galène needs no allowOrigin for the ship. The guest's secret never
 //   leaves the ship's origin.
 //
@@ -35,6 +36,7 @@
   // guests share one origin, so there it is per ship too.
   var key = onShip ? code : host + '/' + code;
   var given = null;    // on a call server: the room and ticket the ship sent
+  var got = 0;         // when they came
   var conn = null, up = null, vsend = null, mic = null, cam = null, screen = null, preview = null;
   var muted = false, speak = false;
   var videoOn = {};   // by connection id, from talon-video
@@ -42,8 +44,9 @@
   var streams = {};   // by connection id: the stream that user publishes
   var voices = {};    // by connection id: the receiver of their audio
   var speakTimer = null;
-  var leaving = false; // the guest pressed Leave, so do not rejoin
+  var gen = 0;         // bumped by a full stop, so late work can tell the call ended
   var tries = 0;       // rejoins since the last good join
+  var rejoin = null;   // the timer of a rejoin to come
   var wake = null;     // the screen wake lock, on a phone
   var tabs = window.BroadcastChannel ? new BroadcastChannel('trunk-guest-' + key) : null;
 
@@ -89,7 +92,9 @@
     t.append(v, face, name);
     t.tabIndex = 0;
     t.title = 'Enlarge';
-    t.onclick = function () { t.classList.toggle('big'); };
+    t.setAttribute('role', 'button');
+    t.setAttribute('aria-pressed', 'false');
+    t.onclick = function () { t.setAttribute('aria-pressed', t.classList.toggle('big')); };
     t.onkeydown = function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.onclick(); }
     };
@@ -97,7 +102,10 @@
     // A shared screen is wider than any camera here (1280), so give it
     // the room, unless someone is already enlarged.
     v.addEventListener('resize', function () {
-      if (conn && id !== conn.id && v.videoWidth > 1280 && !document.querySelector('.tile.big')) t.classList.add('big');
+      if (conn && id !== conn.id && v.videoWidth > 1280 && !document.querySelector('.tile.big')) {
+        t.classList.add('big');
+        t.setAttribute('aria-pressed', 'true');
+      }
     });
     $('grid').append(t);
     return t;
@@ -106,7 +114,9 @@
   // One tile per person on the call, ourselves first. Listeners from a
   // listen link have no voice or video, so they are only counted.
   function render() {
-    var users = (conn && conn.users) || {};
+    // after stop(), an old socket's close still closes its streams
+    if (!conn) return;
+    var users = conn.users || {};
     var all = Object.keys(users);
     var ids = all.filter(function (id) { return users[id].username !== 'listener'; });
     var listening = all.length - ids.length;
@@ -134,7 +144,7 @@
       if (v.srcObject !== src) {
         v.srcObject = src;
         // Safari plays sound only after a tap when no mic is in use
-        if (src) v.play().catch(function () { $('sound').hidden = false; });
+        if (src) v.play().catch(function (e) { if (e && e.name === 'NotAllowedError') $('sound').hidden = false; });
       }
       var on = me ? !!(screen || cam) : !!videoOn[id];
       t.classList.toggle('video', on);
@@ -147,11 +157,13 @@
   function startSpeaking() {
     if (speakTimer) return;
     speakTimer = setInterval(function () {
-      if (up && conn && !muted) up.pc.getStats().then(function (st) {
+      var mine = conn && document.getElementById('t-' + conn.id);
+      // muted, nobody hears us, so no ring
+      if (mine && muted) mine.classList.remove('speaking');
+      else if (mine && up) up.pc.getStats().then(function (st) {
         var loud = false;
         st.forEach(function (r) { if (r.type === 'media-source' && r.kind === 'audio' && r.audioLevel > 0.02) loud = true; });
-        var t = document.getElementById('t-' + conn.id);
-        if (t) t.classList.toggle('speaking', loud);
+        mine.classList.toggle('speaking', loud && !muted);
       }).catch(function () {});
       Object.keys(voices).forEach(function (id) {
         voices[id].getStats().then(function (st) {
@@ -175,7 +187,9 @@
       var s = document.createElement('script');
       s.src = onShip ? '/apps/trunk/protocol.js' : '/protocol.js';
       s.onload = ok;
-      s.onerror = function () { fail(new Error('Could not reach the call server.')); };
+      s.onerror = function () {
+        fail(new Error('Could not reach the ' + (onShip ? 'host' : 'call server') + '. Try again in a minute.'));
+      };
       document.head.append(s);
     });
   }
@@ -184,13 +198,23 @@
 
   // `keep`: a rejoin is coming, so keep the mic, camera, share and mute
   function stop(keep) {
-    if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} conn = null; }
+    if (conn) {
+      // a late error or message from the old socket must not touch the page
+      conn.onclose = conn.onerror = conn.onjoined = conn.onuser = conn.onusermessage = conn.ondownstream = null;
+      try { conn.close(); } catch (e) {}
+      conn = null;
+    }
     up = vsend = null;
     streams = {}; videoOn = {}; micOff = {}; voices = {};
     if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
     if (wake) { wake.release().catch(function () {}); wake = null; }
     $('grid').replaceChildren();
     if (keep) return;
+    gen++;
+    clearTimeout(rejoin);
+    rejoin = null;
+    // a Join after this goes back to the ship for a new ticket
+    given = null;
     stopTracks(mic); stopTracks(cam); stopTracks(screen);
     mic = cam = screen = preview = null;
     muted = false;
@@ -251,20 +275,46 @@
   document.addEventListener('visibilitychange', keepAwake);
 
   // To the ship's own page, which sends the guest back with a ticket.
-  function hop() {
+  // The mark is a random word the ship sends back, so a ticket in a link
+  // someone made up is never shown, even when their page steers this tab
+  // while it is away. A page that cannot keep the mark would hop forever.
+  // `again`: the guest pressed Join, so tell them to press it once more.
+  function hop(again) {
+    var word = crypto.getRandomValues(new Uint32Array(4)).join('-');
+    try {
+      sessionStorage.setItem(key + ':hop', word);
+      if (again) sessionStorage.setItem(key + ':again', '1');
+      else sessionStorage.removeItem(key + ':again');
+    } catch (e) {
+      say('This browser blocks the storage this page needs. Allow it for this site, then open the link again.', true);
+      return;
+    }
     say('Taking you to the host…');
-    location.replace(location.protocol + '//' + host + base + '#hop');
+    location.replace(location.protocol + '//' + host + base + '#hop/' + word);
+  }
+
+  // the mark (hop or again) this tab set before it went, or '', once
+  function marked(k) {
+    try {
+      var m = sessionStorage.getItem(key + ':' + k);
+      sessionStorage.removeItem(key + ':' + k);
+      return m || '';
+    } catch (e) {
+      return '';
+    }
   }
 
   // A guest's ticket. On the ship, from its POST route, and the page
   // keeps the secret that names the guest. On a call server, the one the
   // ship sent back while it has a minute left, or else a trip for a new
-  // one (null).
+  // one (null). A ticket lasts an hour from when the ship made it, just
+  // before it came here. This clock may differ from the ship's, so it
+  // counts from when it came, not from its expiry.
   async function ticket() {
     if (!onShip) {
       var g = given && given.ticket;
-      if (g && g.expires * 1000 > Date.now() + 60000) return g;
-      hop();
+      if (g && Date.now() - got < 59 * 60000) return g;
+      hop(true);
       return null;
     }
     var r = await fetch(base, {
@@ -278,11 +328,11 @@
     return t;
   }
 
-  // On the ship, asked by a call server's page (#hop): get the room and
-  // a ticket, and go back with them. They go only to the origin of the
-  // ticket's own location, which is the call server this ship chose,
-  // never to one a link names. The secret stays here.
-  async function back() {
+  // On the ship, asked by a call server's page (#hop/<word>): get the
+  // room and a ticket, and go back with them and the word. They go only
+  // to the origin of the ticket's own location, which is the call server
+  // this ship chose, never to one a link names. The secret stays here.
+  async function back(word) {
     say('Taking you to the call…');
     try {
       var r = await fetch(base + '/room', { cache: 'no-store' });
@@ -291,14 +341,17 @@
       var t = await ticket();
       delete t.secret;
       location.replace(new URL(t.location).origin + '/join/#' + host + '/' + code + '/'
-        + encodeURIComponent(JSON.stringify({ host: room.host, title: room.title, speak: room.speak, ticket: t })));
+        + encodeURIComponent(JSON.stringify({ host: room.host, title: room.title, speak: room.speak, ticket: t, hop: word })));
     } catch (e) {
       fail(e);
     }
   }
 
   async function join(ev) {
-    if (ev) { ev.preventDefault(); leaving = false; tries = 0; }
+    if (ev) { ev.preventDefault(); tries = 0; }
+    // a full stop while this waits makes it stale: it lets go of what it
+    // got and leaves the status alone
+    var run = gen;
     var name = $('name').value.trim();
     if (!name) return;
     keep('name', name);
@@ -307,23 +360,27 @@
     try {
       // the ticket first, so a link that has ended never asks for the mic
       var t = await ticket();
-      if (!t) return;
+      if (run !== gen || !t) return;
       // on a call server, only its own websocket
       var endpoint = onShip ? t.endpoint
         : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
-      if (t.speak && !mic) {
-        say('Allow the microphone when your browser asks.');
-        try {
-          mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        } catch (e) {
-          say('No microphone, so others will not hear you.');
-        }
-      }
-      var group = t.location.split('/group/')[1].replace(/\/$/, '');
       if (location.protocol === 'https:' && endpoint.indexOf('ws:') === 0) {
         throw new Error('The host\'s call server does not take secure connections yet.');
       }
+      // an address that is not secure has no microphone to ask for
+      if (t.speak && !mic && window.isSecureContext) {
+        say('Allow the microphone when your browser asks.');
+        var m = null;
+        try { m = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); } catch (e) {}
+        if (run !== gen) { stopTracks(m); return; }
+        mic = m;
+        if (!mic) say('No microphone, so others will not hear you.');
+      }
+      var group = t.location.split('/group/')[1].replace(/\/$/, '');
       await loadProtocol();
+      if (run !== gen) return;
+      var joined = false;  // on the call, on this connection
+      var why = null;      // what went wrong before the join, if protocol.js said
       conn = new ServerConnection();
       conn.onconnected = function () {
         this.join(group, t.username, { type: 'token', token: t.token }, { name: name });
@@ -335,6 +392,7 @@
           return;
         }
         if (kind !== 'join') return;
+        joined = true;
         this.request({ '': ['audio', 'video'] });
         var can = perms.indexOf('present') >= 0;
         if (can) publish();
@@ -351,17 +409,24 @@
         $('share').hidden = !can || !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
         say(!can ? 'You are watching and listening.'
           : mic ? 'You are on the call.'
+          : !window.isSecureContext ? 'You are on the call. This address is not secure, so others cannot hear you.'
           : 'Others cannot hear you. Allow the microphone in your browser, then leave and join again.', can && !mic);
         announce();
         startSpeaking();
         render();
       };
       conn.onuser = function (id, kind) {
-        if (kind === 'delete') { delete streams[id]; delete videoOn[id]; delete micOff[id]; }
+        if (kind === 'delete') { delete streams[id]; delete videoOn[id]; delete micOff[id]; delete voices[id]; }
         if (kind === 'add' && id !== conn.id) announce(id);
         render();
       };
       conn.onusermessage = function (source, dest, username, time, privileged, kind, error, value) {
+        // an op removed us; the server closes the socket next
+        if (kind === 'kicked' && privileged) {
+          stop();
+          say((typeof value === 'string' && value) || 'The host removed you from the call.', true);
+          return;
+        }
         if (kind === 'talon-video') videoOn[source] = !!value;
         else if (kind === 'talon-mute') micOff[source] = !!value;
         else return;
@@ -379,24 +444,39 @@
         };
       };
       // a drop the guest did not ask for: rejoin, keeping the mic and
-      // camera, a few times before giving up
+      // camera, a few times before giving up. A first join that never
+      // got on would only fail again.
       conn.onclose = function () {
-        if (!leaving && tries < 3) {
+        if (!joined && !tries) {
+          // from the ship's page, most often the call server does not
+          // allow the ship's origin, which no retry fixes
+          say(why || 'Could not reach the call server. ' + (onShip ? 'Tell the host.' : 'Try again in a minute.'), true);
+          stop();
+          return;
+        }
+        if (tries < 3) {
           tries++;
           stop(true);
-          setTimeout(join, 1500 * tries);
+          rejoin = setTimeout(join, 1500 * tries);
           return;
         }
         say('You were disconnected. Press Join again to come back.');
         stop();
       };
-      conn.onerror = function (e) { say((e && e.message) || 'The connection failed.', true); };
+      // a close always follows, and says what happened. Before the join,
+      // keep what protocol.js said, such as a Galène version it cannot
+      // speak, but not a socket error or a timeout, which say nothing.
+      conn.onerror = function (e) {
+        if (e && e.name === 'Error' && e.message && !/^(Socket error|Timeout)/.test(e.message)) why = e.message;
+        if (joined) say('The connection failed.', true);
+      };
       conn.connect(endpoint);
     } catch (e) {
-      if (!leaving && tries && tries < 3) {
+      if (run !== gen) return;
+      if (tries && tries < 3) {
         tries++;
         stop(true);
-        setTimeout(join, 1500 * tries);
+        rejoin = setTimeout(join, 1500 * tries);
         return;
       }
       fail(e);
@@ -413,8 +493,12 @@
     render();
   };
 
+  // each button waits for its device, so a second press makes no
+  // second stream that nothing stops
   $('camera').onclick = async function () {
     if (cam) { stopTracks(cam); cam = null; return showVideo(); }
+    $('camera').disabled = true;
+    var run = gen;
     try {
       cam = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
     } catch (e) {
@@ -422,26 +506,36 @@
         ? 'The camera is blocked. Allow it in your browser, then press Start camera again.'
         : e && e.name === 'NotFoundError' ? 'No camera found.' : 'The camera is not available.', true);
       return;
+    } finally {
+      $('camera').disabled = false;
     }
+    // the call ended while the browser was asking: let the camera go
+    if (run !== gen) { stopTracks(cam); cam = null; return; }
     showVideo();
   };
 
   $('share').onclick = async function () {
     if (screen) { stopTracks(screen); screen = null; return showVideo(); }
+    $('share').disabled = true;
+    var run = gen;
     try {
       screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
     } catch (e) {
       return;
+    } finally {
+      $('share').disabled = false;
     }
+    if (run !== gen) { stopTracks(screen); screen = null; return; }
     // The browser's own "Stop sharing" ends the track; go back to the camera.
     screen.getVideoTracks()[0].onended = function () { screen = null; showVideo(); };
     showVideo();
   };
 
-  $('leave').onclick = function () { leaving = true; stop(); say('You left the call.'); };
-  // one person, one seat: joining in another tab leaves this one
+  $('leave').onclick = function () { stop(); say('You left the call.'); };
+  // one person, one seat: joining in another tab leaves this one, on
+  // the call or about to rejoin it
   if (tabs) tabs.onmessage = function (e) {
-    if (e.data === 'joined' && conn) { leaving = true; stop(); say('You joined this call in another tab, so this one left.'); }
+    if (e.data === 'joined' && (conn || rejoin)) { stop(); say('You joined this call in another tab, so this one left.'); }
   };
   $('sound').onclick = function () {
     $('sound').hidden = true;
@@ -457,12 +551,16 @@
     speak = !!room.speak;
     $('name').value = recall('name') || '';
     $('form').hidden = false;
+    // back from the ship after a Join, which only fetched a ticket
+    var again = marked('again');
     if (!window.isSecureContext) say('This address is not secure, so your browser blocks the microphone and camera. You can still watch and listen.', true);
+    else if (again) say('Press Join again to join the call.');
     else say(speak ? 'You will be asked for your microphone. Headphones keep echo off the call.' : 'You can watch and listen on this call.');
   }
 
-  if (onShip && location.hash === '#hop') {
-    back();
+  // a join page from before the word sends a bare #hop
+  if (onShip && hash[0] === 'hop') {
+    back(hash[1] || '');
   } else if (onShip) {
     fetch(base + '/room', { cache: 'no-store' })
       .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
@@ -473,10 +571,18 @@
       .catch(fail);
   } else if (!/^[a-z0-9.-]+(:[0-9]+)?$/i.test(host || '') || !/^[a-z0-9-]+$/.test(code || '')) {
     say('This link is not complete. Ask the host for it again.', true);
-  } else if (!hash[2]) {
-    hop();
   } else {
+    // the room and ticket only from the ship, after this tab asked, with
+    // the word this tab took there. Another page may send this tab here
+    // with a ticket of its own, but it cannot know the word.
+    var asked = marked('hop');
     try { given = JSON.parse(decodeURIComponent(hash[2])); } catch (e) { given = null; }
+    if (!asked || !hash[2] || (given && given.hop !== asked)) {
+      given = null;
+      hop();
+      return;
+    }
+    got = Date.now();
     // the ticket is a bearer token for an hour, so not in the address bar
     history.replaceState(null, '', location.pathname + '#' + host + '/' + code);
     if (given && given.ticket) ready(given);

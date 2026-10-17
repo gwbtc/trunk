@@ -90,7 +90,7 @@
     </div>
   </header>
 
-  <div id="banner" hidden></div>
+  <div id="banner" role="alert" hidden></div>
 
   <section>
     <h2>Notifications</h2>
@@ -148,7 +148,7 @@
       <label for="g-ttl">Lasts</label>
       <select id="g-ttl"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="604800">1 week</option><option value="2592000">30 days</option></select>
     </div>
-    <button class="primary" id="g-make">Make an invite link</button>
+    <button class="primary" id="g-make" disabled>Make an invite link</button>
   </section>
 
   <section>
@@ -160,6 +160,7 @@
       <label for="g-public">This ship's public address<span class="hint">Such as https://urbit.example, with nothing after the host. Apps cannot make links until it is set.</span></label>
       <input id="g-public" class="field" maxlength="256" placeholder="https://urbit.example">
     </div>
+    <p class="hint" id="g-public-http" hidden>This address is http. Guests need https, so use http only for testing.</p>
   </section>
 
   <section>
@@ -205,8 +206,14 @@ function ago(ms) {
   return new Date(ms).toLocaleString();
 }
 
-function banner(text, link) {
+// Who set the banner: 'load' and 'guests' clear only their own, and an
+// action's stays until the next action.
+let bannerBy = '';
+function banner(text, link, by = 'act') {
   const b = $('banner');
+  bannerBy = text ? by : '';
+  // the poll repeats an error every 15 s: say it, and scroll to it, once
+  if (text + (link ? ' ' + link.text : '') === (b.hidden ? '' : b.textContent)) return;
   b.textContent = text;
   if (link) {
     b.append(' ');
@@ -224,19 +231,19 @@ async function load() {
   try {
     r = await fetch('/~/scry/trunk/debug.json', { credentials: 'same-origin', cache: 'no-store' });
   } catch (e) {
-    banner('Could not reach your ship.');
+    banner('Could not reach your ship.', null, 'load');
     return;
   }
   if (r.status === 401 || r.status === 403) {
-    banner('You are signed out.', { text: 'Sign in', href: '/~/login?redirect=/apps/trunk' });
+    banner('You are signed out.', { text: 'Sign in', href: '/~/login?redirect=/apps/trunk' }, 'load');
     return;
   }
   if (!r.ok) {
-    banner('Your ship answered ' + r.status + '. Is trunk installed and running?');
+    banner('Your ship answered ' + r.status + '. Is trunk installed and running?', null, 'load');
     return;
   }
   data = await r.json();
-  banner('');
+  if (bannerBy === 'load') banner('');
   render();
   loadGuests();
 }
@@ -260,30 +267,35 @@ async function loadGuests() {
   try {
     [g, rooms] = await Promise.all([scry('guests.json'), scry('rooms.json')]);
   } catch (e) {
+    banner('Could not load your guest links.', null, 'guests');
     return;
   }
+  if (bannerBy === 'guests') banner('');
   // a rebuild closes an open picker and loses a button's "Copied", so
   // rebuild only when something changed
   const seen = JSON.stringify([g, rooms]);
   if (seen === lastGuests) return;
   lastGuests = seen;
   hosted = rooms.map((r) => r.name);
+  linked = new Set(g.links.map((l) => l.code));
   const title = {};
   for (const r of rooms) title[r.name] = r.title || r.name;
 
+  // a line on its own call server cannot seat guests
+  const lines = rooms.filter((r) => !r['custom-sfu']).map((r) => r.name);
   const pick = $('g-room');
   pick.replaceChildren();
-  for (const r of rooms) {
-    const o = el('option', null, title[r.name]);
-    o.value = r.name;
+  for (const n of lines) {
+    const o = el('option', null, title[n]);
+    o.value = n;
     pick.append(o);
   }
   const fresh = el('option', null, 'New line…');
   fresh.value = '';
   pick.append(fresh);
-  pick.value = (chosen === '' || title[chosen]) ? chosen : (rooms.length ? rooms[0].name : '');
+  pick.value = (chosen === '' || lines.includes(chosen)) ? chosen : (lines[0] || '');
   newLine();
-  $('g-make').disabled = false;
+  $('g-make').disabled = making;
 
   const box = $('invites');
   box.replaceChildren();
@@ -364,17 +376,24 @@ async function loadGuests() {
     row.append(lab, on);
     hosts.append(row);
   }
-  if (document.activeElement !== $('g-public')) $('g-public').value = g.origin || '';
+  if (!typing) $('g-public').value = g.origin || '';
+  $('g-public-http').hidden = !/^http:/.test(g.origin || '');
 }
 
-// the ship's public address, which an app's link names (wire 19)
+// the ship's public address, which an app's link names (wire 19). After
+// a change the field shows what the ship kept, refused or not.
+let typing = false;  // the owner is changing the field, so leave it be
+$('g-public').oninput = () => { typing = true; };
+$('g-public').onblur = () => { typing = false; };
 $('g-public').onchange = async () => {
+  typing = false;
   const v = $('g-public').value.trim().toLowerCase().replace(/\/+$/, '');
   if (v && !/^https?:\/\/[a-z0-9.:-]+$/.test(v)) {
     banner('An address is https:// and a host, such as https://urbit.example, with nothing after it.');
-    return;
+  } else {
+    await act({ 'set-origin': v });
   }
-  if (await act({ 'set-origin': v })) reloadGuests();
+  reloadGuests();
 };
 
 // the Tlon groups this ship is in, for a new line's members
@@ -396,9 +415,11 @@ async function loadGroups() {
 }
 
 let hosted = [];
+let linked = new Set();  // the permanent links' codes
 let lastGuests = '';
 let shown = new Set();   // the link codes on screen
 let justMade = false;    // the next rebuild follows a Make
+let making = false;      // a Make is running, so a rebuild leaves its button off
 // after an action, rebuild even if nothing changed: a refused one must
 // still give back the button or switch it disabled
 function reloadGuests() {
@@ -444,53 +465,66 @@ if (location.protocol !== 'https:' || /^(localhost|127\.|\[::1\])/.test(location
 }
 
 $('g-make').onclick = async () => {
-  let name = $('g-room').value;
-  let code = $('g-code').value.trim().toLowerCase().replace(/\s+/g, '-');
-  if (code && !/^[a-z][a-z0-9-]{2,63}$/.test(code)) {
-    banner('A link name is 3 to 64 lower case letters, digits and hyphens, starting with a letter.');
-    return;
-  }
-  // eight random characters: about 41 bits, too many to guess
-  if (code && $('g-tail').checked) {
-    const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    code += '-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => abc[b % 36]).join('');
-  }
-  $('g-make').disabled = true;
-  if (!name) {
-    const title = $('g-title').value.trim();
-    if (!title) {
-      banner('Give the new line a title.');
-      $('g-make').disabled = false;
+  // a return below still runs the finally before its rebuild lands
+  making = true;
+  try {
+    let name = $('g-room').value;
+    let code = $('g-code').value.trim().toLowerCase().replace(/\s+/g, '-');
+    if (code && !/^[a-z][a-z0-9-]{2,63}$/.test(code)) {
+      banner('A link name is 3 to 64 lower case letters, digits and hyphens, starting with a letter.');
       return;
     }
-    name = roomName(title);
-    if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return reloadGuests();
-    const grp = $('g-group').value;
-    if (grp) {
-      const cut = grp.indexOf('/');
-      const group = { ship: grp.slice(0, cut), name: grp.slice(cut + 1) };
-      if (!await act({ 'bind-room': { name, group } })) return reloadGuests();
+    // eight random characters: about 41 bits, too many to guess
+    if (code && $('g-tail').checked) {
+      const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      code += '-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => abc[b % 36]).join('');
     }
-    $('g-title').value = '';
-    chosen = name;
+    if (linked.has(code) && !confirm('The link ' + code + ' already exists. Move it to this line?')) return;
+    $('g-make').disabled = true;
+    if (!name) {
+      const title = $('g-title').value.trim();
+      if (!title) {
+        banner('Give the new line a title.');
+        $('g-make').disabled = false;
+        return;
+      }
+      name = roomName(title);
+      if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return reloadGuests();
+      // the line is open, so a retry after a failed bind does not open another
+      chosen = name;
+      const grp = $('g-group').value;
+      if (grp) {
+        const cut = grp.indexOf('/');
+        const group = { ship: grp.slice(0, cut), name: grp.slice(cut + 1) };
+        if (!await act({ 'bind-room': { name, group } })) {
+          // the page cannot bind a line later
+          banner('The line is open, but it is not tied to the group. Close it and make it again to bind it.');
+          return reloadGuests();
+        }
+      }
+      $('g-title').value = '';
+    }
+    const ok = code
+      ? await act({ 'guest-link': { code, name, speak: $('g-speak').checked } })
+      : await act({ 'invite-guests': {
+          name,
+          speak: $('g-speak').checked,
+          ttl: Number($('g-ttl').value),
+          uses: Number($('g-uses').value),
+        } });
+    if (ok) {
+      $('g-code').value = '';
+      linkMode();
+      justMade = true;
+    }
+    reloadGuests();
+  } finally {
+    making = false;
   }
-  const ok = code
-    ? await act({ 'guest-link': { code, name, speak: $('g-speak').checked } })
-    : await act({ 'invite-guests': {
-        name,
-        speak: $('g-speak').checked,
-        ttl: Number($('g-ttl').value),
-        uses: Number($('g-uses').value),
-      } });
-  if (ok) {
-    $('g-code').value = '';
-    linkMode();
-    justMade = true;
-  }
-  reloadGuests();
 };
 
 async function act(body) {
+  if (bannerBy === 'act') banner('');
   let r;
   try {
     r = await fetch('/apps/trunk/action', {
@@ -508,12 +542,27 @@ async function act(body) {
   return r.status === 204;
 }
 
+// A section's data with its times as they read now. The poll rebuilds a
+// section only when this changes, since a rebuild drops focus and closes
+// an open select.
+const view = (x) => JSON.stringify(x, (k, v) => (['registered', 'at', 'last'].includes(k) && typeof v === 'number' ? ago(v) : v));
+let lastDevices = '';
+let lastSenders = '';
+
 function render() {
   const k = data.kinds;
   for (const f of ['dm', 'club', 'replies', 'calls', 'reads', 'notices']) $('k-' + f).checked = !!k[f];
   $('k-channel').value = k.channel;
   $('version').textContent = 'Wire ' + data.wire + ', desk …' + String(data['desk-hash']).slice(-5);
+  renderDevices();
+  renderSenders();
+  renderStatusAndLog();
+}
 
+function renderDevices() {
+  const seen = view([data.devices, data.drops]);
+  if (seen === lastDevices) return;
+  lastDevices = seen;
   const dev = $('devices');
   dev.replaceChildren();
   if (!data.devices.length) {
@@ -558,10 +607,15 @@ function render() {
       dev.append(el('div', 'dropped', x.id + ' (' + kind + '), answered ' + x.reason + ', ' + ago(x.at)));
     }
   }
+}
 
+function renderSenders() {
+  const senders = data.senders || [];
+  const seen = view(senders);
+  if (seen === lastSenders) return;
+  lastSenders = seen;
   const sd = $('senders');
   sd.replaceChildren();
-  const senders = data.senders || [];
   if (!senders.length) sd.append(el('div', 'empty', 'No app has sent an alert yet.'));
   for (const x of senders.slice().sort((a, b) => (b.last || 0) - (a.last || 0))) {
     const row = el('div', 'row');
@@ -593,6 +647,8 @@ function render() {
       box.disabled = true;
       cap.disabled = true;
       await act({ 'push-app': { id: x.id, allow: box.checked, cap: Number(cap.value) } });
+      // rebuild even if refused, to give back the switch and its value
+      lastSenders = '';
       load();
     };
     box.onchange = save;
@@ -605,7 +661,9 @@ function render() {
     row.append(lab, ctl);
     sd.append(row);
   }
+}
 
+function renderStatusAndLog() {
   const st = $('status');
   st.replaceChildren();
   const add = (k, v, good) => {

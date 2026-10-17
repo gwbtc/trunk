@@ -1,6 +1,6 @@
 # Testing trunk on the dev platform
 
-Trunk's Hoon is tested on its own fleet set from [hoon-development](https://github.com/nisfeb/hoon-development): a fake ship built from the dev platform, never ~ricsul-bilwyt or the older trunk ships (~hec, ~nym). AGENTS.md's "Testing" section still holds; this file is how to do it on the fleet.
+Trunk's Hoon is tested on its own fleet set from [hoon-development](https://github.com/nisfeb/hoon-development): a fake ship built from the dev platform, never ~ricsul-bilwyt or the older trunk ships (~hec, ~nym). AGENTS.md's "Testing" section still holds. This file is how to do it on the fleet.
 
 | | |
 |---|---|
@@ -43,9 +43,9 @@ The suites in `tests/lib/` run through `vere eval` with the kit's `offline-test.
 | suite | covers |
 |---|---|
 | `trunk-push`, `trunk-guest`, `mnemonym` | `gen/test-push`, `gen/test-guest` and `gen/test-mnemonym` as one test each. A failure prints the cases the generator names. The generators stay the checks of record. |
-| `trunk-jwt` | two Galène tokens (speaker and listener) pinned byte for byte. Both were checked outside Hoon with Python's `hmac`: the signature verifies and the claims decode. Also `+unix-secs`. |
+| `trunk-jwt` | two Galène tokens (speaker and listener) pinned byte for byte. Both were checked outside Hoon with Python's `hmac`. The signature verifies and the claims decode. Also `+unix-secs`. |
 | `trunk-json` | `+roster-from-json`: both schema generations, the admin rules, bad keys and values skipped, unknown shapes giving `~`. |
-| `grubbery-marc` | `docs/grubbery-trunk-action.hoon` nests in `action:trunk` (what trunk's `!<` needs), a case trunk lacks fails that check, and each of the six actions comes through unchanged. |
+| `grubbery-marc` | `docs/grubbery-trunk-action.hoon` nests in `action:trunk` (what trunk's `!<` needs), a case trunk lacks fails that check, and each of the seven actions comes through unchanged. |
 
 The ship run is the verdict.
 
@@ -62,19 +62,19 @@ $F reset trunk compiled                           # ship-checks leaves an app on
 
 - `version`: `/~/scry/trunk/version.json` answers the worktree's `+wire-version`.
 - `gens`: `+trunk!test-push`, `test-guest` and `test-mnemonym`, built from the ship's own `%trunk` desk as the dojo builds them, answer `%ok`. A failure prints the generator's answer.
-- `allow`: from a thread (gall's `%spider`, so "another agent"): `%set-call-mode` and `%app-hosting` are refused (the nack's trace is the allowlist's `?>` in `+on-poke`), a first `%app-room-open-as` registers `spider/probe` switched off with no room, the owner switches it on through `/apps/trunk/action`, then an open makes the room and a close removes it. Each step is read back from `/x/guests`.
-- `marc`: grubbery's `/code/mar/clay/trunk/trunk-action.hoon` on the ship is `docs/grubbery-trunk-action.hoon`, header comment aside. It reads the file with hoon-development's `bridge/u` and skips without it.
+- `allow`: runs from a thread, which is gall's `%spider` and so "another agent". `%set-call-mode` and `%app-hosting` are refused, and the nack's trace is the allowlist's `?>` in `+on-poke`. A first `%app-room-open-as` registers `spider/probe` switched off with no room, the owner switches it on through `/apps/trunk/action`, then an open makes the room and a close removes it. Each step is read back from `/x/guests`.
+- `marc`: grubbery's trunk marc on the ship is `docs/grubbery-trunk-action.hoon`, header comment aside. Grubbery's desk holds it as `gub/mar/clay/trunk/trunk-action.hoon` and `gub/mar/clay/trunk/trunk/action.hoon`, which grubbery's ball serves as `/code/mar/clay/trunk/trunk-action.hoon` and `/code/mar/clay/trunk/trunk/action.hoon`. The check reads the ball's `/code/mar/clay/trunk/trunk-action.hoon` with hoon-development's `bridge/u`, and skips without it.
 
-Every read is guarded by a `%cu` scry first: on vere 4.6 a `.^` that misses cancels every thread on the ship. The owner's cookie comes from the kit's `ship-cookie.sh` over `conn.sock` and is never printed.
+Every read is guarded by a `%cu` scry first. On vere 4.6, a `.^` that misses cancels every thread on the ship. The owner's cookie comes from the kit's `ship-cookie.sh` over `conn.sock` and is never printed.
 
 ## Deploying a change
 
 ```sh
-scripts/fleet-deploy.sh $PIER $URL                # copy app lib mar sur gen and |commit %trunk
+scripts/fleet-deploy.sh $PIER $URL                # copy app lib mar sur gen desk.bill desk.docket-0 and |commit %trunk
 scripts/fleet-deploy.sh $PIER $URL --test-desk    # also make %trunk-test and run the kit's setup
 ```
 
-The first run on a ship does the main README's "The desk" in the ship's dojo: it mounts `%base` and `%landscape`, makes and mounts `%trunk`, copies the desk and the files it borrows, takes `sys.kelvin` from the ship's `%base`, commits, installs and waits for `version.json` to answer the worktree's wire. Later runs copy and commit, and wait the same way. `|commit` does not delete a file: remove one from the mount with `|rm`. The script refuses a pier outside `~/fleet/piers` and a URL that is not localhost.
+The first run on a ship does the main README's "The desk" in the ship's dojo. It mounts `%base` and `%landscape`, makes and mounts `%trunk`, copies the desk and the files it borrows, takes `sys.kelvin` from the ship's `%base`, commits, waits for the agent to land and build, installs and waits for `version.json` to answer the worktree's wire. Later runs copy the desk and commit, then wait for every `.hoon`, `.html`, `.js` and `.css` file git tracks in `app`, `lib`, `mar`, `sur` and `gen` to land in clay, compared by its sha-256 on the ship. They check that `app/trunk.hoon` builds. An agent that fails to load fails the whole commit, so it shows as a file that never lands. They run `|install` if an earlier first run stopped before it, then wait for `version.json` the same way. `|commit` does not delete a file. Remove one from the mount with `|rm`. The script refuses a pier outside `~/fleet/piers` and a URL that is not localhost.
 
 To test an upgrade (AGENTS.md, "Test the upgrade"), check out the released commit in a scratch worktree, deploy it from there onto `golden`, give it state, then deploy this branch and check the state came through.
 
@@ -94,4 +94,4 @@ Over HTTP with the owner's cookie: `/~/scry/trunk/version.json`, `debug.json`, `
 - The browser checks (`test/browser/`) need a local Galène 1.1, which this machine does not have. Build one as `test/browser/README.md` says, point `~rud` at it with `%set-sfu`, and add `http://localhost:8136` to its `allowOrigin`.
 - Push end to end (DMs and channel posts between two ships, `%activity` reads, rings) needs a second ship in the set and a local HTTP listener as the device's endpoint.
 - A real grubbery app calling trunk through the kernel. `grubbery-marc` and the `marc` check cover the marc, and the `allow` check covers trunk's side of the `-as` actions from another agent. A grubbery nexus that pokes `%trunk` and watches `/app/grubbery/<name>` would close the gap.
-- App guest tickets: they need an SFU (`%set-sfu`), which the set has none of.
+- App guest tickets need an SFU (`%set-sfu`), and the set has none.

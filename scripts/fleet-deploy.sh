@@ -57,7 +57,7 @@ mounted() { # desk [new]: mount it (|new-desk first if new) unless it is
 khan() { # one-line thread -> its result line
   printf '%s\n' "[0 %fyrd [%base %khan-eval %noun [%ted-eval '$1']]]" |
     "$VERE" eval --jam -n 2>/dev/null |
-    socat -T 60 -,ignoreeof UNIX-CONNECT:"$pier/.urb/conn.sock" 2>/dev/null |
+    socat -T 120 -,ignoreeof UNIX-CONNECT:"$pier/.urb/conn.sock" 2>/dev/null |
     "$VERE" eval --cue -n 2>/dev/null | tail -1
 }
 # 0 once clay's %trunk has this file with these bytes: its sha-256,
@@ -86,13 +86,34 @@ version() { # the wire trunk answers, or nothing
 copy() { # the desk's own files, as the README's cp line
   rsync -a app lib mar sur gen desk.bill desk.docket-0 "$pier/trunk/"
 }
+# the desk's text files, which +landed can check: clay keeps each as a
+# cord. Every one, not only what this run copied, so a rerun after a
+# run that died before its commit still waits for that commit.
+texts() {
+  git ls-files app lib mar sur gen | grep -E '\.(hoon|html|js|css)$'
+}
+# 0 when clay builds the agent as the desk now stands. A file can land
+# and still fail to compile, and the old agent would then answer every
+# check after this one.
+builds() {
+  khan "=/  m  (strand ,vase)  ;<  =bowl  bind:m  get-bowl  =/  p=path  /(scot %p our.bowl)/trunk/(scot %da now.bowl)/app/trunk/hoon  =/  v  .^(vase %ca p)  (pure:m !>(&))" |
+    grep -q '%noun 0\]$'
+}
 
 if [[ -f "$pier/trunk/app/trunk.hoon" ]]; then
   echo "== update %trunk on ~$ship"
   copy
   dojo "|commit %trunk"
-  for ((i = 0; i < 60; i++)); do landed app/trunk.hoon && break; sleep 2; done
-  landed app/trunk.hoon || die "|commit %trunk did not land; read the dojo (tmux attach -t $session)"
+  # every text file, not just the agent: a change to lib/ or a page alone
+  # leaves app/trunk.hoon landed before the commit does. A commit lands
+  # whole, so only the first file waits.
+  for f in $(texts); do
+    for ((i = 0; i < 60; i++)); do landed "$f" && break; sleep 2; done
+    # an agent that fails to load (%load-failed) fails the whole commit,
+    # so it shows here as a file that never lands
+    landed "$f" || die "|commit %trunk did not land $f, or %trunk failed to load it; read the dojo (tmux attach -t $session)"
+  done
+  builds || die "app/trunk.hoon does not build on ~$ship; read the dojo (tmux attach -t $session)"
   echo "  committed"
   # a first run stopped before |install leaves the desk without the agent
   [[ -n "$(version)" ]] || dojo "|install our %trunk"
@@ -101,7 +122,7 @@ else
   mounted base
   mounted landscape
   mounted trunk new
-  copy
+  copy >/dev/null
   install -m 644 "$pier"/base/lib/{default-agent,skeleton}.hoon "$pier/trunk/lib/"
   for m in bill css hoon html js kelvin mime noun svg txt; do
     install -m 644 "$pier/base/mar/$m.hoon" "$pier/trunk/mar/"
@@ -114,6 +135,7 @@ else
   dojo "|commit %trunk"
   for ((i = 0; i < 60; i++)); do landed app/trunk.hoon && break; sleep 2; done
   landed app/trunk.hoon || die "|commit %trunk did not land; read the dojo (tmux attach -t $session)"
+  builds || die "app/trunk.hoon does not build on ~$ship; read the dojo (tmux attach -t $session)"
   echo "  committed"
   dojo "|install our %trunk"
 fi

@@ -1,5 +1,5 @@
 ::  trunk-json: json <-> trunk types, shared by the eyre-facing marks.
-::  This file is the wire's source of truth — the Kotlin client's
+::  This file is the wire's source of truth. The Kotlin client's
 ::  TrunkWire.kt mirrors it exactly.
 ::
 ::    action  {"send":{"ship":"~zod","sig":{...}}}
@@ -11,15 +11,26 @@
 ::            {"share-room":{"host":"~zod","name":n,"ttl":600}}
 ::            {"configure-room":{"host":"~zod","name":n,"open":true,
 ::                               "listen":false,"keep-sfu":true,
-::                               "sfu":null|{"base":b,"group":g,"key":k}}}
+::                               "sfu":null|{"base":b,"group":g,"key":k},
+::                               "title":t,"members":["~zod"],
+::                               "admins":["~zod"]}}
+::                ('' keeps the title, and empty members or admins
+::                keep the roster. A remote admin's members and
+::                admins count only when the room is new.)
 ::            {"close-room":{"name":n}}
 ::            {"join-room":{"host":"~zod","name":n}}
 ::            {"peek-room":{"host":"~zod","name":n}}
+::            {"enter-room":{"host":"~zod","name":n}}
+::                (and the same shape for "leave-room", "occupancy-of",
+::                "who-is-on", "start-recording", "stop-recording"
+::                and "recorders-of")
 ::            {"set-room-access":{"host":"~zod","name":n,
 ::                                "join":null|["r"],"speak":null|["r"]}}
 ::            {"moderate-member":{"host":"~zod","name":n,
 ::                                "who":"~bus","mute":true}}
 ::            {"get-room-access":{"host":"~zod","name":n}}
+::            {"bind-room":{"name":n,
+::                          "group":null|{"ship":"~zod","name":g}}}
 ::            {"set-call-mode":"open"} | {"allow":"~zod"}
 ::            {"unallow":"~zod"} | {"block":"~zod"} | {"unblock":"~zod"}
 ::            {"push-register":{"id":d,"platform":"unifiedpush",
@@ -38,7 +49,8 @@
 ::            {"push-app":{"id":i,"allow":true,"cap":30}}  (cap 0: no limit)
 ::            {"invite-guests":{"name":n,"speak":true,"ttl":86400,
 ::                              "uses":10}}
-::            {"revoke-invite":code}  (an invite's code or a link's name)
+::            {"revoke-invite":code}  (an invite's code, a link's name,
+::                                     or an app link's code)
 ::            {"guest-link":{"code":"groundwire-standup","name":n,
 ::                           "speak":true}}
 ::            {"app-hosting":{"agent":"mud-world","allow":true}}
@@ -51,18 +63,41 @@
 ::    update  {"recv":{"from":"~zod","sig":{...}}}
 ::            {"ticket":{"from":"~zod","name":n,"location":l,"token":t}}
 ::            {"denied":{"from":"~zod","name":n,"why":w}}
+::            {"open":{"from":"~zod","name":n,"title":t,"listen":true,
+::                     "sfu-base":b}}
+::            {"shut":{"from":"~zod","name":n}}
+::            {"policy":<policy>}
+::            {"listen-link":{"name":n,"url":u,"expires":1787000000}}
+::            {"handled":i}
 ::            {"access-state":{"from":"~zod","name":n,"join":null|["r"],
 ::                             "speak":null|["r"],"muted":["~bus"]}}
+::            {"present":{"from":"~zod","name":n,"n":3}}
+::            {"on-line":{"from":"~zod","name":n,"who":["~zod"]}}
+::            {"recorders":{"from":"~zod","name":n,"who":["~zod"]}}
 ::            {"guest-invite":{"code":c,"name":n,"path":p,"speak":true,
 ::                             "expires":1787000000,"uses":10,"guests":0}}
 ::            {"guest-link":{"code":c,"name":n,"path":p,"speak":true}}
 ::    policy  {"mode":"open","allow":["~zod"],"block":["~bus"]}
-::    link    {"listen-link":{"name":n,"url":u,"expires":1787000000}}
+::            (the scry /x/policy, and the object in a "policy" update)
+::    rooms   /x/rooms, the lines we host, never a room's SFU key:
+::            [{"name":n,"title":t,"listen":true,"sfu-base":b,
+::              "custom-sfu":false,"members":["~zod"],
+::              "admins":["~zod"],"join-roles":null|["r"],
+::              "speak-roles":null|["r"],"muted":["~bus"],
+::              "group":null|{"ship":"~zod","name":g}}]
+::    lines   /x/lines, the lines we are invited to:
+::            [{"host":"~zod","name":n,"title":t,"listen":true,
+::              "sfu-base":b}]
+::    sfu     /x/sfu, never the key, only whether one is set:
+::            {"base":b,"group":g,"configured":true}
+::    ice     /x/ice  [{"url":u,"user":s,"cred":c}]
 ::
 ::  Guest seats (wire 16). An invite's path is /apps/trunk/guest/<code>
-::  on the ship: trunk does not know its own public URL, so a client
-::  puts its own origin in front. An agent's room actions are nouns, not
-::  JSON, and their answers on /app/<agent> are %json facts:
+::  on the ship. Invites and the owner's links answer with a path, and
+::  a client puts its own origin in front. Since wire 19 the owner sets
+::  the ship's public address with set-origin, and /x/guests gives it as
+::  "origin". An agent's room actions are nouns, not JSON, and their
+::  answers on /app/<agent> are %json facts:
 ::    ticket  {"guest-ticket":{"room":r,"guest":g,"req":q,
 ::             "username":"guest-3fa9c07b12de5e81a7c4d230",
 ::             "location":l,
@@ -77,10 +112,15 @@
 ::  "<agent>/<name>".
 ::  The guest page's POST answers with the ticket's last six fields
 ::  and "secret", which the page keeps to rejoin as the same guest.
+::  GET <path>/room answers {"host":h,"title":t,"speak":true}, what the
+::  page shows before Join. Either route refuses with an HTTP status
+::  and {"error":w}.
 ::  /x/guests is {"invites":[<guest-invite's object>],
 ::  "links":[<guest-link's object>],
 ::  "apps":[{"agent":a,"allowed":false,"rooms":[r]}],
 ::  "origin":"https://urbit.example"} (origin since wire 19).
+::  Apps' links are not in /x/guests, so an app link's code is only in
+::  its URL.
 /-  trunk
 /+  trunk-guest
 |%
@@ -138,7 +178,7 @@
       :~  host+ship-from-json  name+so  open+bo  listen+bo
           ::  ~ means "use the host ship's own sidecar"
           sfu+(mu sfu-from-json)  keep-sfu+bo
-          ::  only used when the room does not exist yet
+          ::  '' keeps the title, and empty members or admins keep the roster
           title+so  members+(as ship-from-json)  admins+(as ship-from-json)
       ==
       [%close-room (ot ~[name+so])]
@@ -230,7 +270,7 @@
   ==
 ::
 ::  +roles-to-json: one role gate. null means "everyone on the
-::  roster" and is NEVER an empty array — the client keys off the
+::  roster" and is NEVER an empty array. The client keys off the
 ::  distinction, and an empty array is the opposite gate (admins
 ::  only).
 ++  roles-to-json
@@ -516,7 +556,7 @@
 ::  This is the entire coupling surface of the group mirror, and it is
 ::  field names, not types: %trunk never imports a Tlon structure and
 ::  never casts a Tlon mark. The names carry both schema generations
-::  (seats/roles/admins with fleet/sects/bloc fallbacks) — the same
+::  (seats/roles/admins with fleet/sects/bloc fallbacks), the same
 ::  pairs Talon's own GroupAdminParser reads in production. A shape
 ::  this walk does not recognise yields ~, and the caller keeps the
 ::  roster it already has: version drift degrades to staleness, never
@@ -526,7 +566,7 @@
 ::  role, or anyone holding a role the group lists as an admin role.
 ::
 ::  seat-roles keeps the RAW role set per seat (seats.*.roles, with
-::  the legacy fleet.*.sects fallback — the same two names the admin
+::  the legacy fleet.*.sects fallback, the same two names the admin
 ::  derivation above already reads): the room's join/speak gates are
 ::  intersected against it at ticket time, so the role ids here must
 ::  be the ids an admin picked in the group, untranslated.
