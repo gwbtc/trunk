@@ -2768,11 +2768,11 @@
   ?.  (fresh:trunk-push (post-at:trunk-push u.post) now.bowl)
     [~ s `"{word}: not pushed, older than 5 minutes"]
   ::  kept until the post can no longer notify, which for a post dated
-  ::  ahead of our clock is later than now. Not much later, though: a
-  ::  host whose clock runs far ahead would keep it for good.
+  ::  ahead of our clock is later than now. At most a day later, though:
+  ::  a host whose clock runs far ahead would keep it for good.
   =/  at  (max now.bowl (fall (post-at:trunk-push u.post) now.bowl))
   =.  seen.s
-    (~(put by seen.s) id.u.post (min at (add now.bowl fresh-for:trunk-push)))
+    (~(put by seen.s) id.u.post (min at (add now.bowl ~d1)))
   ?.  (wants:trunk-push kinds.s u.post)
     [~ s `"{word}: not pushed, switched off in trunk's settings"]
   =/  got  (notify-level whom.u.post group.u.post)
