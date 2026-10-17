@@ -295,7 +295,7 @@ async function loadGuests() {
   pick.append(fresh);
   pick.value = (chosen === '' || lines.includes(chosen)) ? chosen : (lines[0] || '');
   newLine();
-  $('g-make').disabled = false;
+  $('g-make').disabled = making;
 
   const box = $('invites');
   box.replaceChildren();
@@ -419,6 +419,7 @@ let linked = new Set();  // the permanent links' codes
 let lastGuests = '';
 let shown = new Set();   // the link codes on screen
 let justMade = false;    // the next rebuild follows a Make
+let making = false;      // a Make is running, so a rebuild leaves its button off
 // after an action, rebuild even if nothing changed: a refused one must
 // still give back the button or switch it disabled
 function reloadGuests() {
@@ -464,52 +465,62 @@ if (location.protocol !== 'https:' || /^(localhost|127\.|\[::1\])/.test(location
 }
 
 $('g-make').onclick = async () => {
-  let name = $('g-room').value;
-  let code = $('g-code').value.trim().toLowerCase().replace(/\s+/g, '-');
-  if (code && !/^[a-z][a-z0-9-]{2,63}$/.test(code)) {
-    banner('A link name is 3 to 64 lower case letters, digits and hyphens, starting with a letter.');
-    return;
-  }
-  // eight random characters: about 41 bits, too many to guess
-  if (code && $('g-tail').checked) {
-    const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    code += '-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => abc[b % 36]).join('');
-  }
-  if (linked.has(code) && !confirm('The link ' + code + ' already exists. Move it to this line?')) return;
-  $('g-make').disabled = true;
-  if (!name) {
-    const title = $('g-title').value.trim();
-    if (!title) {
-      banner('Give the new line a title.');
-      $('g-make').disabled = false;
+  // a return below still runs the finally before its rebuild lands
+  making = true;
+  try {
+    let name = $('g-room').value;
+    let code = $('g-code').value.trim().toLowerCase().replace(/\s+/g, '-');
+    if (code && !/^[a-z][a-z0-9-]{2,63}$/.test(code)) {
+      banner('A link name is 3 to 64 lower case letters, digits and hyphens, starting with a letter.');
       return;
     }
-    name = roomName(title);
-    if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return reloadGuests();
-    // the line is open, so a retry after a failed bind does not open another
-    chosen = name;
-    const grp = $('g-group').value;
-    if (grp) {
-      const cut = grp.indexOf('/');
-      const group = { ship: grp.slice(0, cut), name: grp.slice(cut + 1) };
-      if (!await act({ 'bind-room': { name, group } })) return reloadGuests();
+    // eight random characters: about 41 bits, too many to guess
+    if (code && $('g-tail').checked) {
+      const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      code += '-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => abc[b % 36]).join('');
     }
-    $('g-title').value = '';
+    if (linked.has(code) && !confirm('The link ' + code + ' already exists. Move it to this line?')) return;
+    $('g-make').disabled = true;
+    if (!name) {
+      const title = $('g-title').value.trim();
+      if (!title) {
+        banner('Give the new line a title.');
+        $('g-make').disabled = false;
+        return;
+      }
+      name = roomName(title);
+      if (!await act({ 'open-room': { name, title, members: [], admins: [] } })) return reloadGuests();
+      // the line is open, so a retry after a failed bind does not open another
+      chosen = name;
+      const grp = $('g-group').value;
+      if (grp) {
+        const cut = grp.indexOf('/');
+        const group = { ship: grp.slice(0, cut), name: grp.slice(cut + 1) };
+        if (!await act({ 'bind-room': { name, group } })) {
+          // the page cannot bind a line later
+          banner('The line is open, but it is not tied to the group. Close it and make it again to bind it.');
+          return reloadGuests();
+        }
+      }
+      $('g-title').value = '';
+    }
+    const ok = code
+      ? await act({ 'guest-link': { code, name, speak: $('g-speak').checked } })
+      : await act({ 'invite-guests': {
+          name,
+          speak: $('g-speak').checked,
+          ttl: Number($('g-ttl').value),
+          uses: Number($('g-uses').value),
+        } });
+    if (ok) {
+      $('g-code').value = '';
+      linkMode();
+      justMade = true;
+    }
+    reloadGuests();
+  } finally {
+    making = false;
   }
-  const ok = code
-    ? await act({ 'guest-link': { code, name, speak: $('g-speak').checked } })
-    : await act({ 'invite-guests': {
-        name,
-        speak: $('g-speak').checked,
-        ttl: Number($('g-ttl').value),
-        uses: Number($('g-uses').value),
-      } });
-  if (ok) {
-    $('g-code').value = '';
-    linkMode();
-    justMade = true;
-  }
-  reloadGuests();
 };
 
 async function act(body) {

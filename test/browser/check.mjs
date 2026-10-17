@@ -127,12 +127,14 @@ const bytes = (p, kind, dir) => p.evaluate(async (kind, dir) => {
 }, kind, dir);
 
 // polls f until it holds; a navigation destroys the page's context
-// mid-check, so an error is a no for now
+// mid-check, so an error is a no for now. A timeout logs the last one.
 async function until(f, ms = 6000) {
+  let last = null;
   for (let t = 0; t < ms; t += 250) {
-    try { if (await f()) return true; } catch (e) {}
+    try { if (await f()) return true; } catch (e) { last = e; }
     await sleep(250);
   }
+  if (last) console.log('  last error:', last?.message ?? last);
   return false;
 }
 
@@ -261,7 +263,12 @@ async function pageChecks(o) {
 async function joinChecks(o) {
   const sfu = await o.evaluate(async () => (await (await fetch('/~/scry/trunk/sfu.json')).json()).base);
   const text = async (u) => { try { const r = await fetch(u); return r.ok ? r.text() : null; } catch (e) { return null; } };
-  if (!(await text(`${sfu}/join/`))) { console.log(`-- join: skipped, no join page at ${sfu}/join/`); return; }
+  // asked for on its own, a missing join page is a failure
+  if (!(await text(`${sfu}/join/`))) {
+    if (only === 'join') check('the call server has a join page', false, `${sfu}/join/`);
+    else console.log(`-- join: skipped, no join page at ${sfu}/join/`);
+    return;
+  }
   const host = new URL(SHIP).host;
   for (const [f, on] of [['', LINE], ['guest.js', 'guest.js'], ['guest.css', 'guest.css']]) {
     const ship = await text(`${SHIP}/apps/trunk/guest/${on}`);
