@@ -8,8 +8,8 @@ Trunk's Hoon is tested on its own fleet set from [hoon-development](https://gith
 | ship | `~rud`, fake, pier `~/fleet/piers/rud` |
 | HTTP | http://localhost:8136 |
 | dojo | `tmux attach -t fleet`, window `rud` |
-| platform | grubbery (nisfeb/grubbery eed73a6, whose kernel marc for `%trunk-action` types the wire 18 actions) and `%unix`, on the stock vere 4.6 pill, which also ships `%groups` and `%landscape` |
-| `%trunk` | installed from this worktree by `scripts/fleet-deploy.sh`, wire 18 |
+| platform | grubbery and `%unix`, on the stock vere 4.6 pill, which also ships `%groups` and `%landscape`. The marc check needs nisfeb/grubbery dist/single-release b126c50 or later, whose kernel marc for `%trunk-action` types the wire 19 actions. The `compiled` snapshot was built on eed73a6 (wire 18), so refresh it first. |
+| `%trunk` | installed from this worktree by `scripts/fleet-deploy.sh`, wire 19 |
 | test desk | `%trunk-test`, mounted, set up for the kit |
 
 Below, `F=~/software/personal/hoon-development/fleet/fleet` and `U=~/software/personal/hoon-development/bridge/u`. Set `FLEET_WHO` to your session's name so claims know who is asking.

@@ -103,7 +103,7 @@ else
   mounted trunk new
   copy
   install -m 644 "$pier"/base/lib/{default-agent,skeleton}.hoon "$pier/trunk/lib/"
-  for m in bill hoon html js kelvin mime noun svg txt; do
+  for m in bill css hoon html js kelvin mime noun svg txt; do
     install -m 644 "$pier/base/mar/$m.hoon" "$pier/trunk/mar/"
   done
   install -m 644 "$pier/landscape/mar/docket-0.hoon" "$pier/trunk/mar/"
