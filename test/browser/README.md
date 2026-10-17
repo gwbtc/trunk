@@ -59,6 +59,6 @@ The listen check needs a listen link to the `browser-check` line. Mint its token
 LISTEN='http://127.0.0.1:8445/listen/#token=<the token>' SHIP=... CODE=... BROWSER=... node check.mjs
 ```
 
-Use a key made for the test, never the key of a call server other ships use: the dojo keeps it in its history.
+Use a key made for the test, never the key of a call server other ships use, since the dojo keeps it in its history.
 
 The microphone is a test tone the script writes to the system's temp folder: 440 Hz, on for 0.7 s of every second. Chrome's own fake microphone beeps too briefly for the speaking checks to catch.
