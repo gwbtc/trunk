@@ -28,7 +28,7 @@
 /*  icon  %svg   /app/trunk/icon/svg
 |%
 ::  Rooms as they were before state-6. Old state versions must pin the
-::  shape they were actually saved with — referencing the evolving
+::  shape they were actually saved with. Referencing the evolving
 ::  +$ room:trunk alias silently rewrites history, and every migration
 ::  then reads the new shape out of an old noun.
 +$  old-room  [title=@t members=(set ship)]
@@ -86,7 +86,7 @@
       sfu=sfu-config:trunk
       hosted=(map @t old-room)
   ==
-::  %3 accepted a %grant from any ship — see +on-poke
+::  %3 accepted a %grant from any ship. See +on-poke.
 +$  state-3
   $:  %3
       ice=(list ice-server:trunk)
@@ -106,7 +106,7 @@
       ::  one that answers a request we actually made.
       asked=(set [=ship name=@t])
   ==
-::  %4 rang for any ship that asked — see +may-ring
+::  %4 rang for any ship that asked. See +may-ring.
 +$  state-5
   $:  %5
       ice=(list ice-server:trunk)
@@ -453,8 +453,8 @@
 ::  The wire this desk speaks.
 ::
 ::  BUMP THIS on any change to the JSON shapes in lib/trunk-json.hoon.
-::  A client mirrors those by hand — there is no generator between them
-::  — and every drift so far has surfaced as a silent no-op rather than
+::  A client mirrors those by hand. There is no generator between them,
+::  and every drift so far has surfaced as a silent no-op rather than
 ::  an error: a poke gall could not cast, a switch that did nothing.
 ::  With a version the client can say "your ship's Trunk is too old"
 ::  instead of appearing broken.
@@ -477,7 +477,7 @@
 ::  same request to wherever the server pointed, our own network too
 ++  no-redirects  ^-(outbound-config:iris =/(c *outbound-config:iris c(redirects 0)))
 ::  the longest a listen link may live. Galène's tokens are stateless,
-::  so nothing can revoke one early — a short cap is the only brake.
+::  so nothing can revoke one early. A short cap is the only brake.
 ++  listen-ttl-cap  ^~((div ~h1 ~s1))
 ::  +upgrade-flight: a retry from before wire 14. A notice in it names
 ::  no app, and goes without one.
@@ -493,7 +493,7 @@
   tries.f
 ::
 ::  +upgrade-rooms: rooms before state-6 had only [title members].
-::  Pure, so it lives out here rather than in the agent core — that
+::  Pure, so it lives out here rather than in the agent core. That
 ::  core admits exactly its ten arms.
 ++  upgrade-rooms
   |=  old=(map @t old-room)
@@ -519,7 +519,7 @@
 ::
 ::  How long an unanswered ask is kept. The client gives up after 15s
 ::  and ignores a later grant, so this only has to be long enough to
-::  claim an answer that is merely slow — well short of forever.
+::  claim an answer that is merely slow, well short of forever.
 ++  asked-ttl  ~m5
 ::  +prune-asked: drop asks older than +asked-ttl. Called where asks
 ::  are added, so growth is bounded by the rate of asking with no
@@ -570,7 +570,7 @@
   ==
 ::
 ::  The policy a ship starts with: ring for anyone, block nobody.
-::  Always assign this explicitly — never lean on the bunt of
+::  Always assign this explicitly. Never lean on the bunt of
 ::  +$ policy, which forks to %allow and locks the ship down.
 ++  open-policy  `policy:trunk`[%open ~ ~]
 --
@@ -584,7 +584,7 @@
     hc    ~(. +> bowl)
 ::
 ::  A fresh install must start OPEN. Not decorative: `on-init` used to
-::  be a bare ``this`, which leaves the bunt of the state — and the
+::  be a bare ``this`, which leaves the bunt of the state, and the
 ::  bunt of ?(%open %allow) is %allow, the last case, not the first.
 ::  Every newly installed ship therefore came up in allow-mode with an
 ::  empty allow set and silently refused every caller, while the
@@ -647,7 +647,7 @@
   :*  %20  ice.old  sfu.old  (~(run by hosted.old) |=(r=old-room-7 `room:trunk`[title.r members.r admins.r listen.r sfu.r ~ ~ ~ ~ ~]))
       known.old  (stamp-asked asked.old now.bowl)  pol.old  ~  ~  ~  ~  ~  ~  all-kinds:trunk-push  ~  ~  ~  [~ ~ ~]  ~  ~  ~  ~  ~  ~  ~  ''
   ==  ==
-  ::  %8 rooms gain the role gates and mute set, unset — and empty
+  ::  %8 rooms gain the role gates and mute set, unset, and empty
   ::  seat-roles. Sweep the group mirror now if its watch is live:
   ::  otherwise a gate set right after the upgrade would consult
   ::  empty seat-roles and admit nobody but admins until the group
@@ -983,7 +983,7 @@
       =/  had-seats=(map ship (set @t))  ?~(had ~ seat-roles.u.had)
       ::  a reopen that shrinks the roster must tell the leavers:
       ::  +announce reaches only the NEW members. Diffed before the
-      ::  state write — helper arms see pre-mutation state, so diffs
+      ::  state write. Helper arms see pre-mutation state, so diffs
       ::  are computed here and passed down, never derived inside.
       =/  removed=(set ship)
         ?~  had  ~
@@ -1000,8 +1000,8 @@
       =/  got  (~(get by hosted.state) name.act)
       ?~  got  `this
       ::  Announce, like every other room change. Without this the
-      ::  flag moved on the ship and nothing was told about it —
-      ::  members kept showing the old state, and our own client only
+      ::  flag moved on the ship and nothing was told about it.
+      ::  Members kept showing the old state, and our own client only
       ::  noticed if some other call happened to re-scry.
       =/  new  u.got(listen listen.act)
       =.  hosted.state  (~(put by hosted.state) name.act new)
@@ -1009,7 +1009,7 @@
       (announce:hc name.act new %.y)
     ::
     ::  A listen link is a bearer token that Galène cannot revoke, so
-    ::  the ttl is the whole security model — and it only exists at all
+    ::  the ttl is the whole security model, and it only exists at all
     ::  when the room's admins have asked for it.
         %share-room
       ::  Only the host holds the signing key, so a line hosted
@@ -1047,13 +1047,13 @@
         %send
       ::  Answering, declining or hanging up settles the call for the
       ::  whole ship, not just the device that did it. Every device saw
-      ::  the %ring — that is deliberate — but nothing told the rest it
+      ::  the %ring. That is deliberate, but nothing told the rest it
       ::  had been dealt with, so they rang out their full watchdog
       ::  beside a call already in progress.
       ::  ?- per variant, not ?= against a fork of three. Narrowing to
       ::  a fork leaves the compiler without one face for `id` across
-      ::  the branches — that is the find-fork it complains about —
-      ::  even though every variant happens to carry one.
+      ::  the branches, even though every variant happens to carry one.
+      ::  That is the find-fork it complains about.
       =/  settled=(unit @t)
         ?-  -.sig.act
           %ring    ~
@@ -1072,7 +1072,7 @@
         (settle-cards:hc state u.settled %.y)
       ::  the wire carries the call id: a nacked relay comes back as a
       ::  %reject on /calls, and the client drops any %reject whose id
-      ::  it did not mint — so a made-up id never matched, and the
+      ::  it did not mint, so a made-up id never matched, and the
       ::  caller rang out its whole watchdog against a ship that was
       ::  not there. scot %t, because an id is a client-minted cord
       ::  (uuid), not something already knot-safe.
@@ -1123,7 +1123,7 @@
             members  ?~(members.act members.u.got members.act)
             admins   ?~(admins.act admins.u.got admins.act)
           ==
-        ::  a shrunk roster's leavers get a %shut — +announce reaches
+        ::  a shrunk roster's leavers get a %shut. +announce reaches
         ::  only the ships that remain. Diffed before the write.
         =/  removed=(set ship)
           ?~  got  ~
@@ -1252,7 +1252,7 @@
     ::  Role gates for a line. Local-only action, so it is already our
     ::  own ship's owner asking: hosting it ourselves we apply
     ::  directly, otherwise we relay and the HOST checks we are on its
-    ::  admin list — the same split as %configure-room. Either way the
+    ::  admin list, the same split as %configure-room. Either way the
     ::  answer is one %access-state fact on /calls.
         %set-room-access
       ?:  =(host.act our.bowl)
@@ -1268,7 +1268,7 @@
     ::
     ::  Muting one member for everyone. Same local/relay split; the
     ::  mute lands in the room's muted set and takes effect on the
-    ::  next ticket minted — the live socket is the client's job.
+    ::  next ticket minted. The live socket is the client's job.
         %moderate-member
       ?:  =(host.act our.bowl)
         =/  got  (~(get by hosted.state) name.act)
@@ -1286,7 +1286,7 @@
     ::
     ::  Reading the gates back. Hosting it ourselves we answer from
     ::  state; otherwise the host answers with %access-state, and a
-    ::  wire-4 host nacks at the mark cast — which the client reads as
+    ::  wire-4 host nacks at the mark cast, which the client reads as
     ::  "this host does not speak roles yet".
         %get-room-access
       ?:  =(host.act our.bowl)
@@ -1358,8 +1358,8 @@
     ?:  (~(has in block.pol.state) src.bowl)
       %-  (slog leaf+"trunk: dropped {<-.sig>} from blocked {<src.bowl>}" ~)
       `this
-    ::  The mode gates rings only. The rest of an exchange — offer,
-    ::  accept, hangup — has to pass even from a ship the mode would
+    ::  The mode gates rings only. The rest of an exchange, the offer,
+    ::  accept and hangup, has to pass even from a ship the mode would
     ::  refuse, because WE may have called THEM: gating those on the
     ::  allow list would break every outgoing call to someone not
     ::  already on it, by dropping our own callee's answer. Safe
@@ -1431,7 +1431,7 @@
       [(weld cards bcards) this]
     ::
     ::  Gated like %entered above. Unguarded, any ship that guessed a
-    ::  host and room name learned a private line's live occupancy —
+    ::  host and room name learned a private line's live occupancy,
     ::  while +grant-cards refuses those same ships a ticket. Dropped
     ::  silently, not %deny, so this stays a non-oracle.
         %occupancy
@@ -1486,7 +1486,7 @@
       :_(this ~[(fact:hc [%recorders src.bowl name.msg who.msg])])
     ::
     ::  A room admin, over ames, turning the line on or off. %trunk
-    ::  does not know what a Tlon group is — admins are simply the
+    ::  does not know what a Tlon group is. Admins are simply the
     ::  ships the host listed when it opened the room.
     ::  An admin asking us to mint a listen link for a line we host.
         %share
@@ -1496,7 +1496,7 @@
       ?.  (~(has in admins.u.got) src.bowl)  `this
       ?.  listen.u.got  `this
       ::  :hc, not bare. The agent core sits =< over the helper core,
-      ::  so these arms resolve without it — but against the helper's
+      ::  so these arms resolve without it, but against the helper's
       ::  BUNTED bowl, where our.bowl is ~zod. Every link minted here
       ::  pointed at ~zod's subgroup, which no member is ever in, and
       ::  nothing errored.
@@ -1522,7 +1522,7 @@
       ?:  (~(has in block.pol.state) src.bowl)  `this
       ?:  (gth (met 3 title.msg) title-cap)  `this
       =/  got  (~(get by hosted.state) name.msg)
-      ::  Creating a line the host has never hosted — a group admin
+      ::  Creating a line the host has never hosted, a group admin
       ::  turning it on for the first time. There is no admin list to
       ::  check yet, so this reuses the dial that already decides who
       ::  may make this ship do work for them: whoever may ring us.
@@ -1551,8 +1551,8 @@
           [title.msg members.msg admins.msg listen.msg ~ ~ ~ ~ ~ ~]
         =.  hosted.state  (~(put by hosted.state) name.msg new)
         ::  bind at birth (+auto-bind): a line opened remotely by a
-        ::  group admin was the one creation path nothing ever bound —
-        ::  the reconciler only runs on the host's own client, which a
+        ::  group admin was the one creation path nothing ever bound.
+        ::  The reconciler only runs on the host's own client, which a
         ::  headless host never opens. The seeded roster is announced
         ::  either way; a sync that changes it announces the delta.
         =^  bcards  hosted.state  (auto-bind:hc name.msg hosted.state)
@@ -1567,14 +1567,14 @@
         (weld (announce:hc name.msg u.got %.n) (mirror-sub-cards:hc hosted.state))
       ::  State FIRST, announce second. +announce reads the room back
       ::  out of hosted.state, so announcing before the write told
-      ::  everyone the OLD flag — the host changed and no client ever
+      ::  everyone the OLD flag. The host changed and no client ever
       ::  heard about it, which is a switch that does nothing.
       ::  A remote admin may not move a line to another call server:
       ::  any ship that opens a line here names itself its admin, and
       ::  the server it chose would hear every member. Only the host
       ::  sets a line's own server (%configure-room from our own ship).
       =/  new-sfu  sfu.u.got
-      ::  An empty title means "don't touch the topic" — every other
+      ::  An empty title means "don't touch the topic". Every other
       ::  change sends none, and without this each listen toggle would
       ::  blank whatever an admin had set. Same trap as keep-sfu.
       =/  new-title  ?:(=('' title.msg) title.u.got title.msg)
@@ -1600,7 +1600,7 @@
       ::  deliberately does NOT settle asked.state: joins and peeks
       ::  share that set, and a host's roster-change announce landing
       ::  between our %ask and its %grant would delete the entry the
-      ::  %grant handler requires — the grant would be dropped as
+      ::  %grant handler requires. The grant would be dropped as
       ::  unsolicited and the join would silently die. A peek's entry
       ::  therefore lingers after its announce answer, like an ask to
       ::  a host that never replies; the exposure is one unsolicited
@@ -1689,7 +1689,7 @@
     ::
     ::  The host answering one of the three above: pass it through to
     ::  our client. Inert information, so unlike %grant it needs no
-    ::  asked entry — but it must at least be a line we know from
+    ::  asked entry, but it must at least be a line we know from
     ::  this ship, or any stranger could spray "muted" lists at us.
         %access-state
       ?:  (~(has in block.pol.state) src.bowl)  `this
@@ -1699,7 +1699,7 @@
     ::
     ::  the host answering our %occupancy: pass the live count to our
     ::  client on /calls. Inert info; a blocked host gets silence, and
-    ::  a ship whose line we do not know gets it too — same guard as
+    ::  a ship whose line we do not know gets it too, same guard as
     ::  %access-state, so a stranger's counts cannot pile up in a
     ::  client map nothing ever prunes.
         %present
@@ -1817,7 +1817,7 @@
       %watch-ack
     ::  a one-shot adopt watch opened by +auto-bind for one room. The
     ::  ack is the proof %groups exists: bind that room if its group
-    ::  is really there, then drop the watch — +mirror-sub-cards owns
+    ::  is really there, then drop the watch. +mirror-sub-cards owns
     ::  the canonical one from here on. Nack: no %groups (or an old
     ::  one); the room keeps its manual roster.
     ?:  ?=([%groups-mirror %adopt @ ~] wire)
@@ -1834,7 +1834,7 @@
       [[leave cards] this]
     ?.  ?=([%groups-mirror ~] wire)  (on-agent:def wire sign)
     ?~  p.sign
-      ::  the ack IS the proof %groups exists and answered — sync all
+      ::  the ack IS the proof %groups exists and answered. Sync all
       ::  bound rooms right now. The first design deferred a fresh
       ::  bind's sync to the watch's "initial fact", but /v1/groups
       ::  sends none (verified live 2026-09-01: a new subscribe emits
@@ -1897,7 +1897,7 @@
     ::  %recording-off %recorders) ride /beat instead: an older host
     ::  nacks them BY DESIGN, and on this wire that nameless denial
     ::  settled whichever join or peek happened to be pending against
-    ::  the same host — polls run every 15-30s, so it killed real
+    ::  the same host. Polls run every 15-30s, so it killed real
     ::  grants and painted refusal banners on line-less groups. On
     ::  /beat the ?+ falls through and the nack is simply ignored.
     ::
@@ -2088,7 +2088,7 @@
   ^-  card
   [%pass /fan/(scot %p who) %agent [who %trunk] %poke %trunk-room !>(msg)]
 ::
-::  +may-ring: may `who` ring us 1:1? Our own ship always may — that
+::  +may-ring: may `who` ring us 1:1? Our own ship always may. That
 ::  is our other devices, not a stranger.
 ::
 ++  may-ring
@@ -2102,7 +2102,7 @@
   ==
 ::
 ::  +roles-of: the mirrored group roles `who` holds in this room.
-::  Empty for anyone the mirror has never seen — which on an unbound
+::  Empty for anyone the mirror has never seen, which on an unbound
 ::  room is everyone, and role gates then admit only admins, the
 ::  honest reading of "gate by roles nobody has".
 ::
@@ -2131,7 +2131,7 @@
 ::  and its admins always may; an unset join-roles admits the whole
 ::  roster (the only behavior before wire 5); a set one requires the
 ::  member to hold at least one of the listed roles. Membership
-::  itself is the caller's check — this arm only gates members.
+::  itself is the caller's check. This arm only gates members.
 ::
 ++  may-join
   |=  [=room:trunk who=ship]
@@ -2142,7 +2142,7 @@
   !=(~ (~(int in (roles-of room who)) u.join-roles.room))
 ::
 ::  +may-speak: may `who` publish audio? The rule: a mute beats
-::  everything except the host itself — admins included, or an admin
+::  everything except the host itself, admins included, or an admin
 ::  could not be moderated at all; past the mute it is +may-join's
 ::  rule against speak-roles.
 ::
@@ -2156,7 +2156,7 @@
   !=(~ (~(int in (roles-of room who)) u.speak-roles.room))
 ::
 ::  +grant-cards: authorize (or refuse) `who` for the room `name` we
-::  host. Membership plus +may-join is the whole check — a ticket is
+::  host. Membership plus +may-join is the whole check. A ticket is
 ::  only ever minted for a ship the host explicitly listed, and only
 ::  one the join gate admits. What KIND of ticket is +may-speak's
 ::  call: Galène permissions are claims in the token, so the gate has
@@ -2182,8 +2182,8 @@
     (reply who [%deny name 'no sfu configured'])
   ::  admin → op (moderate over the socket) and, unless muted, a
   ::  voice; speaker → voice; listener → neither. %message stays in
-  ::  every tier so the talon-mute gossip usermessages keep flowing —
-  ::  it buys no audio and no access to another room.
+  ::  every tier so the talon-mute gossip usermessages keep flowing.
+  ::  It buys no audio and no access to another room.
   =/  is-adm=?  ?|(=(who our.bowl) (~(has in admins.u.got) who))
   =/  can-speak=?  (may-speak u.got who)
   =/  perms=(list json)
@@ -2226,7 +2226,7 @@
 ::  read is why presence needs no timers: a client that dropped without
 ::  saying %left ages out on the next %occupancy read.
 ::  +on-line-cards: tell a line's members who is on it. Same audience
-::  and same gate as the %occupancy answer — a blocked or role-less
+::  and same gate as the %occupancy answer. A blocked or role-less
 ::  member could not ask, so it must not be told either.
 ::
 ::  The host's own client is told with a fact; it is not a peer of its
@@ -2253,7 +2253,7 @@
 ::  Presence was pull-only through wire 8: a client asked, the host
 ::  answered. That charged every member a poll interval forever and
 ::  charged the host that times its roster, to learn a thing that
-::  changes when somebody joins — which is rare. Announcing inverts
+::  changes when somebody joins, which is rare. Announcing inverts
 ::  it. A heartbeat from a ship already on the line moves its stamp,
 ::  not the set, and so sends nothing at all.
 ::
@@ -2296,7 +2296,7 @@
   [~(wyt by live) (~(put by present) name live)]
 ::  +recorders-of: the live set of ships recording one line, and the
 ::  recording map with that room's stale heartbeats pruned. Same TTL
-::  and same read-time pruning as +occupancy-of — a recorder that quit
+::  and same read-time pruning as +occupancy-of. A recorder that quit
 ::  without saying %recording-off ages out on the next read.
 ++  recorders-of
   |=  [name=@t recording=(map @t (map ship @da))]
@@ -2344,7 +2344,7 @@
   ?~(sfu.u.got sfu.state u.sfu.u.got)
 ::
 ::  +listen-url: where a listener points a browser. Not the Galène
-::  conference UI — that hides audio-only publishers behind a setting
+::  conference UI. That hides audio-only publishers behind a setting
 ::  and cannot autoplay in a tab nobody clicked, which made a link
 ::  useless to anyone who hadn't been told the trick. Trunk serves its
 ::  own one-button page at /listen.
@@ -2407,7 +2407,7 @@
 ::
 ::  Takes the room BY VALUE, deliberately. `hc` is ~(. +> bowl), so
 ::  the helper core closes over the state as it was when the arm was
-::  entered — reading hosted.state back in here returned the value
+::  entered. Reading hosted.state back in here returned the value
 ::  from before the caller's own `=.`, and every change announced the
 ::  flag it had just replaced. That is one bug wearing several hats:
 ::  a switch that does nothing, a listen link refused after enabling.
@@ -2419,7 +2419,7 @@
   =/  base  base:?~(sfu.room sfu.state u.sfu.room)
   ^-  (list card)
   ::  The host tells itself too. It is excluded from the ames pokes
-  ::  below — it is not a peer of its own room — but its client still
+  ::  below, as it is not a peer of its own room, but its client still
   ::  has to see the change, and it has no other way to: without this
   ::  the only path was a re-scry racing the poke, so an admin's first
   ::  click on a switch appeared to do nothing.
@@ -2435,8 +2435,8 @@
 ::
 ::  +shut-cards: tell each ship in `whom` the line is gone FOR THEM.
 ::  Roster shrinks need this: +announce iterates the room's members,
-::  and a ship just removed is no longer one, so it never heard —
-::  its known list kept the dead line forever, a call button whose
+::  and a ship just removed is no longer one, so it never heard.
+::  Its known list kept the dead line forever, a call button whose
 ::  every tap round-trips to 'not a member'. Same card as
 ::  +announce's close path. Takes the removed set by value: callers
 ::  diff old against new BEFORE mutating state, for the closure
@@ -2448,7 +2448,7 @@
   %+  murn  ~(tap in (~(del in whom) our.bowl))
   |=(who=ship ?:((~(has in block.pol.state) who) ~ `(fan who [%shut name])))
 ::
-::  +reply: deliver a room-sig to `who` — as a local fact when that's
+::  +reply: deliver a room-sig to `who`, as a local fact when that's
 ::  us, over ames otherwise.
 ::
 ++  reply
@@ -2480,11 +2480,11 @@
 ::  roster it has: version drift degrades to staleness, never to a
 ::  broken line.
 ::
-::  Callers must only invoke this when %groups is known to be alive —
-::  a fact just arrived from it, or the mirror watch is acked in
-::  wex.bowl. There is no reliable in-agent probe for a missing
+::  Callers must only invoke this when %groups is known to be alive,
+::  meaning a fact just arrived from it, or the mirror watch is acked
+::  in wex.bowl. There is no reliable in-agent probe for a missing
 ::  agent: %gu of one answers nothing and a failed .^ crashes the
-::  whole event, straight through mole (verified on-ship — the poke
+::  whole event, straight through mole (verified on-ship, where the poke
 ::  trace names the %gx path). Proof-of-life is the guard, not a
 ::  scry. The group LIST is read before the single group for the
 ::  same reason: a bound-but-deleted group would otherwise crash the
@@ -2502,15 +2502,15 @@
   (roster-from-json:trunk-json jon ship.gs)
 ::
 ::  +mirror-sub-cards: keep exactly one local watch on %groups alive
-::  while any room is bound, and none when none is. Idempotent — the
+::  while any room is bound, and none when none is. Idempotent. The
 ::  caller fires it after every binding change without tracking what
 ::  happened last time. No is-groups-installed probe: watching a
-::  missing agent nacks, the nack is logged, and rosters stay manual
-::  — which is the correct behaviour and needs no second mechanism.
+::  missing agent nacks, the nack is logged, and rosters stay manual,
+::  which is the correct behaviour and needs no second mechanism.
 ::  +mirror-sweep: re-read every bound room's roster from %groups and
 ::  apply what changed. Shared by the mirror's %fact arm and the
 ::  watch-ack (the first sync a fresh bind gets). Takes and returns the
-::  hosted map by value — helper arms close over pre-mutation state, so
+::  hosted map by value. Helper arms close over pre-mutation state, so
 ::  the caller assigns the result. Announce/shut fire only when the
 ::  membership actually moved; a seat-roles-only change stays
 ::  host-local, since an announce carries no role data.
@@ -2547,12 +2547,12 @@
 ::  +bind-to-group: point a hosted room's roster at a group (or ~ to
 ::  unbind). The %bind-room body, factored so creation can bind at
 ::  birth. Takes and returns hosted by value; the caller assigns.
-::  Sync now only if the mirror watch is already live — that is the
+::  Sync now only if the mirror watch is already live. That is the
 ::  proof %groups exists that mirror-roster requires. A first-ever
 ::  binding syncs on the watch-ack sweep instead, moments later:
 ::  /v1/groups sends no initial fact, so the ack itself is the first
 ::  (and only) proof-of-life signal. Ships a fresh sync drops are
-::  told the line is gone — +announce reaches only the new roster.
+::  told the line is gone. +announce reaches only the new roster.
 ++  bind-to-group
   |=  $:  name=@t
           gs=(unit group-source:trunk)
@@ -2587,7 +2587,7 @@
 ::  +auto-bind: a room made for a group binds at birth. The mapping
 ::  is the naming convention every client already uses: the room is
 ::  named the group's slug, on the group's host. Two cases, neither
-::  of which ever probes %groups directly — the only proof-of-life
+::  of which ever probes %groups directly. The only proof-of-life
 ::  this agent trusts is a watch's ack:
 ::    mirror already live  -> confirm the group exists, bind + sync now
 ::    no live mirror       -> open a one-shot watch on a wire naming
