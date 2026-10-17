@@ -127,6 +127,21 @@
       ['a room name of 64 bytes is one' (valid-room (crip (reap 64 'a')))]
       ['a room name of 65 bytes is not' !(valid-room (crip (reap 65 'a')))]
       ['a link name of 3 bytes is one' (valid-name 'abc')]
+      :-  'a host may announce a new line under its cap'
+      =/  k  (silt (turn (gulf 1 31) |=(n=@ [~nec (scot %ud n)])))
+      (line-fits k ~nec 'new' 32 256)
+      :-  'a host at its cap may not announce a new line'
+      =/  k  (silt (turn (gulf 1 32) |=(n=@ [~nec (scot %ud n)])))
+      !(line-fits k ~nec 'new' 32 256)
+      :-  'a host at its cap may still update a line it has'
+      =/  k  (silt (turn (gulf 1 32) |=(n=@ [~nec (scot %ud n)])))
+      (line-fits k ~nec '1' 32 256)
+      :-  'one host at its cap does not stop another'
+      =/  k  (silt (turn (gulf 1 32) |=(n=@ [~nec (scot %ud n)])))
+      (line-fits k ~bud 'new' 32 256)
+      :-  'a full list takes no new line'
+      =/  k  (silt (turn (gulf 1 256) |=(n=@ [`@p`(add 256 n) 'x'])))
+      !(line-fits k ~nec 'new' 32 256)
       :-  'an app room used just now stays, even dated ahead of us'
       =(1 ~(wyt by (prune-apps (my [[%mud 'p'] app(last (add now ~m5))]~) now)))
       :-  'an app link opens on the call server with the ship host'

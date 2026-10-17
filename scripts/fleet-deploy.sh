@@ -83,8 +83,14 @@ version() { # the wire trunk answers, or nothing
   curl -s -m 10 -b "$jar" "$url/~/scry/trunk/version.json" 2>/dev/null |
     python3 -I -c 'import sys,json; print(json.load(sys.stdin)["wire"])' 2>/dev/null || true
 }
-copy() { # the desk's own files, as the README's cp line; prints those that changed
-  rsync -ai app lib mar sur gen desk.bill desk.docket-0 "$pier/trunk/" | awk '$1 ~ /^>f/ {print $2}'
+copy() { # the desk's own files, as the README's cp line
+  rsync -a app lib mar sur gen desk.bill desk.docket-0 "$pier/trunk/"
+}
+# the desk's text files, which +landed can check: clay keeps each as a
+# cord. Every one, not only what this run copied, so a rerun after a
+# run that died before its commit still waits for that commit.
+texts() {
+  git ls-files app lib mar sur gen | grep -E '\.(hoon|html|js|css)$'
 }
 # 0 when clay builds the agent as the desk now stands. A file can land
 # and still fail to compile, and the old agent would then answer every
@@ -93,21 +99,27 @@ builds() {
   khan "=/  m  (strand ,vase)  ;<  =bowl  bind:m  get-bowl  =/  p=path  /(scot %p our.bowl)/trunk/(scot %da now.bowl)/app/trunk/hoon  =/  v  .^(vase %ca p)  (pure:m !>(&))" |
     grep -q '%noun 0\]$'
 }
+# 0 unless the dojo shows gall refusing the new agent. Building is not
+# loading: when +on-load crashes, gall keeps the old agent, which still
+# answers every check after this one. Gall says so with %load-failed.
+loaded() {
+  sleep 5
+  ! tmux capture-pane -p -t "=$session:$ship" -S -80 | grep -q 'load-failed'
+}
 
 if [[ -f "$pier/trunk/app/trunk.hoon" ]]; then
   echo "== update %trunk on ~$ship"
-  changed=$(copy)
+  copy
   dojo "|commit %trunk"
-  # every changed file, not just the agent: a change to lib/ or a page
-  # alone leaves app/trunk.hoon landed before the commit does. Only text
-  # files: +landed reads clay's noun as a cord, and the bill and docket
-  # are not one.
-  for f in ${changed:-app/trunk.hoon}; do
-    case "$f" in *.hoon|*.html|*.js|*.css) ;; *) continue ;; esac
+  # every text file, not just the agent: a change to lib/ or a page alone
+  # leaves app/trunk.hoon landed before the commit does. A commit lands
+  # whole, so only the first file waits.
+  for f in $(texts); do
     for ((i = 0; i < 60; i++)); do landed "$f" && break; sleep 2; done
     landed "$f" || die "|commit %trunk did not land $f; read the dojo (tmux attach -t $session)"
   done
   builds || die "app/trunk.hoon does not build on ~$ship; read the dojo (tmux attach -t $session)"
+  loaded || die "%trunk did not load the new code on ~$ship; read the dojo (tmux attach -t $session)"
   echo "  committed"
   # a first run stopped before |install leaves the desk without the agent
   [[ -n "$(version)" ]] || dojo "|install our %trunk"

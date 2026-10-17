@@ -71,7 +71,7 @@ services:
         # whole server: every room, not just theirs. Present in 1.1 and
         # master alike; drop this line once upstream guards it.
         # sed succeeds even when nothing matches, so check the patch took.
-        RUN sed -i 's/if a\.group != c\.group\.Name() {/if c.group == nil || a.group != c.group.Name() {/' rtpconn/webclient.go && grep -q 'c.group == nil' rtpconn/webclient.go
+        RUN sed -i 's/if a\.group != c\.group\.Name() {/if c.group == nil || a.group != c.group.Name() {/' rtpconn/webclient.go && grep -qF 'if c.group == nil || a.group != c.group.Name() {' rtpconn/webclient.go
         RUN go build -o /galene
         FROM alpine:3
         COPY --from=build /galene /galene

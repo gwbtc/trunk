@@ -1,5 +1,6 @@
 ::  trunk-guest: guest seats (wire 16 to 19), with no scries and no
-::  cards, so gen/test-guest.hoon can cover it.
+::  cards, so gen/test-guest.hoon can cover it. +line-fits, the one
+::  pure check party lines have, lives here for the same reason.
 ::
 ::  A guest is a person on a call with no ship behind their seat. They
 ::  come in by a link the owner made, or through an app on our ship
@@ -212,6 +213,19 @@
   =/  t=tape  (trip origin)
   =/  host=tape  (slag (add 2 (need (find "//" t))) t)
   (rap 3 ~[base '/join/#' (crip host) '/' code])
+::
+::  +line-fits: may a host's %announce add a line to the lines we know?
+::  An update to a line we know always may. A new one must fit under
+::  the host's own cap and the cap on all lines together, since the
+::  list is remote-controlled.
+::
+++  line-fits
+  |=  [known=(set [ship @t]) host=ship name=@t host-cap=@ud all-cap=@ud]
+  ^-  ?
+  ?:  (~(has in known) [host name])  &
+  ?&  (lth ~(wyt in known) all-cap)
+      (lth (lent (skim ~(tap in known) |=([s=ship @t] =(s host)))) host-cap)
+  ==
 ::
 ::  +app-sub: an app room's Galène subgroup. A party line's is
 ::  '<ship>-<name>' and an app room's is '<ship>/<app>/<room>/<epoch>'.
