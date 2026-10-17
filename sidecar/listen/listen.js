@@ -32,6 +32,7 @@
   var elements = {};
   var ctx = null;
   var speakTimer = null;
+  var wake = null;   // the screen wake lock, on a phone
 
   function audGroup(tok) {
     try {
@@ -78,6 +79,8 @@
   function unlock() {
     try {
       var Ctx = window.AudioContext || window.webkitAudioContext;
+      // so the iPhone's silent switch does not silence the line
+      if (navigator.audioSession) navigator.audioSession.type = 'playback';
       if (!ctx && Ctx) ctx = new Ctx();
       if (ctx && ctx.state === 'suspended') ctx.resume();
     } catch (e) {
@@ -256,8 +259,24 @@
     }, 250);
   }
 
+  // A phone that sleeps drops the line, so keep the screen on while
+  // listening.
+  function keepAwake() {
+    if (navigator.wakeLock && document.visibilityState === 'visible' && conn && !wake) {
+      navigator.wakeLock.request('screen').then(function (w) { wake = w; w.onrelease = function () { wake = null; }; }).catch(function () {});
+    }
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+
   function stop() {
-    if (conn) { try { conn.close(); } catch (e) {} conn = null; }
+    // the old connection's handlers go first, so its close cannot
+    // overwrite why we stopped or tear down a new one
+    if (conn) {
+      conn.onclose = conn.onerror = conn.onjoined = conn.onuser = conn.onusermessage = conn.ondownstream = null;
+      try { conn.close(); } catch (e) {}
+      conn = null;
+    }
+    if (wake) { wake.release().catch(function () {}); wake = null; }
     if (speakTimer) { clearInterval(speakTimer); speakTimer = null; }
     Object.keys(elements).forEach(function (k) {
       try { elements[k].src.disconnect(); } catch (e) {}
@@ -283,7 +302,7 @@
     // start on its own.
     unlock();
 
-    conn = new ServerConnection();
+    var c = conn = new ServerConnection();
 
     conn.onconnected = function () {
       this.join(group, 'listener', { type: 'token', token: token });
@@ -305,6 +324,7 @@
       goBtn.className = 'leave';
       goBtn.disabled = false;
       goBtn.onclick = function () { stop(); say('Stopped.'); };
+      keepAwake();
     };
 
     // (id, kind) only — the user record lives in conn.users.
@@ -339,7 +359,8 @@
         play(s.id, s.stream || stream_);
         say('Listening');
       };
-      s.onclose = function () { say('Listening. Nothing to hear yet.'); };
+      // a stream of a connection we stopped closes after the fact
+      s.onclose = function () { if (c === conn) say('Listening. Nothing to hear yet.'); };
     };
 
     conn.onclose = function () {
@@ -355,8 +376,9 @@
     // Galène tells us its websocket endpoint in the group's status.
     fetch('/group/' + group + '/.status')
       .then(function (r) { return r.json(); })
-      .then(function (st) { conn.connect(st.endpoint); })
+      .then(function (st) { if (c === conn) c.connect(st.endpoint); })
       .catch(function () {
+        if (c !== conn) return;
         say('Could not reach the server.', true);
         stop();
       });
