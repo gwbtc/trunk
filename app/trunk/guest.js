@@ -328,10 +328,10 @@
     return t;
   }
 
-  // On the ship, asked by a call server's page (#hop): get the room and
-  // a ticket, and go back with them. They go only to the origin of the
-  // ticket's own location, which is the call server this ship chose,
-  // never to one a link names. The secret stays here.
+  // On the ship, asked by a call server's page (#hop/<word>): get the
+  // room and a ticket, and go back with them and the word. They go only
+  // to the origin of the ticket's own location, which is the call server
+  // this ship chose, never to one a link names. The secret stays here.
   async function back(word) {
     say('Taking you to the call…');
     try {
