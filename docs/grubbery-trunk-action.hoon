@@ -8,15 +8,17 @@
 ::    the four app-room -as actions (trunk wire 18): calls the app hosts
 ::    for its own users, under its own name. See trunk's
 ::    docs/guest-seats.md, "Grubbery apps".
+::    %app-guest-link-as (trunk wire 19): a link anyone may open to one
+::    of the app's rooms, such as a calendar event's call.
 ::
 ::  TYPED, since %trunk's on-poke does a typed extract and a passthrough
 ::  marc's untyped vase nest-fails it into a nack. The shapes are
 ::  sur/trunk.hoon's, exactly.
 ::
-::  DEPLOY ONLY ONCE THE SHIP'S %trunk IS WIRE 18. The vase carries the
+::  DEPLOY ONLY ONCE THE SHIP'S %trunk IS WIRE 19. The vase carries the
 ::  whole union, and an older trunk's typed extract refuses all of it,
 ::  notices too: calendar and orrery reminders would stop. The order is
-::  trunk 18 on the ship, then this marc, then any app that uses it.
+::  trunk 19 on the ship, then this marc, then any app that uses it.
 ::  Read /~/scry/trunk/version.json first.
 ::
 ::  Deploys to /gub/mar/clay/trunk/trunk/action/hoon AND
@@ -29,6 +31,7 @@
       [%app-room-close-as app=@t room=@t]
       [%app-room-rotate-as app=@t room=@t]
       [%app-guest-ticket-as app=@t room=@t guest=@t speak=? req=@t]
+      [%app-guest-link-as app=@t room=@t title=@t speak=? req=@t]
   ==
 |_  a=action
 ++  grad  %noun

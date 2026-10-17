@@ -1,6 +1,6 @@
 # Browser checks
 
-End-to-end checks of trunk's three pages, run in headless Chromium against a fake ship and a local Galène. The Hoon checks in `gen/` cannot see the pages, so run these after any change to `app/trunk/guest.html`, `app/trunk/page.html`, `sidecar/listen/`, or the guest routes and their JSON.
+End-to-end checks of trunk's three pages, run in headless Chromium against a fake ship and a local Galène. The Hoon checks in `gen/` cannot see the pages, so run these after any change to `app/trunk/guest.html`, `guest.js`, `guest.css`, `app/trunk/page.html`, `sidecar/listen/`, or the guest routes and their JSON.
 
 `check.mjs` signs in as the ship's owner and opens a party line called `browser-check` with a permanent link of the same name. It runs the checks, then revokes the link and closes the line. Each check prints `ok` or `BAD`, and the run ends with `PASS` or `FAIL`.
 
@@ -9,6 +9,7 @@ End-to-end checks of trunk's three pages, run in headless Chromium against a fak
 | `guest` | Two guests hear each other. A guest alone is told others will appear. A speaking ring lights. A reload keeps the name and rejoins as the same guest. Leaving while muted rejoins unmuted. |
 | `video` | Camera frames reach the others. A late joiner sees an existing camera. Mute shows. A screen share replaces the camera on the same tile. Video off is seen. |
 | `page` | On the trunk page, "New line…" with a link name makes a line and a permanent link in one step. The new link is marked, with Copy focused. |
+| `join` | The call server's join page (wire 19) serves the ship's own three files. A guest there goes to the ship for a ticket and comes back with it out of the address bar, joins through the call server's own websocket, keeps no secret on that origin, and meets and hears a guest on the ship's page. It runs only when the call server has a join page. |
 | `listen` | The listen page joins through Galène, is styled, and shows the guest speaking. It runs only when `LISTEN` is set. |
 
 ## Setup
@@ -26,7 +27,7 @@ End-to-end checks of trunk's three pages, run in headless Chromium against a fak
    ./galene -insecure -http 127.0.0.1:8445 -turn '' -data data -groups groups -static static
    ```
 
-   For the listen check, copy `sidecar/listen/` into its `static/listen/`.
+   For the listen check, copy `sidecar/listen/` into its `static/listen/`. For the join check, copy `app/trunk/guest.html` to its `static/join/index.html`, and `guest.js` and `guest.css` beside it.
 3. **Point the ship at it**, from the dojo:
 
    ```

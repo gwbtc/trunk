@@ -28,6 +28,17 @@
   "whom":{"ship":"~nec"},"content":[{"inline":["hey ",{"ship":"~bus"},
   {"break":null},{"bold":["now"]}]}],"mention":false}}}}
   '''
+::  a post whose id holds no readable time, but whose key still names
+::  one in `time`: the case +post-at and +fresh must get right so a
+::  stale post does not re-notify on every re-watch
+=/  timeless-id-post
+  %-  j
+  %+  rap  3
+  :~  '{"add":{"source":{"dm":{"ship":"~nec"}},"event":{"notified":true,'
+      '"child":false,"dm-post":{"key":{"id":"~nec/xyzzy","time":"'
+      (scot %ud t0)
+      '"},"whom":{"ship":"~nec"},"content":[],"mention":false}}}}'
+  ==
 =/  quiet-post
   %-  j
   '''
@@ -427,10 +438,19 @@
       ==
     ::
       :-  'fresh for five minutes'
-      ?&  (fresh da-id (add t0 ~m4))
-          !(fresh da-id (add t0 ~m6))
-          (fresh da-id (sub t0 ~s1))
-          (fresh 'no-time' t0)
+      ?&  (fresh `t0 (add t0 ~m4))
+          !(fresh `t0 (add t0 ~m6))
+          (fresh `t0 (sub t0 ~s1))
+          (fresh ~ t0)
+      ==
+    ::
+      :-  'freshness reads key.time, not just the id'
+      =/  p  (need (add-post timeless-id-post))
+      ?&  =(`t0 time.p)
+          =(~ (post-time id.p))
+          =(`t0 (post-at p))
+          (fresh (post-at p) (add t0 ~m4))
+          !(fresh (post-at p) (add t0 ~m6))
       ==
     ::
       :-  'seen prunes to the window'
@@ -517,8 +537,8 @@
     ::
       :-  'switches: channel posts by mention'
       =/  k  all-kinds
-      =/  quiet=post  ['chat/~nec/x' '~bus/1' ~ %.n ~ ~]
-      =/  loud=post  ['chat/~nec/x' '~bus/1' ~ %.y ~ ~]
+      =/  quiet=post  ['chat/~nec/x' '~bus/1' ~ %.n ~ ~ ~]
+      =/  loud=post  ['chat/~nec/x' '~bus/1' ~ %.y ~ ~ ~]
       ?&  (wants k(channel %mentions) loud)
           !(wants k(channel %mentions) quiet)
           (wants k quiet)

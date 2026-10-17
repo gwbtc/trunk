@@ -120,9 +120,15 @@ The page shows each person by the name their client put in Galène's per-user da
 
 A listen link is a bearer link: anyone who has it can listen, watch any camera or shared screen, and see who is on the line, until it expires (an hour at most). It cannot be revoked. Its token rides in the fragment (`#token=`), so it stays out of server logs, but it stays in browser history and in whatever chat it was pasted into.
 
-## 5. Guests (wire 16 and 17)
+### The join page (wire 19)
 
-People with no ship join through a page the ship serves, and an app on the ship may serve its own. Galène refuses a websocket from another origin, so list the ship's origin in `galene/data/config.json`. Galène re-reads the file when it changes, so no restart is needed:
+An app's guest link, such as a calendar event's call, opens at `<sfu base>/join/#<ship's host>/<code>`. The join page is trunk's own guest page: `app/trunk/guest.html` as `index.html`, with `guest.js` and `guest.css` beside it, under Galène's `/static/join`. The compose file mounts the three from `../app/trunk`. On a call server that is not a checkout of this repo, copy them into a `join/` folder and mount that instead. To update them without recreating the container, also `docker cp join/. <galene container>:/static/join/`.
+
+The page fetches nothing from the ship: Galène's CSP would refuse it. It sends the guest to the ship's guest page, which sends them back with a ticket in the fragment, and the call runs on Galène's own origin. So the join page needs no `allowOrigin` entry, and a new ship on this server needs no change here. `docs/guest-seats.md`, "The join page", has the steps.
+
+## 5. Guests (wire 16 to 19)
+
+People with no ship join through a page the ship serves, and an app on the ship may serve its own. Galène refuses a websocket from another origin, so list the ship's origin in `galene/data/config.json`. Galène re-reads the file when it changes, so no restart is needed. Guests from an app's link (wire 19) join on the join page (step 4) instead, on Galène's own origin, which needs no entry.
 
 ```json
 {"proxyURL": "https://calls.example.com",
