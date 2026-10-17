@@ -841,6 +841,8 @@
       =.  push.state  (~(del by push.state) id.act)
       =.  meta.state  (~(del by meta.state) id.act)
       =.  sent.badge.state  (~(del by sent.badge.state) id.act)
+      ::  with no device left the /v4 watch goes, and its count with it
+      =?  n.badge.state  =(~ push.state)  ~
       :_(this (activity-cards:hc push.state))
     ::
     ::  one push to one device at once, past the level and the
@@ -1113,7 +1115,7 @@
           ?~  got
             ::  a brand-new room starts unbound and ungated; binding
             ::  and gating are separate deliberate acts.
-            [title.act members.act admins.act listen.act sfu.act ~ ~ ~ ~ ~]
+            [title.act members.act admins.act listen.act ?:(keep-sfu.act ~ sfu.act) ~ ~ ~ ~ ~]
           =/  new-sfu  ?:(keep-sfu.act sfu.u.got sfu.act)
           =/  new-title  ?:(=('' title.act) title.u.got title.act)
           %=  u.got
@@ -2053,11 +2055,12 @@
 ::  behind the first undelivered one and the line went silent while
 ::  |hi still worked. Seen twice in the field on the same day. The
 ::  date makes each ask its own flow, the way /relay's call-id
-::  already does for 1:1 calls. A host's answers (+reply) are dated
-::  the same way, on /fan. Its fan-outs (+announce, +shut-cards,
-::  +on-line-cards) keep one bare /fan wire per member: one flow per
-::  roster change per member would grow peer state fast, and none
-::  has ever wedged.
+::  already does for 1:1 calls. A host's answers that someone waits
+::  on (+reply) are dated the same way, on /fan. Its fan-outs
+::  (+announce, +shut-cards, +on-line-cards) and its answers to polls
+::  keep one bare /fan wire per member: one flow per roster change or
+::  poll per member would grow peer state fast, and none has ever
+::  wedged.
 ::
 ++  room-wire
   |=  who=ship
@@ -2469,7 +2472,11 @@
       %on-line     ~[(fact [%on-line our.bowl name.msg who.msg])]
       %link        ~[(fact [%listen-link listen-link.msg])]
     ==
-  ::  an answer is what someone waits on, so its own flow (+room-wire)
+  ::  An answer someone waits on gets its own flow (+room-wire). Answers
+  ::  to polls (%present, %on-line, %recorders-are) come every few
+  ::  seconds, and gall never closes a poke's flow, so they share the
+  ::  member's one /fan flow, as fan-outs do.
+  ?:  ?=(?(%present %on-line %recorders-are) -.msg)  ~[(fan who msg)]
   :~  :*  %pass  /fan/(scot %p who)/(scot %da now.bowl)
           %agent  [who %trunk]
           %poke  %trunk-room  !>(msg)
@@ -3217,7 +3224,7 @@
       %+  skim  ~(tap in ~(key by hosts.s))
       |=(k=@t |(=(k agent) =((end [3 +((met 3 agent))] k) (cat 3 agent '/'))))
     ?:  (gte (lent names) app-name-cap:trunk-guest)
-      [%| (deny room req 'too many apps')]
+      [%| (deny room ?:((lte (met 3 req) id-max:trunk-guest) req '') 'too many apps')]
     [%& s(hosts (~(put by hosts.s) id %.n))]
   ?+    -.act  !!
   ::  closing works even when switched off, and ends the room's link

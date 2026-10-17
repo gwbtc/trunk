@@ -551,7 +551,7 @@
     // back from the ship after a Join, which only fetched a ticket
     var again = marked('again');
     if (!window.isSecureContext) say('This address is not secure, so your browser blocks the microphone and camera. You can still watch and listen.', true);
-    else if (again) say('Press Join to go back on the call.');
+    else if (again) say('Press Join again to join the call.');
     else say(speak ? 'You will be asked for your microphone. Headphones keep echo off the call.' : 'You can watch and listen on this call.');
   }
 

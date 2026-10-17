@@ -99,13 +99,6 @@ builds() {
   khan "=/  m  (strand ,vase)  ;<  =bowl  bind:m  get-bowl  =/  p=path  /(scot %p our.bowl)/trunk/(scot %da now.bowl)/app/trunk/hoon  =/  v  .^(vase %ca p)  (pure:m !>(&))" |
     grep -q '%noun 0\]$'
 }
-# 0 unless the dojo shows gall refusing the new agent. Building is not
-# loading: when +on-load crashes, gall keeps the old agent, which still
-# answers every check after this one. Gall says so with %load-failed.
-loaded() {
-  sleep 5
-  ! tmux capture-pane -p -t "=$session:$ship" -S -80 | grep -q 'load-failed'
-}
 
 if [[ -f "$pier/trunk/app/trunk.hoon" ]]; then
   echo "== update %trunk on ~$ship"
@@ -116,10 +109,11 @@ if [[ -f "$pier/trunk/app/trunk.hoon" ]]; then
   # whole, so only the first file waits.
   for f in $(texts); do
     for ((i = 0; i < 60; i++)); do landed "$f" && break; sleep 2; done
-    landed "$f" || die "|commit %trunk did not land $f; read the dojo (tmux attach -t $session)"
+    # an agent that fails to load (%load-failed) fails the whole commit,
+    # so it shows here as a file that never lands
+    landed "$f" || die "|commit %trunk did not land $f, or %trunk failed to load it; read the dojo (tmux attach -t $session)"
   done
   builds || die "app/trunk.hoon does not build on ~$ship; read the dojo (tmux attach -t $session)"
-  loaded || die "%trunk did not load the new code on ~$ship; read the dojo (tmux attach -t $session)"
   echo "  committed"
   # a first run stopped before |install leaves the desk without the agent
   [[ -n "$(version)" ]] || dojo "|install our %trunk"
