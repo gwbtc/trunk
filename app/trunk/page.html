@@ -155,6 +155,11 @@
     <h2>Apps that host calls</h2>
     <p>An app on this ship can host calls for its own users, such as a game's party voice. It needs your permission first. Each app that has asked shows here, switched off until you turn it on.</p>
     <div id="hosts"></div>
+    <p>An app can also make a link anyone can open, such as a calendar's meeting link. That link opens on your call server's join page, which sends the guest here for their ticket, so it needs this ship's public address. Switching an app on from this ship's public https address fills it in.</p>
+    <div class="row">
+      <label for="g-public">This ship's public address<span class="hint">Such as https://urbit.example, with nothing after the host. Apps cannot make links until it is set.</span></label>
+      <input id="g-public" class="field" maxlength="256" placeholder="https://urbit.example">
+    </div>
   </section>
 
   <section>
@@ -349,13 +354,28 @@ async function loadGuests() {
     on.checked = !!a.allowed;
     on.onchange = async () => {
       on.disabled = true;
+      // an app's links need this ship's address: this page's, if public
+      if (on.checked && !g.origin && location.protocol === 'https:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) {
+        await act({ 'set-origin': location.origin });
+      }
       await act({ 'app-hosting': { agent: a.agent, allow: on.checked } });
       reloadGuests();
     };
     row.append(lab, on);
     hosts.append(row);
   }
+  if (document.activeElement !== $('g-public')) $('g-public').value = g.origin || '';
 }
+
+// the ship's public address, which an app's link names (wire 19)
+$('g-public').onchange = async () => {
+  const v = $('g-public').value.trim().toLowerCase().replace(/\/+$/, '');
+  if (v && !/^https?:\/\/[a-z0-9.:-]+$/.test(v)) {
+    banner('An address is https:// and a host, such as https://urbit.example, with nothing after it.');
+    return;
+  }
+  if (await act({ 'set-origin': v })) reloadGuests();
+};
 
 // the Tlon groups this ship is in, for a new line's members
 async function loadGroups() {

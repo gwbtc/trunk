@@ -3,7 +3,7 @@
 // tone for a microphone. README.md says how to set up and run them.
 //
 //   SHIP=http://localhost:8110 CODE=<+code> BROWSER=/usr/bin/chromium \
-//     node check.mjs [guest|video|page|listen|all]
+//     node check.mjs [guest|video|page|join|listen|all]
 //
 // It signs in as the owner, opens a party line 'browser-check' with a
 // permanent link of the same name, and closes both at the end. Each
@@ -240,6 +240,56 @@ async function pageChecks(o) {
   check('the new-line fields hide again', await o.$eval('#g-new-title', (e) => e.offsetParent === null));
   // closing the line ends its link too
   await act(o, { 'close-room': { name } });
+  // the ship's public address, which apps' links name (wire 19)
+  const was = await o.$eval('#g-public', (e) => e.value);
+  await o.$eval('#g-public', (e) => { e.value = 'https://urbit.example/'; e.dispatchEvent(new Event('change')); });
+  check('the public address field sets the address', await until(() => o.evaluate(
+    async () => (await (await fetch('/~/scry/trunk/guests.json')).json()).origin === 'https://urbit.example')));
+  await act(o, { 'set-origin': was });
+}
+
+// The call server's join page (wire 19): the guest page's three files,
+// served by Galène at <sfu>/join/. A guest there goes to the ship for a
+// ticket and comes back to join on the call server's own origin. Any
+// link works through it, so this uses the owner's.
+async function joinChecks(o) {
+  const sfu = await o.evaluate(async () => (await (await fetch('/~/scry/trunk/sfu.json')).json()).base);
+  const text = async (u) => { try { const r = await fetch(u); return r.ok ? r.text() : null; } catch (e) { return null; } };
+  if (!(await text(`${sfu}/join/`))) { console.log(`-- join: skipped, no join page at ${sfu}/join/`); return; }
+  const host = new URL(SHIP).host;
+  for (const [f, on] of [['', LINE], ['guest.js', 'guest.js'], ['guest.css', 'guest.css']]) {
+    check(`the call server's join/${f} is the ship's`, (await text(`${sfu}/join/${f}`)) === (await text(`${SHIP}/apps/trunk/guest/${on}`)));
+  }
+  const a = await page();
+  await a.goto(`${sfu}/join/#${host}/${LINE}`);
+  await a.waitForSelector('#form:not([hidden])', { timeout: 15000 });
+  const where = await a.evaluate(() => [location.origin, location.hash, document.querySelector('#host').textContent]);
+  check('the guest comes back to the call server', where[0] === new URL(sfu).origin, where);
+  check('with the ticket out of the address bar', where[1] === `#${host}/${LINE}`, where);
+  check('and the ship\'s address shown', where[2].endsWith(` at ${host}`), where);
+  await a.click('#name', { clickCount: 3 });
+  await a.type('#name', 'Joan');
+  await a.click('#join');
+  await onCall(a);
+  const ws = await a.evaluate(() => window.__ws.map((w) => w.url));
+  check('it calls through the call server\'s own websocket', ws.length > 0 && ws.every((u) => new URL(u).host === new URL(sfu).host), ws);
+  const kept = await a.evaluate(() => Object.keys(localStorage));
+  check('the call server\'s origin keeps no secret', kept.length > 0 && kept.every((k) => !/secret/.test(k)), kept);
+  // a ticket gone stale: Join fetches a new one by way of the ship
+  const c = await page();
+  const old = { host: '~old', title: 'Old', speak: true, ticket: { username: 'guest-0', location: `${sfu}/group/x/`, token: 'x', expires: 1, speak: true } };
+  await c.goto(`${sfu}/join/#${host}/${LINE}/${encodeURIComponent(JSON.stringify(old))}`);
+  await c.waitForSelector('#form:not([hidden])');
+  await c.type('#name', 'Stale');
+  await Promise.all([c.waitForNavigation(), c.click('#join')]);
+  check('a stale ticket goes back to the ship for a new one', await until(() => c.evaluate(
+    (h) => location.hash === h && /Browser check/.test(document.querySelector('#room').textContent)
+      && !document.querySelector('#form').hidden, `#${host}/${LINE}`), 15000));
+  await c.close();
+  const b = await guest('Shipley');
+  check('a join page guest and a ship page guest meet', await until(async () => !!(await tile(a, 'Shipley')) && !!(await tile(b, 'Joan')), 10000));
+  await sleep(3000);
+  check('and hear each other', (await bytes(a, 'audio', 'inbound-rtp')) > 0 && (await bytes(b, 'audio', 'inbound-rtp')) > 0);
 }
 
 // LISTEN is a listen link for the line 'browser-check' (README.md)
@@ -261,7 +311,7 @@ async function listenChecks() {
 const o = await owner();
 check('the owner can open the check line', [204].includes(await act(o, { 'open-room': { name: LINE, title: 'Browser check', members: [], admins: [] } })));
 check('and give it a permanent link', [204].includes(await act(o, { 'guest-link': { code: LINE, name: LINE, speak: true } })));
-const runs = { guest: guestChecks, video: videoChecks, page: () => pageChecks(o), listen: listenChecks };
+const runs = { guest: guestChecks, video: videoChecks, page: () => pageChecks(o), join: () => joinChecks(o), listen: listenChecks };
 try {
   for (const [k, f] of Object.entries(runs)) {
     if (only !== 'all' && only !== k) continue;

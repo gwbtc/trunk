@@ -190,9 +190,9 @@ Talon reads each device's `sent` and `last` and the `drops` from it, so those na
 
 ### Guest seats (wire 16 to 18)
 
-A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line: an invite for a set number of people over a set time (`invite-guests`), or a permanent link under a chosen name for a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on, and an agent that hosts several apps, as grubbery does, names each with the `-as` forms (wire 18).
+A ship can host calls that people with no ship join, with audio, video and screen sharing. The owner makes a link to a party line: an invite for a set number of people over a set time (`invite-guests`), or a permanent link under a chosen name for a recurring meeting (`guest-link`, wire 17). A guest opens it, types a name and joins through the ship's own page at `/apps/trunk/guest/<code>`, which is public. Another agent on the ship can also host its own rooms for its own users (`app-room-open`, `app-guest-ticket`), once the owner switches it on, and an agent that hosts several apps, as grubbery does, names each with the `-as` forms (wire 18). Since wire 19 an app can also make a link anyone may open to one of its rooms (`app-guest-link`), such as a calendar event's call. That link opens on the call server's join page, `<sfu base>/join/`, which fetches the guest's ticket by way of the ship's page, so the owner sets the ship's public address first (`set-origin`).
 
-A guest's Galène username is `guest-` and 24 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin`, and an https ship needs Galène behind TLS.
+A guest's Galène username is `guest-` and 24 hex digits, never an `@p`, and a readable name rides in Galène's per-user data. Show guests marked as guests. The guest page publishes the way Talon does: one `camera` stream whose one video sender carries the camera or a shared screen, no simulcast, and the `talon-video` and `talon-mute` usermessages. The live links and the apps that asked are at `/~/scry/trunk/guests.json`. Galène must list the ship's origin in `allowOrigin` for the ship's own guest page, though not for the join page, and an https ship needs Galène behind TLS.
 
 [`docs/guest-seats.md`](docs/guest-seats.md) has the whole design, and starts with how to run a recurring meeting.
 
@@ -308,7 +308,7 @@ AGENTS.md                  notes for coding agents working on trunk
 
 **It is not self-contained.** Installing needs `default-agent` and
 `skeleton` from `%base`, plus the `bill`, `hoon`, `html`, `js`, `kelvin`,
-`mime`, `noun`, `svg` and `txt` marks. Since wire 12 the Landscape tile
+`mime`, `noun`, `svg` and `txt` marks, and since wire 19 `css`. Since wire 12 the Landscape tile
 also needs the `docket-0` mark, `lib/docket` and `sur/docket` from
 `%landscape`. That list is from a working install, not from memory; a
 missing mark fails the commit with a mark error rather than anything
@@ -325,7 +325,7 @@ helpful.
 PIER=/path/to/your/pier
 cp -r app lib mar sur gen desk.bill desk.docket-0 "$PIER/trunk/"
 cp "$PIER"/base/lib/{default-agent,skeleton}.hoon           "$PIER/trunk/lib/"
-cp "$PIER"/base/mar/{bill,hoon,html,js,kelvin,mime,noun,svg,txt}.hoon "$PIER/trunk/mar/"
+cp "$PIER"/base/mar/{bill,css,hoon,html,js,kelvin,mime,noun,svg,txt}.hoon "$PIER/trunk/mar/"
 cp "$PIER"/landscape/mar/docket-0.hoon "$PIER/trunk/mar/"
 cp "$PIER"/landscape/lib/docket.hoon   "$PIER/trunk/lib/"
 cp "$PIER"/landscape/sur/docket.hoon   "$PIER/trunk/sur/"

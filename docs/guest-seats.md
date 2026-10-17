@@ -1,6 +1,6 @@
 # Guest seats: calls with people who have no ship
 
-**Status: built.** Invites and app rooms are wire 16 (state 17). Permanent links, guest secrets and video on the guest page are wire 17 (state 18). Rooms for grubbery apps, named with the `-as` actions, are wire 18 (state 19). This began as a proposal (PR #11). The section near the end lists where the build departs from it and why.
+**Status: built.** Invites and app rooms are wire 16 (state 17). Permanent links, guest secrets and video on the guest page are wire 17 (state 18). Rooms for grubbery apps, named with the `-as` actions, are wire 18 (state 19). Apps' links and the call server's join page are wire 19 (state 20). This began as a proposal (PR #11). The section near the end lists where the build departs from it and why.
 
 A party line seats ships. Guest seats let a ship host calls that people without a ship can join, with audio, video and screen sharing. They arrive through a link, or through an app on the host's ship that already knows who they are.
 
@@ -140,14 +140,57 @@ Every grubbery app reaches trunk as the one gall agent `%grubbery`, so an app na
 [%app-guest-ticket-as app=@t room=@t guest=@t speak=? req=@t]
 ```
 
-- **Opening a room** puts the app on the trunk page, switched off. One agent may name 64 apps at most, and trunk refuses more with `too many apps`.
-- **Answers** come on `/app/grubbery/<name>`, as the same `guest-ticket` and `guest-denied` JSON. A grubbery app gets them by asking the kernel to watch that path (`%gall-watch` with `[our %trunk /app/grubbery/<name>]`). The kernel keeps each fact as a file under `/sys/gall/subs/<ship>/trunk/app/grubbery/<name>/`, and the app matches tickets by `req`.
+- **Opening a room**, or asking for a link (wire 19), puts the app on the trunk page, switched off. One agent may name 64 apps at most, and trunk refuses more with `too many apps`.
+- **Answers** come on `/app/grubbery/<name>`, as the same `guest-ticket` and `guest-denied` JSON. A grubbery app gets them by asking the kernel to watch that path (`%gall-watch` with `[our %trunk /app/grubbery/<name>]`). The kernel keeps the facts under `/sys/gall/subs/<ship>/trunk/app/grubbery/<name>/`, but only the last one, so an earlier answer for the same room can look like the current one. Match answers by `req`, never by room, and make each `req` new, such as the room and the time. Send the first request only after the watch is acknowledged (the kernel marks it live): an answer sent before that is lost.
 - **Rooms** live on the call server at `<ship>/grubbery/<name>/<room>/<epoch>`, one segment deeper than a plain app's, so the two can never meet.
-- **The kernel's trunk marc** must type the four `-as` actions. The exact marc is `docs/grubbery-trunk-action.hoon` in this repo. Deploy it only after the ship's trunk is wire 18: a marc that names actions an older trunk lacks makes that trunk refuse every grubbery poke, notices included. The order is trunk 18, then the marc, then the app.
-- **Permits:** the owner grants the app a permit to poke `%trunk`, and to read only its own `/sys/gall/subs/…/trunk/app/grubbery/<name>/` path. Ask for that path itself in the app's `weir.json`, not `/sys/gall/subs/` or a parent of it.
+- **The kernel's trunk marc** must type the `-as` actions: the four room actions, and since wire 19 `app-guest-link-as`. The exact marc is `docs/grubbery-trunk-action.hoon` in this repo. Deploy it only after the ship's trunk has the wire that marc was written for (19 for the current one): a marc that names actions an older trunk lacks makes that trunk refuse every grubbery poke, notices included. The order is trunk, then the marc, then the app.
+- **Permits:** the owner grants the app a permit to poke `%trunk`, and to read only its own `/sys/gall/subs/…/trunk/app/grubbery/<name>/` path. That path holds the ship's name, which a `weir.json` cannot know, and grubbery's roads have no stand-in for it yet. So the owner grants the exact road, `/sys/gall/subs/<ship>/trunk/app/grubbery/<name>/`, on grubbery's permits page. Never grant `/sys/gall/subs/` or a parent of it, which reads every app's tickets and links. A trunk scry would not help: grubbery's `/sys/scry/` permit reaches every scry at once.
 - **The page:** the app's page is on the ship's origin, so it joins Galène the way trunk's guest page does, loading `/apps/trunk/protocol.js`, never the call server's copy. To show in Talon, it publishes the way the guest page does ("Video and screen sharing", above).
 
 The trust limit is the same as for notices. A name is whatever the app writes, and grubbery's kernel does not check it is the app's own. So one grubbery app with a permit to poke trunk could open, close or rotate rooms under another app's name. It cannot read the other app's tickets as long as its approved permits limit its reads to its own answer path, `/sys/gall/subs/<ship>/trunk/app/grubbery/<name>/`. A permit to read `/sys/gall/subs/` as a whole, or an app with no permits set at all, would let it read every app's. The full fix is for the kernel to stamp the calling app's name itself.
+
+### An app's link (wire 19)
+
+An app can also make a link that anyone may open, for people it does not know, such as the guests of a calendar event. The link leads to one of the app's rooms, so the app needs no page of its own.
+
+```hoon
+[%app-guest-link room=@t title=@t speak=? req=@t]
+[%app-guest-link-as app=@t room=@t title=@t speak=? req=@t]
+```
+
+```jsonc
+// the answer, on the app's path
+{"guest-link": {"room": "e-3fa9", "req": "<request id>", "code": "<32 hex>",
+                "path": "/apps/trunk/guest/<code>",
+                "url": "https://calls.example/join/#urbit.example/<code>", "speak": true}}
+```
+
+- **One link per room.** Trunk makes the code, 32 hex digits, so no app picks one that can be guessed or one the owner's links use. Asking again for the same room gives the same code, with the new title and speak. An app that lost an answer asks again and gets the same URL.
+- **The room need not be open.** The link outlives the room. When someone opens it, a room that closed itself for being idle opens again, with a new epoch. A rotation leaves the link alone, and whoever opens it next joins the new epoch.
+- **Closing the room ends its link.** `app-room-close` is how an app ends a link, such as when the event it was for is deleted. To replace a link that leaked, close the room and ask again: the new link has a new code. The owner can end one with `revoke-invite` and its code, which is in the URL.
+- **Ending a link stops new joins and rejoins.** Whoever is on the call stays until they leave, since Galène checks a token only when someone joins. A rotation does not remove them either: it moves only the users the app tickets again.
+- **The owner's switch gates it twice:** when the link is made, and whenever someone opens it. While it is off, the guest is told so.
+- **Limits.** An app may have 1,000 links. The title and the request id are at most 128 bytes. A link's guests keep nothing on the ship, so they do not count toward an app room's 256.
+- **Refusals.** Besides the switch, `not a room name`, `id too long` and `too many links`, a link is refused with `no sfu configured` without a call server, and with `no public address set` until the owner sets the ship's public address (below).
+
+#### The join page
+
+The URL is on the call server, not the ship: `<sfu base>/join/#<ship's host>/<code>`. A ship on a shared call server gets links on that server's domain, and one with its own call server gets links on its own.
+
+1. Galène serves the join page from its static folder. It is the guest page's own three files: `guest.html` as `index.html`, `guest.js` and `guest.css`.
+2. Galène's Content-Security-Policy lets that page connect only to its own origin, so it cannot ask the ship for a ticket. It sends the guest to the ship's page instead, at `/apps/trunk/guest/<code>#hop`.
+3. The ship's page gets the room and a ticket, as it would for itself, and sends the guest back to `<the ticket's origin>/join/#<host>/<code>/<room and ticket as JSON>`. It sends them only to the origin of the ticket's own location, the call server the ship chose, never to one a link names. The guest's secret stays on the ship's origin.
+4. The join page takes the ticket out of the address bar, shows the host's name and address, asks for a name and joins on its own origin. It loads that server's own `protocol.js` and uses its own websocket, whatever the ticket says.
+
+The call runs on the call server's own origin, so Galène needs no `allowOrigin` entry for the ship, and nothing on the call server changes when another ship starts using it. The ticket rides in a fragment, which no server sees, as a listen link's token does. The guest sees two quick redirects before the Join button. A ticket lasts an hour, so a guest who waits longer before joining, or who drops out after an hour, goes to the ship again.
+
+The join page takes any code, so `<sfu base>/join/#<host>/<name>` works for the owner's permanent links too. It works for an invite, but the invite gives up its seat when the page loads, before the guest presses Join, since the ship's page fetches the ticket then. The join page also goes to whatever host a link names, without a click, so on a shared call server anyone can make a link there that leads to their own site's `/apps/trunk/guest/` path.
+
+**The ship's public address** is the owner's to set, since trunk cannot learn it: `{"set-origin": "https://urbit.example"}`, or the field under "Apps that host calls" on the trunk page. Switching an app on from the ship's public https address fills it in. It is a scheme and a host, with an optional port and nothing after.
+
+#### Ships on an app's call
+
+A ship cannot join an app's room as itself yet. App rooms seat only guests, and `%ask` is for party lines. A ship's user opens the link like anyone else, and shows as a guest under the name they type. Seating ships as themselves would need a ship-to-ship message, a set of ships per room that the app gives, and a way for Talon to learn of the room from the app.
 
 ## Mixing ships and guests
 
@@ -155,7 +198,8 @@ A room can hold both. Members of a party line still join with `%join-room` and t
 
 ## What has to be true outside trunk
 
-- **Galène must take the ship's origin.** The guest page is served by the ship, and Galène refuses a websocket from another origin unless its `data/config.json` lists it: `"allowOrigin": ["https://your.ship.example"]`. An app's own page on the ship needs the same entry. Galène's `.status` sends no CORS header either, which is why every ticket carries `endpoint`. Native apps send no Origin header and are not affected.
+- **Galène must take the ship's origin, for pages on the ship.** The guest page at `/apps/trunk/guest/` is served by the ship, and Galène refuses a websocket from another origin unless its `data/config.json` lists it: `"allowOrigin": ["https://your.ship.example"]`. An app's own page on the ship needs the same entry. Galène's `.status` sends no CORS header either, which is why every ticket carries `endpoint`. Native apps send no Origin header and are not affected. The call server's join page (wire 19) runs on Galène's own origin and needs no entry.
+- **The join page, for apps' links (wire 19).** The call server serves the guest page's three files at `/join/`, from Galène's static folder (`sidecar/README.md`, step 4). The two copies talk only through the fragment shapes above, so a call server may run a newer or older copy than the ships that use it.
 - **Each host ship should have its own Galène group and key.** Every ship that holds a group's key can mint a token for any room in it, so a sidecar several ships share should give each its own group (`sidecar/README.md`, step 1).
 - **Galène must speak TLS before guests use an https ship.** A page served over https cannot load `protocol.js` from, or open a websocket to, plain http: the browser blocks mixed content. The guest page says so rather than failing quietly. The fix is a TLS front for Galène (an nginx vhost with a certificate), `"proxyURL": "https://<that host>"` in Galène's `data/config.json` so `.status` names it, and `%set-sfu` pointed at its https base. `sidecar/README.md` has the steps.
 - **The short link is optional.** One nginx rule on the call server's TLS host can send `https://<host>/<name>` to `https://<ship>/apps/trunk/guest/<name>`, as long as it skips Galène's own paths. `sidecar/README.md` has the rule.
