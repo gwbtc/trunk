@@ -176,9 +176,9 @@
   ?~(l ~ `-.i.l)
 ::
 ::  +valid-origin: the ship's public address, as the owner gives it: http
-::  or https, then a host and maybe a port, and nothing after. '' is
-::  none. It goes into a URL's fragment, so it may hold no '/', '#',
-::  '?' or '@'.
+::  or https, a host of letters, digits, dots and hyphens, and maybe a
+::  :port, with nothing after. '' is none. It goes into a URL's fragment,
+::  and the join page checks it the same way.
 ::
 ++  valid-origin
   |=  o=@t
@@ -190,14 +190,15 @@
     ?:  =("http://" (scag 7 t))  `(slag 7 t)
     ~
   ?~  rest  |
-  ?&  (lte (lent t) 256)
-      !=(~ u.rest)
-      %+  levy  u.rest
-      |=  c=@tD
-      ?|  &((gte c 'a') (lte c 'z'))
-          &((gte c '0') (lte c '9'))
-          =(c '.')  =(c '-')  =(c ':')
-      ==
+  ?.  (lte (lent t) 256)  |
+  =/  cut  (find ":" u.rest)
+  =/  host=tape  ?~(cut u.rest (scag u.cut u.rest))
+  =/  port=tape  ?~(cut "" (slag +(u.cut) u.rest))
+  =/  digit  |=(c=@tD &((gte c '0') (lte c '9')))
+  ?&  !=(~ host)
+      %+  levy  host
+      |=(c=@tD |(&((gte c 'a') (lte c 'z')) (digit c) =(c '.') =(c '-')))
+      |(=(~ cut) &(!=(~ port) (levy port digit)))
   ==
 ::
 ::  +join-url: an app link on the call server's join page (wire 19). The

@@ -408,8 +408,7 @@
       =(`'a[31mred!' (preview [%a [%s 'a\1b[31mred\00!'] ~]))
     ::
       :-  'preview: bytes that are not UTF-8 cost only the preview'
-      =/  r  (preview [%a [%s (cat 3 'ok ' 0xff)] ~])
-      |(=(~ r) ?=(^ r))
+      =(~ (preview [%a [%s (cat 3 'ok ' 0xff)] ~]))
     ::
       :-  'preview: sect, link, cite'
       .=  `'@all @admin c [quote]'
