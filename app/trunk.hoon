@@ -2418,8 +2418,8 @@
 ++  shut-cards
   |=  [name=@t whom=(set ship)]
   ^-  (list card)
-  %+  turn  ~(tap in (~(del in whom) our.bowl))
-  |=(who=ship (fan who [%shut name]))
+  %+  murn  ~(tap in (~(del in whom) our.bowl))
+  |=(who=ship ?:((~(has in block.pol.state) who) ~ `(fan who [%shut name])))
 ::
 ::  +reply: deliver a room-sig to `who` — as a local fact when that's
 ::  us, over ames otherwise.
