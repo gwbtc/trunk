@@ -1,4 +1,4 @@
-# Trunkline sidecar — runs next to your ship (vere) on its host.
+# Trunkline sidecar: runs next to your ship (vere) on its host.
 #
 # NOTE: listeners do NOT use Galène's own web client. It hides
 # audio-only publishers behind a "display all" setting and cannot
@@ -10,14 +10,16 @@
 #   galene  the SFU that party lines run on
 #
 # Both are optional: without them Talon still makes Tier 0 calls (same
-# LAN, public IPv6) — you just lose the hostile-NAT fallback and the
+# LAN, public IPv6). You just lose the hostile-NAT fallback and the
 # ability to *host* a party line. One sidecar anywhere between two
 # callers covers that call, so running one upgrades every call made
 # to you.
 #
-# Bring up:
-#   TURN_PASS=$(openssl rand -hex 16) docker compose up -d
-# then advertise both from your ship (see README.md).
+# Bring up, once:
+#   umask 077; echo "TURN_PASS=$(openssl rand -hex 16)" > .env
+#   docker compose up -d
+# Compose reads .env on every command, so keep it: the ships advertise
+# this password. Then advertise both from your ship (see README.md).
 services:
   coturn:
     image: coturn/coturn:4.6
@@ -66,9 +68,10 @@ services:
         COPY . .
         # handleAction dereferences c.group without a nil check, so a
         # member leaving a party line while a peer joins segfaults the
-        # whole server — every room, not just theirs. Present in 1.1 and
+        # whole server: every room, not just theirs. Present in 1.1 and
         # master alike; drop this line once upstream guards it.
-        RUN sed -i 's/if a\.group != c\.group\.Name() {/if c.group == nil || a.group != c.group.Name() {/' rtpconn/webclient.go
+        # sed succeeds even when nothing matches, so check the patch took.
+        RUN sed -i 's/if a\.group != c\.group\.Name() {/if c.group == nil || a.group != c.group.Name() {/' rtpconn/webclient.go && grep -q 'c.group == nil' rtpconn/webclient.go
         RUN go build -o /galene
         FROM alpine:3
         COPY --from=build /galene /galene
@@ -86,7 +89,7 @@ services:
       - ./galene/groups:/groups
       - ./listen:/static/listen:ro
       # the join page for apps' guest links (wire 19): trunk's own guest
-      # page, the same three files the ship serves
-      - ../app/trunk/guest.html:/static/join/index.html:ro
-      - ../app/trunk/guest.js:/static/join/guest.js:ro
-      - ../app/trunk/guest.css:/static/join/guest.css:ro
+      # page, the same three files the ship serves. Copy app/trunk's
+      # guest.html to join/index.html, with guest.js and guest.css
+      # beside it. A folder mount serves changed files at once.
+      - ./join:/static/join:ro

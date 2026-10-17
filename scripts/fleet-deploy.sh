@@ -83,16 +83,28 @@ version() { # the wire trunk answers, or nothing
   curl -s -m 10 -b "$jar" "$url/~/scry/trunk/version.json" 2>/dev/null |
     python3 -I -c 'import sys,json; print(json.load(sys.stdin)["wire"])' 2>/dev/null || true
 }
-copy() { # the desk's own files, as the README's cp line
-  rsync -a app lib mar sur gen desk.bill desk.docket-0 "$pier/trunk/"
+copy() { # the desk's own files, as the README's cp line; prints those that changed
+  rsync -ai app lib mar sur gen desk.bill desk.docket-0 "$pier/trunk/" | awk '$1 ~ /^>f/ {print $2}'
+}
+# 0 when clay builds the agent as the desk now stands. A file can land
+# and still fail to compile, and the old agent would then answer every
+# check after this one.
+builds() {
+  khan "=/  m  (strand ,vase)  ;<  =bowl  bind:m  get-bowl  =/  p=path  /(scot %p our.bowl)/trunk/(scot %da now.bowl)/app/trunk/hoon  =/  v  .^(vase %ca p)  (pure:m !>(&))" |
+    grep -q '%noun 0\]$'
 }
 
 if [[ -f "$pier/trunk/app/trunk.hoon" ]]; then
   echo "== update %trunk on ~$ship"
-  copy
+  changed=$(copy)
   dojo "|commit %trunk"
-  for ((i = 0; i < 60; i++)); do landed app/trunk.hoon && break; sleep 2; done
-  landed app/trunk.hoon || die "|commit %trunk did not land; read the dojo (tmux attach -t $session)"
+  # every changed file, not just the agent: a change to lib/ or a page
+  # alone leaves app/trunk.hoon landed before the commit does
+  for f in ${changed:-app/trunk.hoon}; do
+    for ((i = 0; i < 60; i++)); do landed "$f" && break; sleep 2; done
+    landed "$f" || die "|commit %trunk did not land $f; read the dojo (tmux attach -t $session)"
+  done
+  builds || die "app/trunk.hoon does not build on ~$ship; read the dojo (tmux attach -t $session)"
   echo "  committed"
   # a first run stopped before |install leaves the desk without the agent
   [[ -n "$(version)" ]] || dojo "|install our %trunk"
@@ -101,7 +113,7 @@ else
   mounted base
   mounted landscape
   mounted trunk new
-  copy
+  copy >/dev/null
   install -m 644 "$pier"/base/lib/{default-agent,skeleton}.hoon "$pier/trunk/lib/"
   for m in bill css hoon html js kelvin mime noun svg txt; do
     install -m 644 "$pier/base/mar/$m.hoon" "$pier/trunk/mar/"
@@ -114,6 +126,7 @@ else
   dojo "|commit %trunk"
   for ((i = 0; i < 60; i++)); do landed app/trunk.hoon && break; sleep 2; done
   landed app/trunk.hoon || die "|commit %trunk did not land; read the dojo (tmux attach -t $session)"
+  builds || die "app/trunk.hoon does not build on ~$ship; read the dojo (tmux attach -t $session)"
   echo "  committed"
   dojo "|install our %trunk"
 fi

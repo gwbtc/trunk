@@ -6,3 +6,4 @@ sidecar/galene.secret
 # the browser checks install their own dependencies
 test/browser/node_modules/
 test/browser/package-lock.json
+sidecar/join/
