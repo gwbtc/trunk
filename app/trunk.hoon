@@ -959,6 +959,9 @@
       %=  this
         pol.state    new
         known.state  (malt (skip ~(tap by known.state) |=([k=[s=ship @t] *] =(s.k ship.act))))
+        ::  and a join we asked of it, so a grant still on its way
+        ::  does not take us into its room
+        asked.state  (malt (skip ~(tap by asked.state) |=([k=[s=ship @t] *] =(s.k ship.act))))
       ==
     ::
         %unblock
@@ -1589,7 +1592,10 @@
       ::  an invitation from anyone is fine (it is just a name), but
       ::  the list is remote-controlled, so it does not grow forever.
       ?:  (~(has in block.pol.state) src.bowl)  `this
-      ?:  |((gth (met 3 title.msg) title-cap) (gth (met 3 sfu-base.msg) title-cap))  `this
+      ::  a name or call server past the cap is refused. A title past it
+      ::  is left out, since a host may set any title on its own lines
+      ::  and its members must still hear about them.
+      ?:  |((gth (met 3 name.msg) title-cap) (gth (met 3 sfu-base.msg) title-cap))  `this
       ::  A new line must fit: one host may not fill the list for
       ::  everyone, and all hosts together may not grow it forever. An
       ::  update to a line we know is always taken.
@@ -1597,7 +1603,8 @@
             ~(key by known.state)  src.bowl  name.msg  host-line-cap  invite-cap
           ==
         `this
-      =/  =line:trunk  [title.msg listen.msg sfu-base.msg]
+      =/  title  ?:((gth (met 3 title.msg) title-cap) '' title.msg)
+      =/  =line:trunk  [title listen.msg sfu-base.msg]
       :-  ~[(fact:hc [%open src.bowl name.msg line])]
       ::  deliberately does NOT settle asked.state: joins and peeks
       ::  share that set, and a host's roster-change announce landing
@@ -1636,8 +1643,14 @@
     ::  asking admin's UI converges without a scry it cannot make.
         %access
       ?:  (~(has in block.pol.state) src.bowl)  `this
-      ::  role gates come from another ship, so they stay roster-sized
-      =/  big  |=(r=(unit (set @t)) ?~(r | (gth ~(wyt in u.r) roster-cap)))
+      ::  role gates come from another ship, so they stay roster-sized,
+      ::  each role no longer than a title
+      =/  big
+        |=  r=(unit (set @t))
+        ?~  r  |
+        ?|  (gth ~(wyt in u.r) roster-cap)
+            (lien ~(tap in u.r) |=(t=@t (gth (met 3 t) title-cap)))
+        ==
       ?:  |((big join.msg) (big speak.msg))  `this
       =/  got  (~(get by hosted.state) name.msg)
       ?~  got  `this
@@ -1894,9 +1907,9 @@
       :_  this
       ~[(fact:hc [%recv peer [%reject 'unknown' 'unreachable']])]
     ::
-    ::  Only the asks that a user is waiting on ride /room. The six
-    ::  fire-and-forget sigs (%entered %left %occupancy %recording-on
-    ::  %recording-off %recorders) ride /beat instead: an older host
+    ::  Only the asks that a user is waiting on ride /room. The seven
+    ::  fire-and-forget sigs (%entered %left %occupancy %who
+    ::  %recording-on %recording-off %recorders) ride /beat instead: an older host
     ::  nacks them BY DESIGN, and on this wire that nameless denial
     ::  settled whichever join or peek happened to be pending against
     ::  the same host. Polls run every 15-30s, so it killed real
@@ -1953,6 +1966,7 @@
       =.  push.state  (~(del by push.state) id)
       =.  meta.state  (~(del by meta.state) id)
       =.  sent.badge.state  (~(del by sent.badge.state) id)
+      =?  n.badge.state  =(~ push.state)  ~
       =.  drops.state
         %+  scag  drop-cap:trunk-push
         ^-  (list drop:trunk-push)
@@ -2754,9 +2768,11 @@
   ?.  (fresh:trunk-push (post-at:trunk-push u.post) now.bowl)
     [~ s `"{word}: not pushed, older than 5 minutes"]
   ::  kept until the post can no longer notify, which for a post dated
-  ::  ahead of our clock is later than now
+  ::  ahead of our clock is later than now. Not much later, though: a
+  ::  host whose clock runs far ahead would keep it for good.
+  =/  at  (max now.bowl (fall (post-at:trunk-push u.post) now.bowl))
   =.  seen.s
-    (~(put by seen.s) id.u.post (max now.bowl (fall (post-at:trunk-push u.post) now.bowl)))
+    (~(put by seen.s) id.u.post (min at (add now.bowl fresh-for:trunk-push)))
   ?.  (wants:trunk-push kinds.s u.post)
     [~ s `"{word}: not pushed, switched off in trunk's settings"]
   =/  got  (notify-level whom.u.post group.u.post)

@@ -15,11 +15,10 @@
 # callers covers that call, so running one upgrades every call made
 # to you.
 #
-# Bring up, once:
-#   umask 077; echo "TURN_PASS=$(openssl rand -hex 16)" > .env
-#   docker compose up -d
-# Compose reads .env on every command, so keep it: the ships advertise
-# this password. Then advertise both from your ship (see README.md).
+# Bring up with README.md's step 2, which fills the join folder and
+# makes .env only once. Compose reads .env on every command, so keep
+# it: the ships advertise this password. Then advertise both from your
+# ship (see README.md).
 services:
   coturn:
     image: coturn/coturn:4.6

@@ -135,7 +135,7 @@ An iPhone needs APNs, which speaks only HTTP/2 with ES256 tokens. Iris has neith
 {"handle": "<h>", "secret": "<s>", "kind": "badge", "badge": 3}
 ```
 
-For an iPhone whose `caps` include `badge`, every message and notice alert also carries `"badge": n`. `n` is `%activity`'s base notify-count, which it gives on `/v4` after each post and read. A message alert carries the count it makes, one more than the last, and `%activity`'s next fact confirms it. When the count moves without an alert, after a read on another client say, it settles for 30 seconds and then goes as a `badge` push to each iPhone told another number. A device that registers with `badge` in its `caps`, as a new device or with a new gateway or handle, gets the current count at once.
+For an iPhone whose `caps` include `badge`, every message and notice alert also carries `"badge": n`. `n` is `%activity`'s base notify-count, which it gives on `/v4` after each post and read. A message alert carries the count it makes, one more than the last, and `%activity`'s next fact confirms it. When the count moves without an alert, after a read on another client say, it settles for 30 seconds and then goes as a `badge` push to each iPhone told another number. A device that registers with `badge` in its `caps`, as a new device or with a new gateway or handle, gets the current count at once when the ship has one. The first device on a ship with none gets it after `%activity`'s next count.
 
 The ship sends a message, read, notice or badge again when the answer is a 5xx, a 429 or nothing at all. It tries again after 30 seconds and then after 5 minutes, and then it gives up and logs it. A ring, a cancel and a test are never sent twice, since they are stale in seconds. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept, and a retry goes only to the target it was meant for. Any other answer is only logged.
 
@@ -378,6 +378,7 @@ Every action a client can poke works by hand, and a few are genuinely useful for
 ::  keep the existing roster, '' keeps the title and keep-sfu=%.y
 ::  keeps the sfu. A remote admin's members and admins count only
 ::  when the line is new, and its title may be 256 bytes at most.
+::  The host's own may be longer, but members show it as no title.
 ::  An sfu key that is not base64url is refused, as %set-sfu refuses
 ::  one. Listen is always set, so pass the line's current
 ::  value. This one turns anonymous listening off. With the current

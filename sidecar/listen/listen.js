@@ -368,8 +368,13 @@
       stop();
     };
 
+    // stop() takes the close handler away, so this says the last word.
+    // protocol.js's own errors are kept, but a socket error or a timeout
+    // says nothing a listener can use.
     conn.onerror = function (e) {
-      say((e && e.message) || 'Connection failed.', true);
+      var m = (e && e.message) || '';
+      if (m && !/^(Socket error|Timeout)/.test(m)) say(m, true);
+      else say('You were disconnected. Press Listen to come back.');
       stop();
     };
 

@@ -57,7 +57,7 @@ mounted() { # desk [new]: mount it (|new-desk first if new) unless it is
 khan() { # one-line thread -> its result line
   printf '%s\n' "[0 %fyrd [%base %khan-eval %noun [%ted-eval '$1']]]" |
     "$VERE" eval --jam -n 2>/dev/null |
-    socat -T 60 -,ignoreeof UNIX-CONNECT:"$pier/.urb/conn.sock" 2>/dev/null |
+    socat -T 120 -,ignoreeof UNIX-CONNECT:"$pier/.urb/conn.sock" 2>/dev/null |
     "$VERE" eval --cue -n 2>/dev/null | tail -1
 }
 # 0 once clay's %trunk has this file with these bytes: its sha-256,

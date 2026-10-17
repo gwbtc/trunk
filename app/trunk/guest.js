@@ -7,8 +7,9 @@
 //   on the call server, at /join/#<ship's host>/<code> (wire 19). There
 //   Galène's CSP lets the page connect only to its own origin, so it
 //   cannot reach the ship. It sends the guest to the ship's page with
-//   #hop, which gets a ticket and sends them back with it in the
-//   fragment. The call then runs on the call server's own origin, so
+//   #hop/<a random word>, which gets a ticket and sends them back with
+//   it and the word in the fragment. The call then runs on the call
+//   server's own origin, so
 //   Galène needs no allowOrigin for the ship. The guest's secret never
 //   leaves the ship's origin.
 //
@@ -274,12 +275,14 @@
   document.addEventListener('visibilitychange', keepAwake);
 
   // To the ship's own page, which sends the guest back with a ticket.
-  // The mark says this tab asked, so a ticket in a link someone made up
-  // is never shown. A page that cannot keep it would hop forever.
+  // The mark is a random word the ship sends back, so a ticket in a link
+  // someone made up is never shown, even when their page steers this tab
+  // while it is away. A page that cannot keep the mark would hop forever.
   // `again`: the guest pressed Join, so tell them to press it once more.
   function hop(again) {
+    var word = crypto.getRandomValues(new Uint32Array(4)).join('-');
     try {
-      sessionStorage.setItem(key + ':hop', '1');
+      sessionStorage.setItem(key + ':hop', word);
       if (again) sessionStorage.setItem(key + ':again', '1');
       else sessionStorage.removeItem(key + ':again');
     } catch (e) {
@@ -287,17 +290,17 @@
       return;
     }
     say('Taking you to the host…');
-    location.replace(location.protocol + '//' + host + base + '#hop');
+    location.replace(location.protocol + '//' + host + base + '#hop/' + word);
   }
 
-  // whether this tab set a mark (hop or again) before it went, once
+  // the mark (hop or again) this tab set before it went, or '', once
   function marked(k) {
     try {
       var m = sessionStorage.getItem(key + ':' + k);
       sessionStorage.removeItem(key + ':' + k);
-      return !!m;
+      return m || '';
     } catch (e) {
-      return false;
+      return '';
     }
   }
 
@@ -329,7 +332,7 @@
   // a ticket, and go back with them. They go only to the origin of the
   // ticket's own location, which is the call server this ship chose,
   // never to one a link names. The secret stays here.
-  async function back() {
+  async function back(word) {
     say('Taking you to the call…');
     try {
       var r = await fetch(base + '/room', { cache: 'no-store' });
@@ -338,7 +341,7 @@
       var t = await ticket();
       delete t.secret;
       location.replace(new URL(t.location).origin + '/join/#' + host + '/' + code + '/'
-        + encodeURIComponent(JSON.stringify({ host: room.host, title: room.title, speak: room.speak, ticket: t })));
+        + encodeURIComponent(JSON.stringify({ host: room.host, title: room.title, speak: room.speak, ticket: t, hop: word })));
     } catch (e) {
       fail(e);
     }
@@ -555,8 +558,9 @@
     else say(speak ? 'You will be asked for your microphone. Headphones keep echo off the call.' : 'You can watch and listen on this call.');
   }
 
-  if (onShip && location.hash === '#hop') {
-    back();
+  // a join page from before the word sends a bare #hop
+  if (onShip && hash[0] === 'hop') {
+    back(hash[1] || '');
   } else if (onShip) {
     fetch(base + '/room', { cache: 'no-store' })
       .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
@@ -567,11 +571,17 @@
       .catch(fail);
   } else if (!/^[a-z0-9.-]+(:[0-9]+)?$/i.test(host || '') || !/^[a-z0-9-]+$/.test(code || '')) {
     say('This link is not complete. Ask the host for it again.', true);
-  } else if (!hash[2] || !marked('hop')) {
-    // the room and ticket only from the ship, after this tab asked
-    hop();
   } else {
+    // the room and ticket only from the ship, after this tab asked, with
+    // the word this tab took there. Another page may send this tab here
+    // with a ticket of its own, but it cannot know the word.
+    var asked = marked('hop');
     try { given = JSON.parse(decodeURIComponent(hash[2])); } catch (e) { given = null; }
+    if (!asked || !hash[2] || (given && given.hop !== asked)) {
+      given = null;
+      hop();
+      return;
+    }
     got = Date.now();
     // the ticket is a bearer token for an hour, so not in the address bar
     history.replaceState(null, '', location.pathname + '#' + host + '/' + code);

@@ -294,12 +294,14 @@ async function joinChecks(o) {
     (h) => location.hash === h && /Browser check/.test(document.querySelector('#room').textContent)
       && !document.querySelector('#form').hidden, `#${host}/${LINE}`), 15000);
   // a ticket gone stale: Join fetches a new one by way of the ship. The
-  // page takes a ticket only in a tab that went to the ship for it, so
-  // mark this one as having gone.
+  // page takes a ticket only in a tab that went to the ship for it, with
+  // the word it took there, so mark this one as having gone, once.
+  const went = (p, word) => p.evaluateOnNewDocument((o, k, w) => {
+    if (location.origin === o && !sessionStorage.getItem('went')) { sessionStorage.setItem('went', '1'); sessionStorage.setItem(k, w); }
+  }, new URL(sfu).origin, `${host}/${LINE}:hop`, word);
   const c = await page();
-  await c.evaluateOnNewDocument((o, k) => { if (location.origin === o) sessionStorage.setItem(k, '1'); },
-    new URL(sfu).origin, `${host}/${LINE}:hop`);
-  const old = { host: '~old', title: 'Old', speak: true, ticket: { username: 'guest-0', location: `${sfu}/group/x/`, token: 'x', expires: 1, speak: true } };
+  await went(c, 'w');
+  const old = { host: '~old', title: 'Old', speak: true, hop: 'w', ticket: { username: 'guest-0', location: `${sfu}/group/x/`, token: 'x', expires: 1, speak: true } };
   await c.goto(`${sfu}/join/#${host}/${LINE}/${encodeURIComponent(JSON.stringify(old))}`);
   await c.waitForSelector('#form:not([hidden])');
   check('a ticket the tab went for is shown', (await c.$eval('#room', (e) => e.textContent)) === 'Old');
@@ -309,12 +311,20 @@ async function joinChecks(o) {
   // the hop starts inside the click, which may then find its page gone
   await c.click('#join').catch(() => {});
   check('a stale ticket goes back to the ship for a new one', await home(c));
+  check('and asks for Join once more', await c.evaluate(() => /Press Join again/.test(document.querySelector('#status').textContent)));
   await c.close();
   // a ticket in a link someone made up: the page asks the ship instead
   const d = await page();
   await d.goto(`${sfu}/join/#${host}/${LINE}/${encodeURIComponent(JSON.stringify({ ...old, title: 'Forged' }))}`);
   check('a ticket the tab did not go for is not shown', await home(d));
   await d.close();
+  // one sent while the tab was away, by a page that steers it: the word
+  // is wrong
+  const e = await page();
+  await went(e, 'w');
+  await e.goto(`${sfu}/join/#${host}/${LINE}/${encodeURIComponent(JSON.stringify({ ...old, title: 'Forged', hop: 'guess' }))}`);
+  check('a ticket with the wrong word is not shown', await home(e));
+  await e.close();
   const b = await guest('Shipley');
   check('a join page guest and a ship page guest meet', await until(async () => !!(await tile(a, 'Shipley')) && !!(await tile(b, 'Joan')), 10000));
   check('and hear each other', await until(async () =>
