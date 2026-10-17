@@ -8,8 +8,8 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 - `app/trunk/page.html` and `app/trunk/icon.svg`: the owner's page and the tile's icon, built into the agent with `/*`.
 - `lib/trunk-push.hoon`: pure push logic, with no scries and no cards: what notifies, every push body, retries, ring bookkeeping, sender records and the debug report. Keep it pure so `gen/test-push.hoon` can cover it.
 - `lib/trunk-guest.hoon`: pure guest-seat logic (wire 16 to 19): guest secrets and ids, invite codes and link names, who an invite or a permanent link seats, app-room seats and SFU locations. `gen/test-guest.hoon` covers it.
-- `app/trunk/guest.html`, `guest.js` and `guest.css`: the public page a guest opens from a link: audio, video and screen sharing. A call server serves the same three files at `/join/` for apps' links (wire 19), so they hold no inline script or style, which Galène's CSP refuses.
-- `app/trunk/protocol.js`: Galène 1.1's own client library, unmodified (MIT), served to the guest page from the ship. Change it only to match the call server's Galène version. It publishes the way Talon does (see `docs/guest-seats.md`, "Video and screen sharing"), so change it and Talon together.
+- `app/trunk/guest.html`, `guest.js` and `guest.css`: the public page a guest opens from a link, with audio, video and screen sharing. A call server serves the same three files at `/join/` for apps' links (wire 19), so they hold no inline script or style, which Galène's CSP refuses. `guest.js` publishes the way Talon does (see `docs/guest-seats.md`, "Video and screen sharing"), so change it and Talon together.
+- `app/trunk/protocol.js`: Galène 1.1's own client library, unmodified (MIT), served to the guest page from the ship. Change it only to match the call server's Galène version.
 - `lib/trunk-json.hoon`: the wire's JSON. Talon mirrors it by hand.
 - `lib/trunk-jwt.hoon`: Galène's HS256 tokens. `lib/mnemonym.hoon`: comet names.
 - `sur/trunk.hoon`: the types, including every action.
@@ -45,12 +45,13 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 - An app reaches only its own rooms. App rooms are keyed by the app's id, the agent gall names in `sap.bowl` or `<agent>/<name>` for an app that agent names, and `/app/<agent>` and `/app/<agent>/<name>` admit only that agent. Which of a host agent's apps may use which name is that agent's to enforce.
 - A guest's Galène `sub` is a guest id, `guest-` and 24 hex digits. It never starts with `~`. A link guest's id is the hash of a secret only their page holds (`+id-of`), so nobody else can rejoin as them. An app guest's id is one trunk makes. Neither a guest nor an app ever names an id.
 - `/calls` carries invite codes, listen links and our own tickets, so only the owner's sessions (`+by-owner`) may watch it. An app gets its answers on `/app/<agent>`.
-- Only our own ship sets a line's own SFU. A line another ship opens on ours runs on our SFU, under a name that is one clean URL segment, and a remote admin's `%configure` cannot move it to another server. A room's own SFU key never leaves through a scry.
+- Only our own ship sets a line's own SFU. A line another ship opens on ours runs on our SFU, under a name that is one clean URL segment, and a remote admin's `%configure` cannot move it to another server. A room's own SFU key never leaves through a scry. `%configure-room` refuses a key that is not base64url, as `%set-sfu` does.
 - The guest page loads only the ship's own copy of `protocol.js`, never the call server's, because the page runs on the ship's origin.
 - On the call server (`/join/`, wire 19) the same page loads that server's `protocol.js` and uses its websocket, whatever a ticket says. The ship's page hands a ticket to a call server only at the origin of the ticket's own location, never at one a link names, and never hands over the guest's secret. The join page takes a ticket only from a trip to the ship that it started itself, marked in the tab's `sessionStorage`, so a hand-made link cannot show one ship's name and join another's room. The fragments between the two copies (`#hop`, `#<host>/<code>` and `#<host>/<code>/<json>`) are a wire. A call server serves ships on other trunk versions, so keep them compatible.
 - An app's link has a code trunk makes, one per app room. The owner's links never take one of those codes.
 - The guest routes under `/apps/trunk/guest/` are public. They take nothing but a link's code and a guest's secret, and show nothing of the host but its name and the room's title. Codes, link names and secrets are bearer secrets, so they are never in `/x/debug`.
 - A signal's sender is the ames `src`, never anything in the payload.
+- `%trunk-room` is taken only from other ships. Nothing legitimate sends one from our own ship, and a local agent that did could act as an admin of our lines.
 - A ship's Galène token has its `@p` as `sub`, for every ship, and a guest's has its guest id (below). Galène refuses any later message whose username differs, so a readable name travels in Galène's per-user data instead.
 - The debug report (`/x/debug`) never carries a push secret, a gateway handle, an endpoint's path or a chat's id. `gen/test-push.hoon` checks this, so extend that test when you add a field.
 - Push bodies are built by hand in a fixed key order, and the tests pin their bytes. Talon parses them, so a change to a body is a change to the wire.
@@ -60,6 +61,8 @@ Read the README first for what trunk is and its wire, `docs/design.md` for how i
 Boot fresh fake galaxies from the v4.6 pill. It ships Tlon's `%groups`, so `%activity` and `%settings` are real. Never reuse a fake ship's name after rebuilding its pier, since peers keep ames state for the old one and pokes vanish without an error.
 
 Install the desk as the README's "The desk" says, then run `+trunk!test-push`, `+trunk!test-guest` and `+trunk!test-mnemonym`. For any change to the guest page, the trunk page, the listen page or the guest routes, also run the browser checks in `test/browser/` (its README has the setup). For push work, register a device whose endpoint is a local HTTP listener, then drive real events: DMs and channel posts between two fake ships, reads through `%activity`'s `read` action, and rings with `%send`.
+
+`TESTING.md` has how to run these on the dev platform's fleet, with the offline suites in `tests/` and the scripts that deploy to a ship and check it.
 
 `|commit` adds and changes files in a desk but does not delete them. Remove a file from a mounted desk with `|rm`.
 

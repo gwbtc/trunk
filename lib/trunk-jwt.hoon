@@ -1,6 +1,6 @@
 ::  trunk-jwt: mint HS256 JWTs that the party-line SFU (Galène) accepts.
 ::
-::  Byte-order notes, learned the hard way — the two primitives disagree:
+::  Byte-order notes, learned the hard way. The two primitives disagree:
 ::    - base64:mimes:html reads octs data LSB-first (native cord order),
 ::      so a cord goes in as [(met 3 c) c] and comes back readable.
 ::    - hmac-sha256l:hmac:crypto reads octs data MSB-first and returns a
@@ -13,7 +13,7 @@
 ++  de-b64  ~(de base64:mimes:html | &)
 ::  +mint: a Galène-compatible JWT.
 ::
-::    key  the group's HS256 secret, base64url — the same string that
+::    key  the group's HS256 secret, base64url, the same string that
 ::         appears as the "k" field of Galène's authKeys entry
 ::    sub  username the SFU shows for this client: a ship's @p, or a
 ::         guest id
@@ -27,7 +27,7 @@
 ::
 ::  +speaker grants %present and %message. %present is the right to publish
 ::  audio. %message is the right to have a usermessage relayed, which
-::  Galène gates the same way it gates chat — without it the server
+::  Galène gates the same way it gates chat. Without it the server
 ::  silently drops the message and clients cannot tell each other
 ::  anything the SFU does not model, mute state being the first such
 ::  thing. It buys no ability to publish and no access to another room.

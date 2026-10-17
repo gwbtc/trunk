@@ -3,8 +3,8 @@
 ::  1:1 calls are peer-to-peer: the agent only routes opaque SDP.
 ::  Party lines are host-centered: the group host's sidecar runs an SFU
 ::  (Galène), and the host's %trunk mints per-member, per-room join
-::  tickets — the trust boundary the host already has for the group's
-::  messages, extended to its audio.
+::  tickets. That is the trust boundary the host already has for the
+::  group's messages, extended to its audio.
 |%
 ::  one signaling message. ids are client-minted opaque strings (uuid).
 ::  sdp is a complete (non-trickle) session description; fpr is the
@@ -22,10 +22,10 @@
 ::  our sidecar's SFU.
 ::    base:   origin, e.g. 'http://calls.example.com:8444'
 ::    group:  the ONE Galène group configured there, e.g. 'talon'.
-::            It must have "auto-subgroups": true — every party line is
+::            It must have "auto-subgroups": true. Every party line is
 ::            a subgroup created on first join, so hosting a new room
 ::            needs no server-side configuration.
-::    key:    the group's HS256 secret, base64url — the same string as
+::    key:    the group's HS256 secret, base64url, the same string as
 ::            the "k" field of Galène's authKeys entry.
 +$  sfu-config  [base=@t group=@t key=@t]
 ::  who may ring us 1:1. The block set always applies; the mode only
@@ -36,14 +36,14 @@
 ::  This is ship-level on purpose: %trunk is the chokepoint every
 ::  client shares, so the policy holds for every device and for apps
 ::  other than the one that set it. It deliberately knows nothing
-::  about %contacts — a client that wants "contacts only" keeps the
+::  about %contacts. A client that wants "contacts only" keeps the
 ::  allow set in sync itself.
 +$  call-mode  ?(%open %allow)
 +$  policy  [mode=call-mode allow=(set ship) block=(set ship)]
 ::  a party line we host. members may join; anyone else is denied.
 ::
 ::    admins   ships that may reconfigure this room remotely. %trunk
-::             has no idea what a Tlon group is — this is just a list
+::             has no idea what a Tlon group is. This is just a list
 ::             the host seeds, so a group's admins can turn the line
 ::             on or off without owning the host ship.
 ::    listen   may anonymous listen links be minted for this room?
@@ -53,16 +53,16 @@
 ::    sfu      which sidecar this room runs on. ~ means "the ship's
 ::             own", which is the common case. A group that would
 ::             rather not route its audio through the host's sidecar
-::             sets its own here — the host still mints the tickets,
+::             sets its own here. The host still mints the tickets,
 ::             but against the group's chosen server.
 ::  where a room's roster is mirrored from, when it is bound to a
-::  group. %trunk still has no idea what a group IS — this is an
+::  group. %trunk still has no idea what a group IS. This is an
 ::  opaque [host name] pair used to build one scry path and one
 ::  subscription. Unbound rooms (~) behave exactly as before: the
 ::  host seeds members/admins by hand and nothing watches anything.
 +$  group-source  [=ship name=@t]
 ::  role gates (wire 5). ~ for either gate means "everyone on the
-::  roster", the only behavior before state-9 — so a bunted room is
+::  roster", the only behavior before state-9, so a bunted room is
 ::  exactly a wire-4 room. A set gate admits a member iff their
 ::  seat-roles entry intersects it; the host and admins bypass both
 ::  gates. muted is moderation and beats everything except the host.
@@ -162,7 +162,11 @@
       ::  the lifetime is the whole security model.
       [%share-room host=ship name=@t ttl=@ud]
       ::  ask a REMOTE host to reconfigure a line we are an admin of.
-      ::  The host checks that we are actually on its admin list.
+      ::  The host checks that we are actually on its admin list. On
+      ::  our own ship it applies directly. A non-empty title, members
+      ::  or admins replaces the old value, and '' or an empty set
+      ::  keeps it. An sfu key that is not base64url is refused, as
+      ::  %set-sfu refuses one.
       $:  %configure-room
           host=ship
           name=@t
@@ -178,7 +182,7 @@
       [%join-room host=ship name=@t]
       ::  ask a host whether a line exists, without joining it. A
       ::  member whose ship had no %trunk when the host announced never
-      ::  received it and has no other way to find out — scries are
+      ::  received it and has no other way to find out. Scries are
       ::  local, so it cannot read the host's rooms directly.
       [%peek-room host=ship name=@t]
       ::  live presence (wire 6): tell the host we connected to / left
@@ -206,7 +210,7 @@
       [%bind-room name=@t group=(unit group-source)]
       ::  role-gate a line: who may join, who may speak. ~ = everyone
       ::  on the roster. Applied locally when we host, relayed to the
-      ::  host otherwise — who checks we are on its admin list.
+      ::  host otherwise, and the host checks we are on its admin list.
       $:  %set-room-access
           host=ship
           name=@t
@@ -299,10 +303,11 @@
       ::  line hosted elsewhere has to ask.
       [%share name=@t ttl=@ud]
       [%link =listen-link]
-      ::  a room admin, over ames, changing what the host hosts
-      ::  title/members/admins are only used when the room does not
-      ::  exist yet — a group admin turning the line on for the first
-      ::  time, on a host ship that has never hosted it.
+      ::  a room admin, over ames, changing what the host hosts. A
+      ::  non-empty title replaces the old one, and '' keeps it.
+      ::  members and admins count only when the room is new, a group
+      ::  admin turning the line on for the first time on a host ship
+      ::  that has never hosted it. A title over 256 bytes is refused.
       $:  %configure
           name=@t
           open=?
@@ -317,9 +322,10 @@
       ==
       ::  an admin, over ames, setting a line's role gates. ~ =
       ::  everyone on the roster. The host checks the asker is on its
-      ::  admin list and answers with %access-state. New in wire 5:
-      ::  an old desk nacks these at the mark cast, which the sender's
-      ::  client surfaces — the designed compat story.
+      ::  admin list and answers with %access-state. Each gate holds
+      ::  at most roster-cap (256) roles. New in wire 5. An old desk
+      ::  nacks these at the mark cast, which the sender's client
+      ::  surfaces. That is the designed compat story.
       [%access name=@t join=(unit (set @t)) speak=(unit (set @t))]
       ::  an admin muting (or unmuting) one member for everyone
       [%moderate name=@t who=ship mute=?]
@@ -373,8 +379,8 @@
       ::  a freshly minted listen link, for the client to share
       [%listen-link =listen-link]
       ::  one of this ship's devices answered or declined a call, so
-      ::  the rest can stop ringing. Every device sees the %ring — that
-      ::  is the point — but until now nothing told the others it had
+      ::  the rest can stop ringing. Every device sees the %ring, which
+      ::  is the point. Until now nothing told the others it had
       ::  been dealt with, and they rang out their whole watchdog next
       ::  to a call already in progress.
       [%handled id=@t]

@@ -53,7 +53,7 @@ Poke `%trunk` on your own ship, mark `%trunk-action`. From another ship it is re
 - **body**: the text under the title. It may be empty.
 - **open**: any JSON your app wants back when the notice is tapped. Talon does not act on it yet. Today a tap opens a calendar notice's event, found by its tag, and simply opens the app for any other.
 
-The whole push body, as trunk sends it, may be at most 4 KiB, escapes included. That counts the event, patp, sender and via fields as well as tag, title, body and `open`, so keep the notice's own text about 150 bytes under 4 KiB.
+The whole push body, as trunk sends it, may be at most 4 KiB, escapes included. That counts the event, patp, app and via fields as well as tag, title, body and `open`, so keep the notice's own text about 200 bytes under 4 KiB.
 
 `push-notice` is the same without `app`, for wire 12 and 13. Trunk then names the notice after the agent that sent it.
 
@@ -79,7 +79,7 @@ A notice that was taken can still be held back, without a nack:
 
 - **The owner's switches.** The trunk page (`/apps/trunk`) has a switch for alerts from all apps, and one for each app that has sent any. A new app name starts allowed, unless the owner switched off the notices your agent sends under no name, with plain `push-notice`. Then each new name starts off too, so an agent the owner silenced cannot get around that by naming itself. One app switched off does not switch off its agent's other names, so one grubbery app the owner silenced leaves new grubbery apps on.
 - **One every five seconds.** Each app gets at most one push every five seconds. What comes sooner waits, and when the five seconds are up the app gets one push: the notice itself if only one waited, or a summary titled "3 alerts from calendar". The summary lists the first five titles, each cut to 80 characters, and counts the rest. Its tag is `batch-` and the sender's id: `batch-<agent>`, or `batch-<agent>/<app>` for a named app, such as `batch-grubbery/calendar`. So send each reminder once, as it falls due, rather than in a burst.
-- **An hourly limit.** An app gets 30 pushes an hour unless the owner sets another limit for it on the trunk page, from a few up to 720, or none. Past it, the app's notices are dropped until the hour is up. A chat app the owner trusts can be given more. Your app cannot raise its own.
+- **An hourly limit.** An app gets 30 pushes an hour unless the owner sets another limit for it. The trunk page offers 10, 30, 60, 120 or 300, or none. The owner's `push-app` action takes up to 720. Past the limit, the app's notices are dropped until the hour is up. A chat app the owner trusts can be given more. Your app cannot raise its own. A new app name starts with its agent's own limit, the one on the notices it sends under no name, when the owner set that to a limit below 30. So an agent cannot get around a lower limit by naming itself.
 - **Devices.** Only devices whose app said it understands notices get one. An older app would show it as a chat message.
 
 Each of these leaves a line in trunk's log on the page, such as "notice from calendar: not pushed, this app is switched off". An agent can read the same log, and each app's counts, from the owner-only scry `/~/scry/trunk/debug.json`, under `log` and `senders`.

@@ -33,21 +33,26 @@ EOF
 echo '{}' > galene/data/config.json
 ```
 
-Note the mixed spelling: `authKeys` is camelCase, `auto-subgroups` is kebab. Galène wants exactly that, and rejects the file otherwise.
+Note the mixed spelling. `authKeys` is camelCase and `auto-subgroups` is kebab-case. Galène wants exactly that, and rejects the file otherwise.
 
 **One group per host ship.** If several ships host lines on one sidecar, give each its own group file and key, such as `groups/<ship>.json`, and point each ship at its own group in step 3. Every ship that holds a group's key can join, hear and moderate every room in that group. Separate groups keep one host out of another's lines, and one host's key can then be changed without touching the others. A key built into a client app, as Talon's fallback sidecar is, is a key everyone holds.
 
 ## 2. Run
 
 ```bash
+mkdir -p join
+cp ../app/trunk/guest.html join/index.html
+cp ../app/trunk/guest.js ../app/trunk/guest.css join/
 umask 077
 [ -f .env ] || echo "TURN_PASS=$(openssl rand -hex 16)" > .env
 docker compose up -d
 ```
 
+The `join/` folder is the join page for apps' guest links (step 4), copied from a checkout of this repo. Make it before the first `docker compose up`. Otherwise Docker creates it owned by root, and the copy fails.
+
 The first run writes the TURN password into `.env`, which only you can read, and later runs keep it. Compose reads `.env` on every command. Keep the file, since your ships advertise this password (step 3).
 
-Open 3478 for both UDP and TCP, since clients fall back to TURN over TCP, and UDP 49160-49200, for coturn. Open TCP 443 for the TLS front. Do not open 8444. The compose file binds Galène to 127.0.0.1, so 8444 is never reachable from outside, and plain http would carry every ticket in the clear in the websocket's first message. Put the TLS front in step 5 up before you point a ship at Galène. Galène has a public address, so most clients reach it directly and party lines need no TURN.
+Open 3478 for both UDP and TCP, since clients fall back to TURN over TCP, and UDP 49160-49200, for coturn. A client tries TCP only when the ship's ICE list has a `?transport=tcp` entry, as the `%set-ice` in step 3 does. Open TCP 443 for the TLS front. Do not open 8444. The compose file binds Galène to 127.0.0.1, so 8444 is never reachable from outside, and plain http would carry every ticket in the clear in the websocket's first message. Put the TLS front in step 5 up before you point a ship at Galène. Galène has a public address, so most clients reach it directly and party lines need no TURN.
 
 On a cloud that puts the machine behind a 1:1 NAT, such as AWS, GCP or Oracle, the machine sees only its private address, so coturn would hand out an address nobody can reach. Add `--external-ip=<public ip>/<private ip>` to coturn's command in the compose file.
 
@@ -69,7 +74,7 @@ Galène gives this password to everyone who joins, guests too, and it also lists
 From the ship's dojo, once:
 
 ```
-:trunk &trunk-action [%set-ice ~[['stun:your.host:3478' '' ''] ['turn:your.host:3478' 'talon' 'THE_TURN_PASS']]]
+:trunk &trunk-action [%set-ice ~[['stun:your.host:3478' '' ''] ['turn:your.host:3478' 'talon' 'THE_TURN_PASS'] ['turn:your.host:3478?transport=tcp' 'talon' 'THE_TURN_PASS']]]
 :trunk &trunk-action [%set-sfu ['https://calls.example.com' 'talon' 'THE_KEY']]
 ```
 
@@ -87,15 +92,7 @@ A listen link is a bearer link. Anyone who has it can listen, watch any camera o
 
 ### The join page (wire 19)
 
-An app's guest link, such as a calendar event's call, opens at `<sfu base>/join/#<ship's host>/<code>`. The join page is trunk's own guest page: `app/trunk/guest.html` as `index.html`, with `guest.js` and `guest.css` beside it. The compose file mounts the `join/` folder read-only at Galène's `/static/join`, as it does `listen/`. Fill it from a checkout of this repo, and again whenever trunk's guest page changes:
-
-```bash
-mkdir -p join
-cp ../app/trunk/guest.html join/index.html
-cp ../app/trunk/guest.js ../app/trunk/guest.css join/
-```
-
-Files in a mounted folder update live, so the new copies are served at once, with no restart and no `docker cp`. On a call server that is not a checkout of this repo, copy the three files there from one.
+An app's guest link, such as a calendar event's call, opens at `<sfu base>/join/#<ship's host>/<code>`. The join page is trunk's own guest page: `app/trunk/guest.html` as `index.html`, with `guest.js` and `guest.css` beside it. The compose file mounts the `join/` folder read-only at Galène's `/static/join`, as it does `listen/`, and step 2 filled it. Whenever trunk's guest page changes, run step 2's two `cp` lines again. Files in a mounted folder update live, so the new copies are served at once, with no restart and no `docker cp`. On a call server that is not a checkout of this repo, copy the three files there from one.
 
 The page fetches nothing from the ship, since Galène's CSP would refuse it. It sends the guest to the ship's guest page, which sends them back with a ticket in the fragment, and the call runs on Galène's own origin. So the join page needs no `allowOrigin` entry, and a new ship on this server needs no change here. `docs/guest-seats.md`, "The join page", has the steps.
 

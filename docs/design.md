@@ -87,7 +87,7 @@
 
 **Desks.** `%trunk` is the desk this project adds, with the agent, types, marks and the JWT lib. It must be installed on **both** ships. A peer without it nacks the relay, and the caller sees "unreachable". `groups` is Tlon's existing desk, read-only here and only on the host side, to answer "who is allowed on this line".
 
-**Transports.** Device to its own ship is always eyre: pokes up, SSE facts down. Ship to ship is always ames, so `src` is cryptographically the sending ship and a signal cannot lie about who it is from. Galène and coturn are plain Unix daemons on the ship's host machine, not desks and not part of Urbit.
+**Transports.** Device to its own ship is always eyre: pokes up, SSE facts down. Ship to ship is always ames, so `src` is cryptographically the sending ship and a signal cannot lie about who it is from. Galène and coturn are plain Unix daemons on the ship's host machine, not desks and not part of Urbit. `%trunk` takes no `%trunk-room` poke from its own ship. Nothing legitimate sends one, and a local agent that did could act as a line admin. A member's asks and the host's answers to them (`%grant`, `%deny` and the like) each ride their own dated wire, so one stuck ames flow holds up only one message. The host's fan-outs (`%announce`, `%shut`, `%on-line`) ride one wire per member, `/fan/<ship>`.
 
 **The asymmetry worth remembering.** In 1:1 the agent is a dumb relay and the two devices negotiate directly, so nothing in the middle can hear the call. In a party line the host's ship is a real authority. It decides membership and signs the tickets, and its SFU necessarily hears the audio in order to mix it.
 
@@ -172,7 +172,7 @@ A ring only reaches a sleeping device if three things line up.
 
 Answering opens the app rather than answering in place. The media negotiation lives in `CallController`, which needs the app running and its channel up. Declining works from the notification alone, because a decline is one poke and needs no media (`CallActionReceiver`).
 
-The notification is cancelled as soon as the controller leaves `Incoming`: answered, declined, or the caller gave up.
+The notification is cancelled as soon as the controller leaves `Incoming`, when the call is answered or declined or the caller gives up.
 
 ### What this does not cover yet
 
@@ -226,7 +226,7 @@ A ship with no SFU of its own adopts it on first connect, so party lines work wi
 +$ room  [... listen=? sfu=(unit sfu-config)]
 ```
 
-`~` means "the host ship's own sidecar", which is the common case. The host's owner can put a line on another server, with `%configure-room` from the host itself, and the host then mints the tickets against it. A remote admin cannot. Any ship that opens a line here names itself its admin, and a server it chose would hear every member, so a remote `%configure` keeps the line's server as it is. Reading a key back is not part of the deal either. `/x/rooms` reports `sfu-base` and `custom-sfu`, never a key. Guest links work only on the host's own SFU.
+`~` means "the host ship's own sidecar", which is the common case. The host's owner can put a line on another server, with `%configure-room` from the host itself, and the host then mints the tickets against it. A remote admin cannot. Any ship that opens a line here names itself its admin, and a server it chose would hear every member, so a remote `%configure` keeps the line's server as it is. `%configure-room` refuses a key that is not base64url, as `%set-sfu` does. Reading a key back is not part of the deal either. `/x/rooms` reports `sfu-base` and `custom-sfu`, never a key. Guest links work only on the host's own SFU.
 
 ## Party lines are opt-in, and so is anonymous listening
 
@@ -236,7 +236,7 @@ Two switches per room, both off unless someone asks for them.
 +$ room  [title=@t members=(set ship) admins=(set ship) listen=?]
 ```
 
-`admins` is just "ships that may reconfigure this room". `%trunk` never learns what a Tlon group is. The host seeds the list from the group's own roster when it opens the line (`PartyLineHost.startLine` gets members and admins from one `fetchGroupAdmin` call). A group admin who doesn't own the host ship sends `%configure-room`, which relays to the host as a `%configure` room-sig, and the host checks its own `admins` set. So the authority model is the group's, and the enforcement is the host's.
+`admins` is just "ships that may reconfigure this room". `%trunk` never learns what a Tlon group is. The host seeds the list from the group's own roster when it opens the line (`PartyLineHost.startLine` gets members and admins from one `fetchGroupAdmin` call). A group admin who doesn't own the host ship sends `%configure-room`, which relays to the host as a `%configure` room-sig, and the host checks its own `admins` set. So the authority model is the group's, and the enforcement is the host's. On a line the host already has, a remote admin's `%configure` can close it, switch listening and set a non-empty title. Its members and admins count only when the line is new. A title from another ship, in a remote `%configure` or an `%announce`, may be at most 256 bytes, and so may an announced call server address. A remote admin's role gates may hold at most 256 roles each. Trunk refuses anything longer.
 
 Enforcement stays where it already was. No open room means `grant-cards` denies, and `listen=%.n` means no listener token is ever minted. A client that ignores the switches still can't get a ticket.
 
@@ -303,7 +303,7 @@ The README's "The desk" has the steps and the list of files to copy from `%base`
 Then point the ship at its sidecar once (see `sidecar/README.md` for the key):
 
 ```dojo
-:trunk &trunk-action [%set-ice ~[['stun:host:3478' '' ''] ['turn:host:3478' 'talon' 'PASS']]]
+:trunk &trunk-action [%set-ice ~[['stun:host:3478' '' ''] ['turn:host:3478' 'talon' 'PASS'] ['turn:host:3478?transport=tcp' 'talon' 'PASS']]]
 :trunk &trunk-action [%set-sfu ['https://calls.example.com' 'talon' 'KEY']]
 ```
 
@@ -345,10 +345,10 @@ TRUNK_E2E=1 TRUNK_SFU_KEY=<key> TRUNK_SFU=http://<lan-ip>:8444 \
 - Ring arrives but no offer → check the eyre poke of `%trunk-action` (mark file json grab) on the caller's ship.
 - Offer arrives, never live → Tier 0 insufficiency on this network. That's a *finding*, not a bug, so note the NAT shapes involved.
 - `unknown`/`unreachable` reject → the peer has no `%trunk` running.
-- **"busy" on every call** → first: is another client logged into the same ship? A ship is one identity across many devices and they all receive the ring. A busy device used to reply "busy" for the whole ship, cancelling a call another device was ringing for. A test harness left connected did exactly this for a day. Busy devices now stay silent. Then: the far device is stuck in a ringing or active state. It used to stick forever. A ring now expires after 45s. The state is in memory, so a device wedged by an older build stays wedged until the process restarts.
+- **"busy" on every call** → first check whether another client is logged into the same ship. A ship is one identity across many devices and they all receive the ring. A busy device used to reply "busy" for the whole ship, cancelling a call another device was ringing for. A test harness left connected did exactly this for a day. Busy devices now stay silent. Then check whether the far device is stuck in a ringing or active state. It used to stick forever. A ring now expires after 45s. The state is in memory, so a device wedged by an older build stays wedged until the process restarts.
 - **Party line fails to connect** → almost always the SFU address. Check what `location` a ticket carries (`join-room` and read the fact) rather than what you think you configured.
 - **"duplicate client id"** in Galène's log → a client reused its id across connections. Each connection needs a fresh one.
-- Denials are deliberate and specific. `no such room` means the host never opened it, `not a member` means the ship is not on the group roster, and `no sfu configured` means the host never ran `%set-sfu`.
+- Denials are deliberate and specific. `no such room` means the host never opened it, and `not a member` means the ship is not on the group roster or the host blocked it. `missing join role` means the line's join gate admits none of the ship's roles, and `no sfu configured` means the host never ran `%set-sfu`.
 
 ## v0 results (2026-08-25, ~nec + ~feb on localhost)
 
@@ -407,4 +407,4 @@ Both flows are already covered headlessly by `TrunkCallE2ETest` and `PartyLineE2
 
 ## Next
 
-Done since this list was first written: the desk and sidecar live in their own repo (gwbtc/trunk), iOS rings through CallKit and PushKit, and the ship sends its own pushes, with the APNs gateway as the only piece off the ship. Still ahead: WAN metrics against real ships, ConnectionService on Android, ICE restart on network change, and TLS in front of Galène.
+Since this list was first written, the desk and sidecar have moved to their own repo (gwbtc/trunk), and iOS rings through CallKit and PushKit. The ship sends its own pushes, with the APNs gateway as the only piece off the ship. Galène runs behind a TLS front, which step 5 of `sidecar/README.md` sets up. Still ahead are WAN metrics against real ships, ConnectionService on Android and ICE restart on network change.

@@ -43,7 +43,7 @@ The suites in `tests/lib/` run through `vere eval` with the kit's `offline-test.
 | suite | covers |
 |---|---|
 | `trunk-push`, `trunk-guest`, `mnemonym` | `gen/test-push`, `gen/test-guest` and `gen/test-mnemonym` as one test each. A failure prints the cases the generator names. The generators stay the checks of record. |
-| `trunk-jwt` | two Galène tokens (speaker and listener) pinned byte for byte. Both were checked outside Hoon with Python's `hmac`: the signature verifies and the claims decode. Also `+unix-secs`. |
+| `trunk-jwt` | two Galène tokens (speaker and listener) pinned byte for byte. Both were checked outside Hoon with Python's `hmac`. The signature verifies and the claims decode. Also `+unix-secs`. |
 | `trunk-json` | `+roster-from-json`: both schema generations, the admin rules, bad keys and values skipped, unknown shapes giving `~`. |
 | `grubbery-marc` | `docs/grubbery-trunk-action.hoon` nests in `action:trunk` (what trunk's `!<` needs), a case trunk lacks fails that check, and each of the seven actions comes through unchanged. |
 
@@ -70,11 +70,11 @@ Every read is guarded by a `%cu` scry first. On vere 4.6, a `.^` that misses can
 ## Deploying a change
 
 ```sh
-scripts/fleet-deploy.sh $PIER $URL                # copy app lib mar sur gen and |commit %trunk
+scripts/fleet-deploy.sh $PIER $URL                # copy app lib mar sur gen desk.bill desk.docket-0 and |commit %trunk
 scripts/fleet-deploy.sh $PIER $URL --test-desk    # also make %trunk-test and run the kit's setup
 ```
 
-The first run on a ship does the main README's "The desk" in the ship's dojo. It mounts `%base` and `%landscape`, makes and mounts `%trunk`, copies the desk and the files it borrows, takes `sys.kelvin` from the ship's `%base`, commits, installs and waits for `version.json` to answer the worktree's wire. Later runs copy and commit, and wait the same way. `|commit` does not delete a file. Remove one from the mount with `|rm`. The script refuses a pier outside `~/fleet/piers` and a URL that is not localhost.
+The first run on a ship does the main README's "The desk" in the ship's dojo. It mounts `%base` and `%landscape`, makes and mounts `%trunk`, copies the desk and the files it borrows, takes `sys.kelvin` from the ship's `%base`, commits, waits for the agent to land and build, installs and waits for `version.json` to answer the worktree's wire. Later runs copy the desk and commit, then wait for every text file git tracks in it (`.hoon`, `.html`, `.js` and `.css`) to land in clay, compared by its sha-256 on the ship. They check that `app/trunk.hoon` builds and that the dojo shows no load failure. They run `|install` if an earlier first run stopped before it, then wait for `version.json` the same way. `|commit` does not delete a file. Remove one from the mount with `|rm`. The script refuses a pier outside `~/fleet/piers` and a URL that is not localhost.
 
 To test an upgrade (AGENTS.md, "Test the upgrade"), check out the released commit in a scratch worktree, deploy it from there onto `golden`, give it state, then deploy this branch and check the state came through.
 
@@ -94,4 +94,4 @@ Over HTTP with the owner's cookie: `/~/scry/trunk/version.json`, `debug.json`, `
 - The browser checks (`test/browser/`) need a local Galène 1.1, which this machine does not have. Build one as `test/browser/README.md` says, point `~rud` at it with `%set-sfu`, and add `http://localhost:8136` to its `allowOrigin`.
 - Push end to end (DMs and channel posts between two ships, `%activity` reads, rings) needs a second ship in the set and a local HTTP listener as the device's endpoint.
 - A real grubbery app calling trunk through the kernel. `grubbery-marc` and the `marc` check cover the marc, and the `allow` check covers trunk's side of the `-as` actions from another agent. A grubbery nexus that pokes `%trunk` and watches `/app/grubbery/<name>` would close the gap.
-- App guest tickets: they need an SFU (`%set-sfu`), which the set has none of.
+- App guest tickets need an SFU (`%set-sfu`), and the set has none.

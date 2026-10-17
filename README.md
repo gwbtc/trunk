@@ -2,7 +2,7 @@
 
 Voice calls, party lines and push notifications over Urbit.
 
-`%trunk` is a Gall agent. It routes opaque SDP between ships for 1:1 calls, and for party lines it mints short-lived, room-scoped tokens for an SFU. It never sees media and never parses SDP. Its job there is the trust boundary: local-only actions, and a signal's sender is the cryptographic ames source, never a claim in the payload.
+`%trunk` is a Gall agent. It routes opaque SDP between ships for 1:1 calls, and for party lines it mints short-lived, room-scoped tokens for an SFU. It never sees media and never parses SDP. Its job there is the trust boundary. It takes actions only from its own ship, and a signal's sender is the cryptographic ames source, never a claim in the payload.
 
 Since wire 11 it also wakes its owner's phones itself, with push notifications for calls, messages and alerts from other apps on the ship. Since wire 12 it serves its owner a page for those notifications and for debugging them. The one piece left off the ship is signing an iPhone's push with Apple's key, which a small gateway does.
 
@@ -53,7 +53,7 @@ A missing scry means no desk, or one too old to say. A number lower than yours m
 {"denied": {"from": "~zod", "name": "lounge", "why": "not a member"}}
 ```
 
-Take the ticket to the SFU: fetch `<location>/.status` for its websocket endpoint, then join with the token. That is Galène's own protocol from there on, and its `protocol.js` is a usable client library.
+Take the ticket to the SFU. Fetch `<location>/.status` for its websocket endpoint, then join with the token. That is Galène's own protocol from there on, and its `protocol.js` is a usable client library.
 
 Galène names everyone by the token's `sub`, so a username on the line is the ship's `@p`, comets included. Galène refuses any later message whose username differs from the token's, so a client must send its `@p` and nothing else. A readable name, such as a nickname or a comet's mnemonym, travels in Galène's per-user data as `"data": {"name": "..."}` on the join, and other clients get it in `user` messages. Hosts on wire 10 to 12 signed a comet in as its full mnemonym instead (up to twelve words joined by dots, one dot in front when the host's Jael holds a Groundwire attestation and two otherwise), and Galène then refused that comet's every message, so comets could not speak there. Wire 13 puts the `@p` back.
 
@@ -98,7 +98,7 @@ Any agent on our ship can send a notice, such as a calendar reminder or a time t
 {"push-notice": {"tag": "cal-e1", "title": "Leave now", "body": "Meeting at 3"}}
 ```
 
-`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. An empty title becomes the app's name, the app name may be 40 bytes, and the whole push body, as sent, may be 4 KiB. That body adds about 150 bytes of its own fields to the notice's text. One agent may use up to 16 names, and trunk keeps 128 apps, forgetting the one idle longest that the owner never changed. Each app gets at most one push every five seconds. What comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<agent>` or `batch-<agent>/<app>`. An app gets 30 pushes an hour unless the owner sets another limit for it, up to 720 or none at all. The owner can switch off all notices, or any one app, on the trunk page. A new app name starts allowed, unless the owner switched off the notices its agent sends under no name. Another agent may send notices and nothing else. Every other action, settings and devices included, is taken only from the owner's web session, Talon or the dojo. That stops a careless app, not a hostile one, since gall lets an agent name any origin for its poke.
+`tag` groups and replaces notices on the phone, and `open` is any JSON the app acts on when the notice is tapped. An empty title becomes the app's name, the app name may be 40 bytes, and the whole push body, as sent, may be 4 KiB. That body adds about 200 bytes of its own fields to the notice's text. One agent may use up to 16 names, and trunk keeps 128 apps, forgetting the one idle longest that the owner never changed. Each app gets at most one push every five seconds. What comes sooner waits, then goes as one push, the notice itself or a summary titled "3 alerts from calendar" with the tag `batch-<agent>` or `batch-<agent>/<app>`. An app gets 30 pushes an hour unless the owner sets another limit for it, up to 720 or none at all. The owner can switch off all notices, or any one app, on the trunk page. A new app name starts allowed, unless the owner switched off the notices its agent sends under no name. It also starts with its agent's own hourly limit, when the owner set that to a limit below 30. Another agent may send notices and nothing else. Every other action, settings and devices included, is taken only from the owner's web session, Talon or the dojo. That stops a careless app, not a hostile one, since gall lets an agent name any origin for its poke.
 
 UnifiedPush devices get these bodies, built in the off-ship relay's key order, as `application/json`. Rings, cancels and tests go with `TTL: 60` and `Urgency: high`, notices with `TTL: 3600` and `Urgency: high`, and everything else with `TTL: 86400` and `Urgency: normal`.
 
@@ -135,9 +135,9 @@ An iPhone needs APNs, which speaks only HTTP/2 with ES256 tokens. Iris has neith
 {"handle": "<h>", "secret": "<s>", "kind": "badge", "badge": 3}
 ```
 
-For an iPhone whose `caps` include `badge`, every message and notice alert also carries `"badge": n`. `n` is `%activity`'s base notify-count, which it gives on `/v4` after each post and read. A message alert carries the count it makes, one more than the last, and `%activity`'s next fact confirms it. When the count moves without an alert, after a read on another client say, it settles for 30 seconds and then goes as a `badge` push to each iPhone told another number.
+For an iPhone whose `caps` include `badge`, every message and notice alert also carries `"badge": n`. `n` is `%activity`'s base notify-count, which it gives on `/v4` after each post and read. A message alert carries the count it makes, one more than the last, and `%activity`'s next fact confirms it. When the count moves without an alert, after a read on another client say, it settles for 30 seconds and then goes as a `badge` push to each iPhone told another number. A device that registers with `badge` in its `caps`, as a new device or with a new gateway or handle, gets the current count at once.
 
-The ship sends a message, read, notice or badge again when the answer is a 5xx, a 429 or nothing at all: after 30 seconds, then after 5 minutes, then it gives up and logs it. A ring, a cancel and a test are never sent twice, since they are stale in seconds. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept, and a retry goes only to the target it was meant for. Any other answer is only logged.
+The ship sends a message, read, notice or badge again when the answer is a 5xx, a 429 or nothing at all. It tries again after 30 seconds and then after 5 minutes, and then it gives up and logs it. A ring, a cancel and a test are never sent twice, since they are stale in seconds. An answer of 404 or 410 means the device is gone, so the ship drops it. From a gateway, 401 means the same. A device registered again since that push left is kept, and a retry goes only to the target it was meant for. Any other answer is only logged.
 
 ### The trunk page (wire 12)
 
@@ -188,7 +188,7 @@ A guest's Galène username is `guest-` and 24 hex digits, never an `@p`, and a r
 
 ## How a 1:1 call works
 
-Signalling travels through ames, ship to ship. Media never does. It goes directly between the two clients, and the ships never see it. The SDP is complete when it is sent: one offer and one answer, no trickling, because every ames round trip is expensive.
+Signalling travels through ames, ship to ship. Media never does. It goes directly between the two clients, and the ships never see it. The SDP is complete when it is sent. There is one offer and one answer, with no trickling, because every ames round trip is expensive.
 
 ```mermaid
 sequenceDiagram
@@ -266,12 +266,17 @@ lib/trunk-push.hoon        what wakes a phone, and the bytes that do it
 lib/trunk-guest.hoon       who a guest link seats, and guest ids
 gen/test-*.hoon            checks to run on a ship: test-push, test-guest and test-mnemonym answer %ok
 gen/test-roster.hoon       a probe of the group-roster parser, which answers [%parsed ...]
+gen/token.hoon             mints a Galène token by hand, to test the signing path
+gen/trunk/policy.hoon      prints who may ring this ship
+tests/                     offline suites for the libraries, run by scripts/offline-tests.sh
+scripts/                   offline tests, live ship checks and a deploy to a dev fleet ship
 test/browser/              end-to-end checks of the pages, in headless Chromium
 sidecar/                   coturn + Galène, and the listen page
 docs/design.md             how it works and why
 docs/notifications.md      how other apps send notifications through trunk
 docs/guest-seats.md        calls with people who have no ship, and recurring meetings
 AGENTS.md                  notes for coding agents working on trunk
+TESTING.md                 how to test trunk on the dev platform's fleet
 ```
 
 ## The desk
@@ -341,7 +346,7 @@ Rooms carry what their admins decide:
           muted=(set ship) seat-roles=(map ship (set @t))]
 ```
 
-`admins` is just "ships that may reconfigure this room". The agent has no idea what a group is. A client seeds it from whatever roster it has, or binds the room to a group source and the roster (and each member's roles) mirrors it from then on. `sfu` overrides the ship's own sidecar, so a group needn't route its audio through the host's server. The role gates are wire 5. `~` for either gate means everyone on the roster, which is exactly the pre-wire-5 behavior. A set gate admits a member iff their mirrored roles intersect it, the host and admins bypass both gates, and `muted` is moderation that beats everything except the host.
+`admins` is just "ships that may reconfigure this room". The agent has no idea what a group is. A client seeds it from whatever roster it has, or binds the room to a group source and the roster (and each member's roles) mirrors it from then on. `sfu` overrides the ship's own sidecar, so a group needn't route its audio through the host's server. The role gates are wire 5. `~` for either gate means everyone on the roster, which is exactly the pre-wire-5 behavior. A set gate admits a member iff their mirrored roles intersect it, the host and admins bypass both gates, and `muted` is moderation that beats everything except the host. A gate set by a remote admin may hold at most 256 roles.
 
 ### From the dojo
 
@@ -371,7 +376,10 @@ Every action a client can poke works by hand, and a few are genuinely useful for
 ::  reconfigure a line, on the host or from any ship on its admin
 ::  list (the poke relays and the host checks). Empty members/admins
 ::  keep the existing roster, '' keeps the title and keep-sfu=%.y
-::  keeps the sfu. Listen is always set, so pass the line's current
+::  keeps the sfu. A remote admin's members and admins count only
+::  when the line is new, and its title may be 256 bytes at most.
+::  An sfu key that is not base64url is refused, as %set-sfu refuses
+::  one. Listen is always set, so pass the line's current
 ::  value. This one turns anonymous listening off. With the current
 ::  value, the form changes nothing else and re-announces the line to
 ::  every member, the manual re-delivery for a lost invitation.

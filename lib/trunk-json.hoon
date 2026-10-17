@@ -14,8 +14,9 @@
 ::                               "sfu":null|{"base":b,"group":g,"key":k},
 ::                               "title":t,"members":["~zod"],
 ::                               "admins":["~zod"]}}
-::                (title, members and admins are used only when the
-::                room does not exist yet)
+::                ('' keeps the title, and empty members or admins
+::                keep the roster. A remote admin's members and
+::                admins count only when the room is new.)
 ::            {"close-room":{"name":n}}
 ::            {"join-room":{"host":"~zod","name":n}}
 ::            {"peek-room":{"host":"~zod","name":n}}
@@ -78,6 +79,18 @@
 ::            {"guest-link":{"code":c,"name":n,"path":p,"speak":true}}
 ::    policy  {"mode":"open","allow":["~zod"],"block":["~bus"]}
 ::            (the scry /x/policy, and the object in a "policy" update)
+::    rooms   /x/rooms, the lines we host, never a room's SFU key:
+::            [{"name":n,"title":t,"listen":true,"sfu-base":b,
+::              "custom-sfu":false,"members":["~zod"],
+::              "admins":["~zod"],"join-roles":null|["r"],
+::              "speak-roles":null|["r"],"muted":["~bus"],
+::              "group":null|{"ship":"~zod","name":g}}]
+::    lines   /x/lines, the lines we are invited to:
+::            [{"host":"~zod","name":n,"title":t,"listen":true,
+::              "sfu-base":b}]
+::    sfu     /x/sfu, never the key, only whether one is set:
+::            {"base":b,"group":g,"configured":true}
+::    ice     /x/ice  [{"url":u,"user":s,"cred":c}]
 ::
 ::  Guest seats (wire 16). An invite's path is /apps/trunk/guest/<code>
 ::  on the ship. Invites and the owner's links answer with a path, and
@@ -99,6 +112,9 @@
 ::  "<agent>/<name>".
 ::  The guest page's POST answers with the ticket's last six fields
 ::  and "secret", which the page keeps to rejoin as the same guest.
+::  GET <path>/room answers {"host":h,"title":t,"speak":true}, what the
+::  page shows before Join. Either route refuses with an HTTP status
+::  and {"error":w}.
 ::  /x/guests is {"invites":[<guest-invite's object>],
 ::  "links":[<guest-link's object>],
 ::  "apps":[{"agent":a,"allowed":false,"rooms":[r]}],
@@ -162,7 +178,7 @@
       :~  host+ship-from-json  name+so  open+bo  listen+bo
           ::  ~ means "use the host ship's own sidecar"
           sfu+(mu sfu-from-json)  keep-sfu+bo
-          ::  only used when the room does not exist yet
+          ::  '' keeps the title, and empty members or admins keep the roster
           title+so  members+(as ship-from-json)  admins+(as ship-from-json)
       ==
       [%close-room (ot ~[name+so])]

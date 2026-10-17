@@ -171,7 +171,7 @@ An app can also make a link that anyone may open, for people it does not know, s
 - **Ending a link stops new joins and rejoins.** Whoever is on the call stays until they leave, since Galène checks a token only when someone joins. A rotation does not remove them either. It moves only the users the app tickets again.
 - **The owner's switch gates it twice:** when the link is made, and whenever someone opens it. While it is off, the guest is told so.
 - **Limits.** An app may have 1,000 links. The title and the request id are at most 128 bytes. A link's guests keep nothing on the ship, so they do not count toward an app room's 256.
-- **Refusals.** Besides the switch, a link can be refused with `not a room name`, `id too long` or `too many links`, or with `too many apps` when the agent already names 64. `try again` means the new code met one already in use, so ask again. Without a call server the refusal is `no sfu configured`, and until the owner sets the ship's public address (below) it is `no public address set`. When the public address and the call server differ in scheme, one http and the other https, it is `public address and call server differ in http or https`, since the join page reaches the ship with its own scheme.
+- **Refusals.** Besides the switch, a link can be refused with `not a room name`, `id too long` or `too many links`, or with `too many apps` when the agent already names 64. `try again` means the new code met one already in use, so ask again. Without a call server the refusal is `no sfu configured`, and until the owner sets the ship's public address (below) it is `no public address set`. When the public address and the call server differ in scheme, one http and the other https, it is `public address and call server differ in http or https`, since the join page reaches the ship with its own scheme. Every refusal of a link carries its `req`. That includes `too many apps`, and `id too long` when the `req` itself fits in 128 bytes.
 
 #### The join page
 
@@ -221,7 +221,7 @@ The MUD drops its own signalling relay, its ICE handling and its coturn script. 
 
 ## Where the build departs from the proposal
 
-The proposal's four open questions were settled as it proposed: invites need only the owner's action, a guest's token lasts an hour, the guest page is served from the ship, and removal is by rotation, with no op connection. Beyond those:
+The proposal's four open questions were settled as it proposed. Invites need only the owner's action, a guest's token lasts an hour, the guest page is served from the ship, and removal is by rotation, with no op connection. Beyond those:
 
 - **Trunk never takes a display name.** Galène's per-user data comes from the client whatever trunk says, so the guest route and `app-guest-ticket` carry no name.
 - **A guest id is the hash of a secret (wire 17),** not an id the page sends back. In wire 16 the page rejoined by sending its id, and any guest who saw another's id on the call could rejoin as them.

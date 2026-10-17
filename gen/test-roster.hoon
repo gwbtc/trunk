@@ -11,7 +11,7 @@
 ?~  jon  [%bad-json ~]
 =/  ros  (roster-from-json:trunk-json u.jon host)
 ?~  ros  [%parsed ~]
-::  unpacked so the dojo shows lists, not raw set/map trees — the
+::  unpacked so the dojo shows lists, not raw set/map trees. The
 ::  seat-roles leg is the wire-5 addition this harness now covers.
 :-  %parsed
 :~  members+~(tap in members.u.ros)
