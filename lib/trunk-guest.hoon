@@ -1,4 +1,4 @@
-::  trunk-guest: guest seats (wire 16 and 17), with no scries and no
+::  trunk-guest: guest seats (wire 16 to 19), with no scries and no
 ::  cards, so gen/test-guest.hoon can cover it.
 ::
 ::  A guest is a person on a call with no ship behind their seat. They
@@ -28,6 +28,8 @@
 ::  apps one agent may name with the -as actions (wire 18)
 ++  app-name-cap  64
 ++  app-guest-cap  256
+::  links one app may have (wire 19)
+++  app-link-cap  1.000
 ::  an app room that asks for no ticket for this long closes itself
 ++  app-idle  ~d1
 ::  the longest user id or request id an app may give
@@ -162,6 +164,53 @@
   |=  room=@t
   ^-  ?
   &(!=('' room) (lte (met 3 room) 64) ((sane %tas) room))
+::
+::  +link-of: the code of an app room's link, if it has one.
+::  ponytail: a scan of every app's links, fine at app-link-cap; index
+::  them by [app room] if many apps keep many links.
+::
+++  link-of
+  |=  [m=(map @t app-link:trunk) app=@t room=@t]
+  ^-  (unit @t)
+  =/  l  (skim ~(tap by m) |=([@t k=app-link:trunk] &(=(app app.k) =(room room.k))))
+  ?~(l ~ `-.i.l)
+::
+::  +valid-origin: the ship's public address, as the owner gives it: http
+::  or https, then a host and maybe a port, and nothing after. '' is
+::  none. It goes into a URL's fragment, so it may hold no '/', '#',
+::  '?' or '@'.
+::
+++  valid-origin
+  |=  o=@t
+  ^-  ?
+  ?:  =('' o)  &
+  =/  t=tape  (trip o)
+  =/  rest=(unit tape)
+    ?:  =("https://" (scag 8 t))  `(slag 8 t)
+    ?:  =("http://" (scag 7 t))  `(slag 7 t)
+    ~
+  ?~  rest  |
+  ?&  (lte (lent t) 256)
+      !=(~ u.rest)
+      %+  levy  u.rest
+      |=  c=@tD
+      ?|  &((gte c 'a') (lte c 'z'))
+          &((gte c '0') (lte c '9'))
+          =(c '.')  =(c '-')  =(c ':')
+      ==
+  ==
+::
+::  +join-url: an app link on the call server's join page (wire 19). The
+::  page sends the guest to our guest page for a ticket, which sends
+::  them back to join, so the call runs on the call server's own origin
+::  and Galène needs no allowOrigin for us.
+::
+++  join-url
+  |=  [base=@t origin=@t code=@t]
+  ^-  @t
+  =/  t=tape  (trip origin)
+  =/  host=tape  (slag (add 2 (need (find "//" t))) t)
+  (rap 3 ~[base '/join/#' (crip host) '/' code])
 ::
 ::  +app-sub: an app room's Galène subgroup. A party line's is
 ::  '<ship>-<name>' and an app room's is '<ship>/<app>/<room>/<epoch>'.

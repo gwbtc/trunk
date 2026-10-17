@@ -145,6 +145,10 @@
       guests=(map @t @t)
       last=@da
   ==
+::  a link anyone may open to one of an app's rooms (wire 19). Trunk made
+::  its code, and a room has one at most. It outlives the room: a guest
+::  who opens it reopens a room that closed itself for being idle.
++$  app-link  [app=@t room=@t title=@t speak=?]
 ::  local client -> own agent
 +$  action
   $%  [%send =ship =sig]
@@ -250,6 +254,11 @@
       [%app-room-close room=@t]
       [%app-room-rotate room=@t]
       [%app-guest-ticket room=@t guest=@t speak=? req=@t]
+      ::  a link to one of its rooms for anyone it gives it to (wire 19),
+      ::  answered with the link's code and URL. A room has one link:
+      ::  asking again gives the same code, with the new title and speak.
+      ::  Closing the room ends it.
+      [%app-guest-link room=@t title=@t speak=? req=@t]
       ::  the same, naming the app they are for (wire 18). Every grubbery
       ::  app reaches trunk as %grubbery, so such an app names itself,
       ::  e.g. 'calendar': it gets its own switch, its own rooms and its
@@ -258,9 +267,14 @@
       [%app-room-close-as app=@t room=@t]
       [%app-room-rotate-as app=@t room=@t]
       [%app-guest-ticket-as app=@t room=@t guest=@t speak=? req=@t]
+      [%app-guest-link-as app=@t room=@t title=@t speak=? req=@t]
       ::  the owner's switch for one app's calls. `agent` is the app's
       ::  id: the agent, or '<agent>/<name>' for one that names itself.
       [%app-hosting agent=@t allow=?]
+      ::  the ship's public address, such as 'https://urbit.example', or
+      ::  '' for none (wire 19). An app's link names it, so the call
+      ::  server's page knows where to get a guest's ticket.
+      [%set-origin origin=@t]
       [%set-call-mode mode=call-mode]
       [%allow =ship]
       [%unallow =ship]

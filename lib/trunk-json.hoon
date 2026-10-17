@@ -43,6 +43,8 @@
 ::                           "speak":true}}
 ::            {"app-hosting":{"agent":"mud-world","allow":true}}
 ::                              (or "grubbery/calendar", wire 18)
+::            {"set-origin":"https://urbit.example"}  ("" for none,
+::                                                    wire 19)
 ::    sig     {"ring":{"id":i}} | {"offer":{"id":i,"sdp":s,"fpr":f}}
 ::            {"accept":{...}}  | {"reject":{"id":i,"reason":r}}
 ::            {"hangup":{"id":i}}
@@ -67,6 +69,9 @@
 ::             "endpoint":"wss://...","token":t,"expires":1787000000,
 ::             "speak":true}}
 ::    denied  {"guest-denied":{"room":r,"req":q,"why":w}}
+::    link    {"guest-link":{"room":r,"req":q,"code":c,"path":p,
+::             "url":"https://calls.example/join/#ship.example/<code>",
+::             "speak":true}}  (wire 19)
 ::  An app that names itself (the -as actions, wire 18) gets the same
 ::  facts on /app/<agent>/<name>, and shows in /x/guests as
 ::  "<agent>/<name>".
@@ -74,7 +79,8 @@
 ::  and "secret", which the page keeps to rejoin as the same guest.
 ::  /x/guests is {"invites":[<guest-invite's object>],
 ::  "links":[<guest-link's object>],
-::  "apps":[{"agent":a,"allowed":false,"rooms":[r]}]}.
+::  "apps":[{"agent":a,"allowed":false,"rooms":[r]}],
+::  "origin":"https://urbit.example"} (origin since wire 19).
 /-  trunk
 /+  trunk-guest
 |%
@@ -178,6 +184,7 @@
       [%guest-link (ot ~[code+so name+so speak+bo])]
       ::  `agent` is the app's id: the agent, or '<agent>/<name>' (wire 18)
       [%app-hosting (ot ~[agent+so allow+bo])]
+      [%set-origin so]
       [%set-call-mode (su (perk %open %allow ~))]
       [%allow ship-from-json]
       [%unallow ship-from-json]
@@ -365,11 +372,13 @@
           links=(map @t guest-link:trunk)
           apps=(map [app=@t room=@t] app-room:trunk)
           hosts=(map @t ?)
+          origin=@t
       ==
   ^-  json
   =,  enjs:format
   %-  pairs
-  :~  :-  %invites
+  :~  [%origin s+origin]
+      :-  %invites
       a+(turn ~(tap by invites) |=([c=@t i=invite:trunk] (invite-to-json c i)))
       :-  %links
       a+(turn ~(tap by links) |=([c=@t l=guest-link:trunk] (link-to-json c l)))
@@ -408,6 +417,21 @@
   %+  frond:enjs:format  'guest-ticket'
   %-  pairs:enjs:format
   [['room' s+room] ['guest' s+guest] ['req' s+req] ticket]
+::
+::  +app-link-to-json: an app's link (wire 19), with its URL on the call
+::  server's join page and its path on the ship
+++  app-link-to-json
+  |=  [room=@t req=@t code=@t url=@t speak=?]
+  ^-  json
+  %+  frond:enjs:format  'guest-link'
+  %-  pairs:enjs:format
+  :~  ['room' s+room]
+      ['req' s+req]
+      ['code' s+code]
+      ['path' s+(cat 3 guest-path:trunk-guest code)]
+      ['url' s+url]
+      ['speak' b+speak]
+  ==
 ::
 ::  +room-info-to-json: what the guest page shows before Join
 ++  room-info-to-json

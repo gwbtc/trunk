@@ -1,0 +1,88 @@
+:root {
+  --bg: #f7f6f3;
+  --fg: #1a1a17;
+  --muted: #6b6a63;
+  --line: #e0ded7;
+  --tile: #e9e7e1;
+  --accent: #1f6f4a;
+  --accent-fg: #ffffff;
+  --bad: #8a2f2f;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14140f;
+    --fg: #ece9e1;
+    --muted: #9a978c;
+    --line: #2c2b25;
+    --tile: #22221c;
+    --accent: #4bbd85;
+    --accent-fg: #0d1a13;
+    --bad: #e08585;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 26rem; margin: 0 auto; padding: 24px 16px; text-align: center; }
+body.in main { max-width: 72rem; }
+h1 {
+  margin: 0 0 .25rem; font-size: 1.05rem; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+}
+.room { margin: 0; font-size: 1.5rem; font-weight: 600; overflow-wrap: anywhere; }
+.host { margin: .25rem 0 2rem; color: var(--muted); overflow-wrap: anywhere; }
+body.in .host { margin-bottom: 1rem; }
+form { max-width: 26rem; margin: 0 auto; }
+label { display: block; text-align: left; color: var(--muted); font-size: .9rem; margin-bottom: .35rem; }
+input {
+  width: 100%; padding: .8rem 1rem; margin-bottom: 1rem;
+  border: 1px solid var(--muted); border-radius: .75rem;
+  background: transparent; color: var(--fg); font: inherit;
+}
+button {
+  padding: .9rem 1.2rem; border: 0; border-radius: 999px;
+  background: var(--accent); color: var(--accent-fg);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+form button { width: 100%; padding: 1.15rem 1rem; font-size: 1.15rem; }
+button:disabled { opacity: .55; cursor: default; }
+button.quiet { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+button.on { background: var(--fg); color: var(--bg); }
+.controls { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 1rem; }
+/* on a phone the tiles stack, so keep the controls in reach */
+body.in .controls { position: sticky; bottom: 0; background: var(--bg); padding: .75rem 0; margin-top: .6rem; }
+#leave { color: var(--bad); border-color: var(--bad); }
+.status { margin: 1rem 0; color: var(--muted); min-height: 1.5rem; }
+.alone { color: var(--muted); margin: 0 0 .75rem; }
+.status.bad { color: var(--bad); }
+.grid {
+  display: grid; gap: .6rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+.tile {
+  position: relative; aspect-ratio: 16 / 9; border-radius: .75rem;
+  background: var(--tile); overflow: hidden; cursor: pointer;
+}
+.tile.big { grid-column: 1 / -1; max-height: 80vh; }
+.tile.speaking { box-shadow: 0 0 0 3px var(--accent); }
+.tile video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.tile .face {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--tile); font-size: 1.1rem; padding: 1rem; overflow-wrap: anywhere;
+}
+.tile.video .face { display: none; }
+.tile .name {
+  position: absolute; left: .5rem; bottom: .5rem; max-width: calc(100% - 1rem);
+  padding: .1rem .5rem; border-radius: .5rem; font-size: .85rem;
+  background: rgba(0, 0, 0, .55); color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* on a phone, a tile with no video is one line, so ten people fit */
+@media (max-width: 40rem) {
+  .tile:not(.video):not(.big) { aspect-ratio: auto; height: 2.6rem; }
+  .tile:not(.video):not(.big) .face { display: none; }
+}
+[hidden] { display: none !important; }
