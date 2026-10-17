@@ -69,7 +69,7 @@ So a grubbery app that sends notices must:
 
 The calendar does all three from its version 30.
 
-A grubbery app can also host calls for its own users with the same naming scheme (wire 18). See "Grubbery apps" in `docs/guest-seats.md`. Its kernel marc must then type those actions too, and goes on a ship only after trunk 18 is there.
+A grubbery app can also host calls for its own users with the same naming scheme (wire 18). See "Grubbery apps" in `docs/guest-seats.md`. Since wire 19 it can also make a link anyone may open to one of its rooms (`app-guest-link-as`), such as a calendar event's call. Its kernel marc must then type those actions too, and goes on a ship only after a trunk with that wire is there.
 
 ## What happens next
 

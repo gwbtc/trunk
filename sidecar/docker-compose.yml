@@ -85,3 +85,8 @@ services:
       - ./galene/data:/data
       - ./galene/groups:/groups
       - ./listen:/static/listen:ro
+      # the join page for apps' guest links (wire 19): trunk's own guest
+      # page, the same three files the ship serves
+      - ../app/trunk/guest.html:/static/join/index.html:ro
+      - ../app/trunk/guest.js:/static/join/guest.js:ro
+      - ../app/trunk/guest.css:/static/join/guest.css:ro
