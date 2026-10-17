@@ -1,4 +1,5 @@
-::  +test-guest: guest seats (wire 16) and permanent links (wire 17).
+::  +test-guest: guest seats (wire 16), permanent links (wire 17) and
+::  apps' links (wire 19).
 ::  Each limit is checked as a pair: the last case allowed, and one more
 ::  refused. Answers %ok, or the name of each case that came out wrong.
 ::    +trunk!test-guest
@@ -105,6 +106,25 @@
       (location ['http://h:8444' 'talon' 'k'] 'zod-x')
       ['an http base has a ws endpoint' =('ws://h:8444/ws' (endpoint 'http://h:8444'))]
       ['an https base has a wss endpoint' =('wss://sfu.example/ws' (endpoint 'https://sfu.example'))]
+  ::
+      ['an https origin is an address' (valid-origin 'https://urbit.example')]
+      ['an http origin with a port is one' (valid-origin 'http://localhost:8136')]
+      ['no origin is allowed' (valid-origin '')]
+      ['an origin has a scheme' !(valid-origin 'urbit.example')]
+      ['an origin has a host' !(valid-origin 'https://')]
+      ['an origin has no path' !(valid-origin 'https://urbit.example/')]
+      ['an origin has no fragment' !(valid-origin 'https://a.example#b')]
+      ['an origin has no user' !(valid-origin 'https://u@a.example')]
+      ['an origin is lower case' !(valid-origin 'https://Urbit.example')]
+      :-  'an app link opens on the call server with the ship host'
+      .=  'https://calls.example/join/#urbit.example/0a1b'
+      (join-url 'https://calls.example' 'https://urbit.example' '0a1b')
+      :-  'an app link keeps a port'
+      .=  'http://127.0.0.1:8445/join/#localhost:8136/0a1b'
+      (join-url 'http://127.0.0.1:8445' 'http://localhost:8136' '0a1b')
+      :-  'a room has the link made for it'
+      =/  m  (my ~[['c1' ['grubbery/cal' 'e-1' 't' &]] ['c2' ['grubbery/cal' 'e-2' 't' &]]])
+      &(=(`'c2' (link-of m 'grubbery/cal' 'e-2')) =(~ (link-of m 'grubbery/orrery' 'e-2')))
   ==
 =/  bad  (murn cases |=([n=@t ok=?] ?:(ok ~ `n)))
 ?~(bad %ok [%failed bad])
