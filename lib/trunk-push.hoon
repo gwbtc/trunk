@@ -698,12 +698,14 @@
 ::  `quiet` is ~ while quiet hours are off, or say no offset: a ship
 ::  has no zone table, so Talon writes the zone's minutes from UTC
 ::  beside its name, and one it did not write holds nothing. Better a
-::  push at night than none all day. whoCanMessage needs nothing
-::  here: %activity notifies no message of a DM request that waits,
-::  so none is pushed, whoever may message.
+::  push at night than none all day. `added`: only people the owner
+::  has added may message, which decides whether a request notifies
+::  (+request-allowed). It needs nothing for messages: %activity
+::  notifies none of a DM request that waits.
 ::
 +$  reach
-  $:  favourites=(set @t)
+  $:  added=?
+      favourites=(set @t)
       quiet=(unit [from=@ud to=@ud east=? off=@ud])
   ==
 ++  reach-of
@@ -726,7 +728,8 @@
   =/  to  (min-at u.entry ~['quiet' 'toMin'])
   =/  off  (min-at u.entry ~['quiet' 'offsetMin'])
   :-  ~
-  :-  favs
+  :+  =(`'Added' (cord-at u.entry ~['whoCanMessage']))
+    favs
   ?.  =(`[%b %.y] (at u.entry ~['quiet' 'on']))  ~
   ?~  from  ~
   ?~  to  ~
@@ -780,6 +783,52 @@
   ?~  r  %.n
   ?~  author  %.y
   !(~(has in favourites.u.r) u.author)
+::
+::  +add-invite: a DM request, from an %activity /v4 fact. %activity
+::  says one for a ship's first message and notifies none of the
+::  messages while the request waits, so without a push for it a
+::  closed phone hears nothing of a new person at all.
+::
+::    {"add":{"source":{"dm":{"ship":"~nec"}},"time":1794263483429,
+::            "event":{"dm-invite":{"ship":"~nec"},"notified":true}}}
+::
+::  `time` is Unix milliseconds. The post it gives is the hint's: the
+::  chat is the ship, and the id is shaped as a post's, ~ship/<da>, so
+::  a client reads its author and time as any other. One without a
+::  time is dated `now`.
+::
+++  add-invite
+  |=  [jon=json now=@da]
+  ^-  (unit post)
+  =/  ev  (at jon ~['add' 'event'])
+  ?~  ev  ~
+  ?.  =(`[%b %.y] (at u.ev ~['notified']))  ~
+  =/  who  (cord-at u.ev ~['dm-invite' 'ship'])
+  ?~  who  ~
+  ?.  ?=(%dm (chat-of u.who))  ~
+  =/  at=@da
+    =/  t  (at jon ~['add' 'time'])
+    ?.  ?=([~ %n *] t)  now
+    =/  ms  (rush p.u.t dem)
+    ?~  ms  now
+    (add ~1970.1.1 (div (mul u.ms ~s1) 1.000))
+  `[u.who (rap 3 ~[u.who '/' (scot %ud at)]) ~ %.n ~ ~ `at]
+::
+::  +request-allowed: may this ship's request notify? Anyone's, unless
+::  the owner lets only added people message them: then a favourite's
+::  alone. Talon also lets through someone in the contact book, which
+::  the ship does not read here: their request shows when Talon opens.
+::
+++  request-allowed
+  |=  [r=(unit reach) who=@t]
+  ^-  ?
+  ?~  r  %.y
+  |(!added.u.r (~(has in favourites.u.r) who))
+::
+::  +request-text: what an iPhone's alert says of a request. Never the
+::  message: nothing of a stranger's is shown before the owner accepts.
+::
+++  request-text  'Wants to message you'
 ::
 ::  +preview: a one-line text preview of a post's content for an iOS
 ::  alert: the words and the ship names, at most 140 characters.

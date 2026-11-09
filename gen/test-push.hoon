@@ -326,7 +326,7 @@
             '\\"offsetMin\\":-300}}"}}}'
         ==
       =/  r  (reach-of s)
-      ?&  =(r `[(silt ~['~nec']) `[1.320 420 %.n 300]])
+      ?&  =(r `[%.y (silt ~['~nec']) `[1.320 420 %.n 300]])
           =(~ (reach-of (j '{"desk":{"ui-prefs":{}}}')))
           =(~ (reach-of (j '{"desk":{"ui-prefs":{"reach":"not json"}}}')))
       ==
@@ -335,18 +335,18 @@
       =/  off  (reach-of (j '{"ui-prefs":{"reach":{"whoCanMessage":"Anyone","favourites":[],"quiet":{"on":false,"fromMin":1320,"toMin":420,"offsetMin":0}}}}'))
       =/  old  (reach-of (j '{"ui-prefs":{"reach":{"quiet":{"on":true,"fromMin":1320,"toMin":420,"zone":"America/New_York"}}}}'))
       =/  far  (reach-of (j '{"ui-prefs":{"reach":{"quiet":{"on":true,"fromMin":1320,"toMin":420,"offsetMin":1440}}}}'))
-      ?&  =(off `[~ ~])
-          =(old `[~ ~])
-          =(far `[~ ~])
+      ?&  =(off `[%.n ~ ~])
+          =(old `[%.n ~ ~])
+          =(far `[%.n ~ ~])
           !(quiet-at off ~2026.11.10..04.30.00)
           !(quiet-at ~ ~2026.11.10..04.30.00)
       ==
     ::
       :-  'quiet hours on the owner clock, over midnight and not'
       ::  22:00 to 07:00, five hours west of UTC
-      =/  r=(unit reach)  `[(silt ~['~nec']) `[1.320 420 %.n 300]]
+      =/  r=(unit reach)  `[%.n (silt ~['~nec']) `[1.320 420 %.n 300]]
       ::  09:00 to 17:00, an hour east
-      =/  d=(unit reach)  `[~ `[540 1.020 %.y 60]]
+      =/  d=(unit reach)  `[%.n ~ `[540 1.020 %.y 60]]
       ?&  (quiet-at r ~2026.11.10..04.30.00)
           (quiet-at r ~2026.11.10..03.00.00)
           !(quiet-at r ~2026.11.10..02.59.00)
@@ -357,17 +357,52 @@
           !(quiet-at d ~2026.11.10..07.59.00)
           !(quiet-at d ~2026.11.10..16.00.00)
           (quiet-at d ~2026.11.10..15.59.00)
-          !(quiet-at `[~ `[600 600 %.y 0]] ~2026.11.10..10.00.00)
+          !(quiet-at `[%.n ~ `[600 600 %.y 0]] ~2026.11.10..10.00.00)
       ==
     ::
       :-  'in quiet hours only a favourite is pushed'
-      =/  r=(unit reach)  `[(silt ~['~nec']) `[1.320 420 %.n 300]]
+      =/  r=(unit reach)  `[%.n (silt ~['~nec']) `[1.320 420 %.n 300]]
       =/  night  ~2026.11.10..04.30.00
       ?&  (quiet-holds r `'~bus' night)
           !(quiet-holds r `'~nec' night)
           (quiet-holds r ~ night)
           !(quiet-holds r `'~bus' ~2026.11.9..17.00.00)
           !(quiet-holds ~ `'~bus' night)
+      ==
+    ::
+      :-  'a DM request is a post for its ship, dated by the fact'
+      ::  as %activity said it between two ships, 2026-11-09
+      =/  f
+        %-  j
+        %+  rap  3
+        :~  '{"add":{"source":{"dm":{"ship":"~lyx"}},"event":{"dm-invite":'
+            '{"ship":"~lyx"},"notified":true},"source-key":"ship/~lyx",'
+            '"time":1794263483429}}'
+        ==
+      =/  p  (add-invite f t0)
+      =/  at  (add ~1970.1.1 (div (mul 1.794.263.483.429 ~s1) 1.000))
+      ?&  ?=(^ p)
+          =('~lyx' whom.u.p)
+          =((rap 3 ~['~lyx/' (scot %ud at)]) id.u.p)
+          =(`at time.u.p)
+          =(`at (post-at u.p))
+          =(`'~lyx' (author id.u.p))
+          =(~ parent.u.p)
+          =(~ (add-invite dm-post t0))
+          =(~ (add-post f))
+          ::  not notified, or no ship: no request
+          =(~ (add-invite (j '{"add":{"event":{"dm-invite":{"ship":"~lyx"},"notified":false}}}') t0))
+          =(~ (add-invite (j '{"add":{"event":{"dm-invite":{},"notified":true}}}') t0))
+          ::  no time: dated now
+          =/  q  (add-invite (j '{"add":{"event":{"dm-invite":{"ship":"~lyx"},"notified":true}}}') t0)
+          &(?=(^ q) =(`t0 time.u.q))
+      ==
+    ::
+      :-  'a request notifies anyone, or with only added people a favourite'
+      ?&  (request-allowed ~ '~bus')
+          (request-allowed `[%.n ~ ~] '~bus')
+          !(request-allowed `[%.y (silt ~['~nec']) ~] '~bus')
+          (request-allowed `[%.y (silt ~['~nec']) ~] '~nec')
       ==
     ::
       :-  'dm-post notifies'
