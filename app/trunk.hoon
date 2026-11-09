@@ -2783,6 +2783,10 @@
       ?:  from-group.u.got  "Talon's level for that chat's group is {(trip lev.u.got)}"
       "Talon's level for that chat is {(trip lev.u.got)}"
     [~ s `"{word}: not pushed, {why}"]
+  ::  the owner's quiet hours: Talon's on every device, so the ship's
+  ::  too. An iPhone cannot hold an alert itself.
+  ?:  (quiet-holds:trunk-push talon-reach (author:trunk-push id.u.post) now.bowl)
+    [~ s `"{word}: not pushed, in Talon's quiet hours"]
   ::  a notified post is one more in Tlon's count, and this alert
   ::  carries it. One we do not push leaves the count alone, so
   ::  %activity's next fact differs and the badge timer sends it.
@@ -2840,6 +2844,17 @@
   %^  chat-level:trunk-push  .^(json %gx (weld base /desk/talon/json))
     whom
   group
+::
+::  +talon-reach: when the owner can be reached, kept by Talon beside the
+::  levels (desk %talon, bucket ui-prefs, entry "reach"). ~ when
+::  %settings is not running or Talon never wrote one. As
+::  +notify-level, neither scry can fail.
+::
+++  talon-reach
+  ^-  (unit reach:trunk-push)
+  =/  base=path  /(scot %p our.bowl)/settings/(scot %da now.bowl)
+  ?.  .^(? %gu (snoc base %$))  ~
+  (reach-of:trunk-push .^(json %gx (weld base /desk/talon/json)))
 ::
 ::  +signal-cards: a peer's ring wakes our devices, and its hangup
 ::  un-rings the ones we woke.

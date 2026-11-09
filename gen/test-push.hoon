@@ -316,6 +316,60 @@
           =(~ (level-of s '~nec'))
       ==
     ::
+      :-  'reach from settings, as Talon stores it'
+      =/  s
+        %-  j
+        %+  rap  3
+        :~  '{"desk":{"ui-prefs":{"reach":"{\\"whoCanMessage\\":\\"Added\\",'
+            '\\"favourites\\":[\\"~nec\\"],\\"quiet\\":{\\"on\\":true,'
+            '\\"fromMin\\":1320,\\"toMin\\":420,\\"zone\\":\\"America/New_York\\",'
+            '\\"offsetMin\\":-300}}"}}}'
+        ==
+      =/  r  (reach-of s)
+      ?&  =(r `[(silt ~['~nec']) `[1.320 420 %.n 300]])
+          =(~ (reach-of (j '{"desk":{"ui-prefs":{}}}')))
+          =(~ (reach-of (j '{"desk":{"ui-prefs":{"reach":"not json"}}}')))
+      ==
+    ::
+      :-  'reach with quiet hours off, or no offset, holds nothing'
+      =/  off  (reach-of (j '{"ui-prefs":{"reach":{"whoCanMessage":"Anyone","favourites":[],"quiet":{"on":false,"fromMin":1320,"toMin":420,"offsetMin":0}}}}'))
+      =/  old  (reach-of (j '{"ui-prefs":{"reach":{"quiet":{"on":true,"fromMin":1320,"toMin":420,"zone":"America/New_York"}}}}'))
+      =/  far  (reach-of (j '{"ui-prefs":{"reach":{"quiet":{"on":true,"fromMin":1320,"toMin":420,"offsetMin":1440}}}}'))
+      ?&  =(off `[~ ~])
+          =(old `[~ ~])
+          =(far `[~ ~])
+          !(quiet-at off ~2026.11.10..04.30.00)
+          !(quiet-at ~ ~2026.11.10..04.30.00)
+      ==
+    ::
+      :-  'quiet hours on the owner clock, over midnight and not'
+      ::  22:00 to 07:00, five hours west of UTC
+      =/  r=(unit reach)  `[(silt ~['~nec']) `[1.320 420 %.n 300]]
+      ::  09:00 to 17:00, an hour east
+      =/  d=(unit reach)  `[~ `[540 1.020 %.y 60]]
+      ?&  (quiet-at r ~2026.11.10..04.30.00)
+          (quiet-at r ~2026.11.10..03.00.00)
+          !(quiet-at r ~2026.11.10..02.59.00)
+          (quiet-at r ~2026.11.10..11.59.00)
+          !(quiet-at r ~2026.11.10..12.00.00)
+          !(quiet-at r ~2026.11.9..17.00.00)
+          (quiet-at d ~2026.11.10..08.00.00)
+          !(quiet-at d ~2026.11.10..07.59.00)
+          !(quiet-at d ~2026.11.10..16.00.00)
+          (quiet-at d ~2026.11.10..15.59.00)
+          !(quiet-at `[~ `[600 600 %.y 0]] ~2026.11.10..10.00.00)
+      ==
+    ::
+      :-  'in quiet hours only a favourite is pushed'
+      =/  r=(unit reach)  `[(silt ~['~nec']) `[1.320 420 %.n 300]]
+      =/  night  ~2026.11.10..04.30.00
+      ?&  (quiet-holds r `'~bus' night)
+          !(quiet-holds r `'~nec' night)
+          (quiet-holds r ~ night)
+          !(quiet-holds r `'~bus' ~2026.11.9..17.00.00)
+          !(quiet-holds ~ `'~bus' night)
+      ==
+    ::
       :-  'dm-post notifies'
       =/  p  (add-post dm-post)
       ?&  ?=(^ p)
