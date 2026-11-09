@@ -2760,11 +2760,14 @@
     =^  cards  s  (count-changed s jon)
     [cards s ~]
   =/  post  (add-post:trunk-push jon)
+  ::  not a post: a new person's request, perhaps
+  =/  invite=?  ?=(~ post)
+  =?  post  invite  (add-invite:trunk-push jon now.bowl)
   ?~  post  [~ s ~]
   =.  seen.s  (prune-seen:trunk-push seen.s now.bowl)
   ?:  (~(has by seen.s) id.u.post)  [~ s ~]
   ::  the log says what kind of chat, never which one
-  =/  word  (chat-word:trunk-push u.post)
+  =/  word  ?:(invite "DM request" (chat-word:trunk-push u.post))
   ?.  (fresh:trunk-push (post-at:trunk-push u.post) now.bowl)
     [~ s `"{word}: not pushed, older than 5 minutes"]
   ::  kept until the post can no longer notify, which for a post dated
@@ -2777,6 +2780,8 @@
     [~ s `"{word}: not pushed, switched off in trunk's settings"]
   =/  got  (notify-level whom.u.post group.u.post)
   =/  level  (bind got head)
+  ::  a request is from a chat with no level yet, and a DM's level
+  ::  of none still silences it
   ?.  (allows:trunk-push whom.u.post level mention.u.post ?=(^ parent.u.post))
     =/  why=tape
       ?~  got  "Talon has no level for that chat or its group, so only mentions"
@@ -2785,8 +2790,11 @@
     [~ s `"{word}: not pushed, {why}"]
   ::  the owner's quiet hours: Talon's on every device, so the ship's
   ::  too. An iPhone cannot hold an alert itself.
-  ?:  (quiet-holds:trunk-push talon-reach (author:trunk-push id.u.post) now.bowl)
+  =/  rea  talon-reach
+  ?:  (quiet-holds:trunk-push rea (author:trunk-push id.u.post) now.bowl)
     [~ s `"{word}: not pushed, in Talon's quiet hours"]
+  ?:  &(invite !(request-allowed:trunk-push rea whom.u.post))
+    [~ s `"{word}: not pushed, Talon lets only added people message"]
   ::  a notified post is one more in Tlon's count, and this alert
   ::  carries it. One we do not push leaves the count alone, so
   ::  %activity's next fact differs and the badge timer sends it.
@@ -2801,6 +2809,7 @@
         id.u.post
         parent.u.post
         (author:trunk-push id.u.post)
+        ?:  invite  `request-text:trunk-push
         ?.(ios ~ (biff content.u.post preview:trunk-push))
     ==
   [cards s `"{word}: pushed to {(devices (lent cards))}"]
