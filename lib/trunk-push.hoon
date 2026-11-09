@@ -689,6 +689,98 @@
   ?~  group  ~
   (bind (level-of jon (cat 3 'group/' u.group)) |=(l=@t [l %.y]))
 ::
+::  +reach: when the owner can be reached, as Talon keeps it: the
+::  "reach" entry of %settings' desk %talon, bucket ui-prefs, a string
+::  of JSON like the levels:
+::    {"whoCanMessage":"Anyone|Added","favourites":["~nec"],
+::     "quiet":{"on":true,"fromMin":1320,"toMin":420,
+::              "zone":"America/New_York","offsetMin":-300}}
+::  `quiet` is ~ while quiet hours are off, or say no offset: a ship
+::  has no zone table, so Talon writes the zone's minutes from UTC
+::  beside its name, and one it did not write holds nothing. Better a
+::  push at night than none all day. whoCanMessage needs nothing
+::  here: %activity notifies no message of a DM request that waits,
+::  so none is pushed, whoever may message.
+::
++$  reach
+  $:  favourites=(set @t)
+      quiet=(unit [from=@ud to=@ud east=? off=@ud])
+  ==
+++  reach-of
+  |=  jon=json
+  ^-  (unit reach)
+  =/  v  (at jon ~['desk' 'ui-prefs' 'reach'])
+  =/  w  ?^(v v (at jon ~['ui-prefs' 'reach']))
+  ?~  w  ~
+  =/  entry=(unit json)
+    ?.  ?=([%s *] u.w)  w
+    (de:json:html p.u.w)
+  ?~  entry  ~
+  ?.  ?=([%o *] u.entry)  ~
+  =/  favs=(set @t)
+    =/  f  (at u.entry ~['favourites'])
+    ?.  ?=([~ %a *] f)  ~
+    %-  ~(gas in *(set @t))
+    (murn p.u.f |=(j=json ?:(?=([%s *] j) `p.j ~)))
+  =/  from  (min-at u.entry ~['quiet' 'fromMin'])
+  =/  to  (min-at u.entry ~['quiet' 'toMin'])
+  =/  off  (min-at u.entry ~['quiet' 'offsetMin'])
+  :-  ~
+  :-  favs
+  ?.  =(`[%b %.y] (at u.entry ~['quiet' 'on']))  ~
+  ?~  from  ~
+  ?~  to  ~
+  ?~  off  ~
+  ::  a day has 1.440 minutes, and no zone is a day from UTC
+  ?:  |((gte n.u.from 1.440) (gte n.u.to 1.440) (gte n.u.off 1.440))  ~
+  `[n.u.from n.u.to east.u.off n.u.off]
+::
+::  +min-at: a whole number of minutes, and whether it is not below
+::  zero. ~ for anything else: a fraction, an exponent, no number.
+::
+++  min-at
+  |=  [jon=json pax=(list @t)]
+  ^-  (unit [east=? n=@ud])
+  =/  j  (at jon pax)
+  ?.  ?=([~ %n *] j)  ~
+  =/  t  (trip p.u.j)
+  =/  west  ?=([%'-' *] t)
+  =/  n  (rust ?:(west (slag 1 t) t) dem)
+  ?~  n  ~
+  `[!west u.n]
+::
+::  +quiet-at: is `now` in the owner's quiet hours? Read on their
+::  clock: UTC's minute of the day, moved by the offset. From a time
+::  to the same time is no hours at all, and from a later one to an
+::  earlier runs over midnight. As Talon's quietAt.
+::
+++  quiet-at
+  |=  [r=(unit reach) now=@da]
+  ^-  ?
+  ?~  r  %.n
+  ?~  quiet.u.r  %.n
+  =/  q  u.quiet.u.r
+  ?:  =(from.q to.q)  %.n
+  =/  t  (yell now)
+  =/  utc  (add (mul 60 h.t) m.t)
+  =/  m
+    %-  mod  :_  1.440
+    ?:(east.q (add utc off.q) (sub (add utc 1.440) off.q))
+  ?:  (lth from.q to.q)
+    &((gte m from.q) (lth m to.q))
+  |((gte m from.q) (lth m to.q))
+::
+::  +quiet-holds: a post in quiet hours is held, but a favourite's.
+::  As Talon's messageReaches decides on a device.
+::
+++  quiet-holds
+  |=  [r=(unit reach) author=(unit @t) now=@da]
+  ^-  ?
+  ?.  (quiet-at r now)  %.n
+  ?~  r  %.n
+  ?~  author  %.y
+  !(~(has in favourites.u.r) u.author)
+::
 ::  +preview: a one-line text preview of a post's content for an iOS
 ::  alert: the words and the ship names, at most 140 characters.
 ::
